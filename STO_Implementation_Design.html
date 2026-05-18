@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>STO Management System — Implementation & Design v2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10.5pt; line-height: 1.6; color: #1a1a2e; background: #fff; }
+  .page-break { page-break-after: always; break-after: page; }
+
+  /* COVER */
+  .cover { height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 80px 72px; background: linear-gradient(135deg, #1e3a5f 0%, #0f2040 60%, #0a1628 100%); color: #fff; position: relative; overflow: hidden; }
+  .cover::before { content: ''; position: absolute; top: -120px; right: -120px; width: 500px; height: 500px; border-radius: 50%; background: rgba(59,130,246,0.12); }
+  .cover::after { content: ''; position: absolute; bottom: -80px; left: -80px; width: 350px; height: 350px; border-radius: 50%; background: rgba(99,179,237,0.08); }
+  .cover-tag { font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: #63b3ed; font-weight: 600; margin-bottom: 24px; }
+  .cover h1 { font-size: 36pt; font-weight: 700; line-height: 1.15; margin-bottom: 20px; color: #fff; }
+  .cover h1 span { color: #63b3ed; }
+  .cover-sub { font-size: 13pt; color: #a0aec0; margin-bottom: 56px; max-width: 540px; }
+  .cover-meta { display: flex; gap: 48px; margin-top: 48px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 32px; }
+  .cover-meta-item label { display: block; font-size: 8pt; letter-spacing: 1.5px; text-transform: uppercase; color: #63b3ed; margin-bottom: 4px; }
+  .cover-meta-item span { font-size: 10pt; color: #e2e8f0; font-weight: 500; }
+  .cover-stack { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+  .stack-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 5px 14px; font-size: 9pt; color: #e2e8f0; font-weight: 500; }
+
+  /* CONTENT */
+  .content { padding: 56px 72px; max-width: 100%; }
+  .section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; padding-bottom: 14px; border-bottom: 2px solid #e2e8f0; }
+  .section-num { background: #1e3a5f; color: #fff; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11pt; font-weight: 700; flex-shrink: 0; }
+  .section-header h2 { font-size: 18pt; font-weight: 700; color: #1e3a5f; }
+  h3 { font-size: 12pt; font-weight: 600; color: #2d3748; margin: 24px 0 10px; }
+  p { margin-bottom: 12px; color: #4a5568; }
+
+  /* CARDS */
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  .card-title { font-size: 10pt; font-weight: 700; color: #1e3a5f; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .highlight-box { background: #ebf4ff; border-left: 4px solid #3182ce; border-radius: 0 8px 8px 0; padding: 14px 20px; margin: 16px 0; }
+  .highlight-box p { color: #2b6cb0; margin: 0; font-size: 10pt; }
+  .warn-box { background: #fffaf0; border-left: 4px solid #d69e2e; border-radius: 0 8px 8px 0; padding: 14px 20px; margin: 16px 0; }
+  .warn-box p { color: #744210; margin: 0; font-size: 10pt; }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 9.5pt; }
+  thead tr { background: #1e3a5f; color: #fff; }
+  thead th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 9pt; letter-spacing: 0.3px; }
+  tbody tr { border-bottom: 1px solid #e2e8f0; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody td { padding: 9px 14px; color: #4a5568; vertical-align: top; }
+  tbody td:first-child { font-weight: 600; color: #2d3748; }
+
+  /* CODE */
+  pre { background: #1a202c; color: #e2e8f0; border-radius: 10px; padding: 18px 22px; margin: 14px 0 20px; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 8.5pt; line-height: 1.7; overflow: hidden; white-space: pre-wrap; }
+  code { background: #edf2f7; color: #c05621; padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .kw { color: #63b3ed; } .st { color: #68d391; } .cm { color: #718096; font-style: italic; } .fn { color: #f6ad55; } .tp { color: #b794f4; }
+
+  /* FLOW */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 20px 0; padding: 20px 24px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
+  .flow-node { background: #fff; border: 2px solid #3182ce; border-radius: 8px; padding: 7px 12px; font-size: 8.5pt; font-weight: 600; color: #1e3a5f; text-align: center; min-width: 80px; }
+  .flow-node.draft { border-color: #718096; color: #718096; }
+  .flow-node.rejected { border-color: #e53e3e; color: #e53e3e; }
+  .flow-node.closed { border-color: #38a169; color: #38a169; }
+  .flow-node.optional { border-color: #d69e2e; color: #8b6914; background: #fffff0; border-style: dashed; }
+  .flow-label { font-size: 7pt; color: #718096; display: block; text-align: center; margin-top: 3px; }
+  .flow-arrow { font-size: 14pt; color: #a0aec0; }
+
+  /* ROLE SWIMLANE TABLE */
+  .swimlane { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 8.5pt; }
+  .swimlane th { padding: 8px 12px; text-align: left; font-size: 8pt; font-weight: 700; letter-spacing: 0.3px; color: #fff; }
+  .swimlane td { padding: 8px 12px; vertical-align: top; border: 1px solid #e2e8f0; }
+  .swimlane .group-cell { font-weight: 700; font-size: 9pt; white-space: nowrap; }
+  .sw-receiving  { background: #2b6cb0; }
+  .sw-planning   { background: #c05621; }
+  .sw-logistics  { background: #276749; }
+  .sw-mgmt       { background: #6b46c1; }
+  .sw-recv-log   { background: #2c7a7b; }
+  .field-mandatory { color: #c53030; font-weight: 600; }
+  .field-optional  { color: #4a5568; }
+  .field-auto      { color: #718096; font-style: italic; }
+
+  /* ROLE CARDS */
+  .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+  .role-card { border-radius: 10px; padding: 16px; border: 1px solid; }
+  .role-card.blue   { background: #ebf8ff; border-color: #bee3f8; }
+  .role-card.orange { background: #fffaf0; border-color: #feebc8; }
+  .role-card.green  { background: #f0fff4; border-color: #c6f6d5; }
+  .role-card.purple { background: #faf5ff; border-color: #e9d8fd; }
+  .role-card.teal   { background: #e6fffa; border-color: #b2f5ea; }
+  .role-card.cyan   { background: #e0f7fa; border-color: #b2ebf2; }
+  .role-card .role-name  { font-weight: 700; font-size: 10pt; margin-bottom: 6px; }
+  .role-card .role-perms { font-size: 8.5pt; color: #4a5568; line-height: 1.5; }
+  ul { padding-left: 20px; margin: 8px 0; color: #4a5568; }
+  li { margin-bottom: 4px; font-size: 9.5pt; }
+
+  /* ARCH */
+  .arch { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 0; margin: 24px 0; padding: 28px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
+  .arch-box { background: #fff; border-radius: 10px; padding: 18px 14px; text-align: center; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .arch-box .arch-icon { font-size: 22pt; display: block; margin-bottom: 6px; }
+  .arch-box .arch-label { font-weight: 700; font-size: 10pt; color: #1e3a5f; display: block; margin-bottom: 4px; }
+  .arch-box .arch-detail { font-size: 8pt; color: #718096; line-height: 1.4; }
+  .arch-arrow { text-align: center; font-size: 20pt; color: #a0aec0; padding: 0 8px; }
+
+  /* BADGE */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 8pt; font-weight: 600; }
+  .badge-blue   { background: #ebf4ff; color: #2b6cb0; }
+  .badge-green  { background: #f0fff4; color: #276749; }
+  .badge-red    { background: #fff5f5; color: #c53030; }
+  .badge-orange { background: #fffaf0; color: #c05621; }
+  .badge-purple { background: #faf5ff; color: #6b46c1; }
+
+  @page { margin: 0; size: A4; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .decision-row { display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start; }
+  .decision-num { background: #3182ce; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .decision-body strong { display: block; font-size: 10pt; color: #1e3a5f; margin-bottom: 3px; }
+  .decision-body p { font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-tag">Technical Design Document — v2.0</div>
+  <h1>Stock Transfer Order<br/><span>Management System</span></h1>
+  <p class="cover-sub">Full-stack implementation covering architecture, data model, API design, group-based access control, the approval state machine, field ownership per group, and the redesigned dashboard.</p>
+  <div class="cover-stack">
+    <span class="stack-pill">React 18 + TypeScript</span>
+    <span class="stack-pill">Vite + Tailwind CSS</span>
+    <span class="stack-pill">Node.js + Express</span>
+    <span class="stack-pill">SQLite (better-sqlite3)</span>
+    <span class="stack-pill">JWT Auth (AD-ready)</span>
+    <span class="stack-pill">React Hook Form</span>
+  </div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><label>Version</label><span>2.0 — Demo Build</span></div>
+    <div class="cover-meta-item"><label>Date</label><span>May 2026</span></div>
+    <div class="cover-meta-item"><label>Auth Model</label><span>Group Selector → AD-ready JWT</span></div>
+    <div class="cover-meta-item"><label>Groups</label><span>6 role groups, no passwords</span></div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- 1. OVERVIEW -->
+<div class="content">
+  <div class="section-header"><div class="section-num">1</div><h2>Overview</h2></div>
+  <p>The STO Management System digitises the full lifecycle of pharmaceutical Stock Transfer Orders — from a Receiving Site submitting a material transfer request, through a multi-stage group approval workflow, to Receiving Site Logistics confirming final receipt and closing the order.</p>
+  <div class="highlight-box">
+    <p><strong>Core problem solved:</strong> Excel-based STOs had no audit trail, no real-time status visibility, and no role enforcement. This system enforces strict group-based field ownership at every step, logs every action immutably, and surfaces an actionable queue dashboard to each group so they know exactly what needs their attention.</p>
+  </div>
+
+  <h3>System Architecture</h3>
+  <div class="arch">
+    <div class="arch-box">
+      <span class="arch-icon">🖥️</span>
+      <span class="arch-label">Frontend</span>
+      <span class="arch-detail">React 18 + TypeScript<br/>Vite dev server<br/>Tailwind CSS<br/>Port 5173</span>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box">
+      <span class="arch-icon">⚙️</span>
+      <span class="arch-label">Backend API</span>
+      <span class="arch-detail">Node.js + Express<br/>TypeScript<br/>JWT middleware<br/>Port 4000</span>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box">
+      <span class="arch-icon">🗄️</span>
+      <span class="arch-label">Database</span>
+      <span class="arch-detail">SQLite via<br/>better-sqlite3<br/>WAL mode<br/>sto.db file</span>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Frontend Libraries</div>
+      <ul>
+        <li><strong>React Router v6</strong> — client routing, ProtectedRoute wrapper</li>
+        <li><strong>React Hook Form</strong> — form state, validation, conditional fields</li>
+        <li><strong>Axios</strong> — HTTP client with JWT header injection + 401 redirect</li>
+        <li><strong>Tailwind CSS</strong> — utility-first, no custom CSS files</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Backend Libraries</div>
+      <ul>
+        <li><strong>Express 4</strong> — HTTP server and route mounting</li>
+        <li><strong>jsonwebtoken</strong> — JWT sign &amp; verify (8-hour expiry)</li>
+        <li><strong>better-sqlite3</strong> — synchronous SQLite driver</li>
+        <li><strong>bcryptjs</strong> — password hashing (ready for AD integration)</li>
+        <li><strong>cors + dotenv</strong> — cross-origin and environment config</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- 2. AUTHENTICATION & GROUPS -->
+<div class="content">
+  <div class="section-header"><div class="section-num">2</div><h2>Authentication &amp; Group-Based Access</h2></div>
+
+  <p>There is <strong>no login page</strong>. Instead, a Group Selector screen presents 6 group cards. Clicking a group issues a JWT that encodes the group, plant, and display name. Every subsequent API request sends this token in <code>Authorization: Bearer &lt;token&gt;</code>. The <code>authenticate</code> middleware verifies the signature and attaches the decoded payload to <code>req.user</code>.</p>
+
+  <div class="warn-box">
+    <p><strong>AD-ready design:</strong> The JWT payload shape (<code>userId</code>, <code>group</code>, <code>name</code>, <code>plant</code>) already matches what an Active Directory LDAP / passport-azure-ad call will produce after mapping AD group names to the 6 group strings. Replacing the demo group array with an AD call requires no changes to middleware, routes, or frontend.</p>
+  </div>
+
+  <h3>The 6 Groups</h3>
+  <div class="role-grid">
+    <div class="role-card blue">
+      <div class="role-name" style="color:#2b6cb0;">Receiving Site</div>
+      <div class="role-perms">Creates STO requests (DRAFT). Fills in all intake fields. Submits for planning review. Plant: Plant B.</div>
+    </div>
+    <div class="role-card orange">
+      <div class="role-name" style="color:#c05621;">Shipping Site Planning</div>
+      <div class="role-perms">Receives PLANNING_REVIEW queue. Fills MPN#, Batch#, Expiry Date. Approves (inventory confirmed) or Rejects. Plant: Plant A.</div>
+    </div>
+    <div class="role-card green">
+      <div class="role-name" style="color:#276749;">Shipping Site Logistics</div>
+      <div class="role-perms">Fills container info, freight cost, PGI date, estimated delivery date, actual ship date, tracking ID, ready-to-ship flag. Plant: Plant A.</div>
+    </div>
+    <div class="role-card purple">
+      <div class="role-name" style="color:#6b46c1;">Management / Finance</div>
+      <div class="role-perms">Management approves high-value STOs (auto-triggered). Finance gives final financial approval. Both record IGB Complete. Plant: ALL.</div>
+    </div>
+    <div class="role-card teal">
+      <div class="role-name" style="color:#2c7a7b;">Receiving Site Logistics</div>
+      <div class="role-perms">Confirms receipt. Fills Actual Receipt Date. Closes out delivery (marks STO CLOSED). Plant: Plant B.</div>
+    </div>
+    <div class="role-card cyan" style="grid-column: span 1;">
+      <div class="role-name" style="color:#0e7490;">All Groups (read)</div>
+      <div class="role-perms">Every group can view all STOs regardless of status. Editing is strictly gated — only the active group at the current stage can write.</div>
+    </div>
+  </div>
+
+  <h3>Group Selector Flow</h3>
+  <pre><code><span class="cm">// GET /api/auth/groups — returns demo group list</span>
+<span class="cm">// POST /api/auth/select-group — { groupId } → JWT (no password)</span>
+<span class="cm">// GET /api/auth/me — returns current user from token</span>
+
+<span class="cm">// Frontend: AuthContext.tsx</span>
+<span class="kw">async function</span> <span class="fn">selectGroup</span>(groupId: <span class="tp">number</span>) {
+  <span class="kw">const</span> r = <span class="kw">await</span> api.post(<span class="st">'/auth/select-group'</span>, { groupId });
+  localStorage.setItem(<span class="st">'sto_token'</span>, r.data.token);
+  setUser(r.data.user);
+}</code></pre>
+
+  <h3>Routes</h3>
+  <table>
+    <thead><tr><th>Route</th><th>Component</th><th>Who can access</th></tr></thead>
+    <tbody>
+      <tr><td>/select-group</td><td>GroupSelector.tsx</td><td>Public — redirects to /dashboard if already logged in</td></tr>
+      <tr><td>/dashboard</td><td>Dashboard.tsx</td><td>All authenticated groups</td></tr>
+      <tr><td>/sto</td><td>STOList.tsx</td><td>All authenticated groups</td></tr>
+      <tr><td>/sto/new</td><td>STOForm.tsx</td><td>receiving_site only</td></tr>
+      <tr><td>/sto/:id</td><td>STODetail.tsx</td><td>All groups (field editing gated per group + status)</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="page-break"></div>
+
+<!-- 3. APPROVAL STATE MACHINE -->
+<div class="content">
+  <div class="section-header"><div class="section-num">3</div><h2>Approval State Machine</h2></div>
+  <p>Every STO moves through a defined sequence of statuses. Transitions are enforced server-side — a client can never skip a stage. Each endpoint validates both the group and the current status before writing.</p>
+
+  <div class="flow">
+    <div><div class="flow-node draft">DRAFT</div><span class="flow-label">Receiving Site</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">PLANNING<br/>REVIEW</div><span class="flow-label">on submit</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">SHIPPING<br/>LOGISTICS</div><span class="flow-label">planning approved</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node optional">MANAGEMENT<br/>REVIEW</div><span class="flow-label">if &gt;$10K or freight &gt;$5K</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">FINANCE<br/>REVIEW</div><span class="flow-label">mgmt approved</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">RECEIVING<br/>LOGISTICS</div><span class="flow-label">finance approved</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node closed">CLOSED</div><span class="flow-label">delivery confirmed</span></div>
+    <div style="margin-left:16px; padding-left:16px; border-left:2px solid #e2e8f0;">
+      <div class="flow-node rejected">REJECTED</div>
+      <span class="flow-label">Planning, Mgmt, or Finance</span>
+    </div>
+  </div>
+
+  <h3>Endpoint → Transition Map</h3>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Group Required</th><th>From Status</th><th>To Status</th><th>Key Fields Saved</th></tr></thead>
+    <tbody>
+      <tr><td>POST /sto/:id/submit</td><td>receiving_site</td><td>DRAFT</td><td>PLANNING_REVIEW</td><td>—</td></tr>
+      <tr><td>POST /sto/:id/planning</td><td>shipping_planning</td><td>PLANNING_REVIEW</td><td>SHIPPING_LOGISTICS or REJECTED</td><td>mpn_number, batch_number, expiration_date, planning_notes</td></tr>
+      <tr><td>POST /sto/:id/logistics</td><td>shipping_logistics</td><td>SHIPPING_LOGISTICS</td><td>MANAGEMENT_REVIEW or FINANCE_REVIEW</td><td>container_info, freight_cost, ready_to_ship, pgi_date, est_delivery_date, actual_ship_date, tracking_id</td></tr>
+      <tr><td>POST /sto/:id/management</td><td>management</td><td>MANAGEMENT_REVIEW</td><td>FINANCE_REVIEW or REJECTED</td><td>management_approved, igb_complete, management_notes</td></tr>
+      <tr><td>POST /sto/:id/finance</td><td>finance</td><td>FINANCE_REVIEW</td><td>RECEIVING_LOGISTICS or REJECTED</td><td>finance_approved, igb_complete, finance_notes</td></tr>
+      <tr><td>POST /sto/:id/receiving-logistics</td><td>receiving_logistics</td><td>RECEIVING_LOGISTICS</td><td>CLOSED (if delivery_closed_out=true)</td><td>actual_receipt_date, delivery_closed_out</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Management Approval Auto-trigger</h3>
+  <p>When Shipping Logistics submits their fields, the backend computes <code>management_approval_required</code> from configurable thresholds stored in <code>sto_config</code>. The STO goes directly to FINANCE_REVIEW if management is not required.</p>
+
+  <pre><code><span class="kw">const</span> matThreshold    = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || <span class="st">'10000'</span>);
+<span class="kw">const</span> freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD  || <span class="st">'5000'</span>);
+<span class="kw">const</span> mgmtRequired     = materialValue &gt; matThreshold || freightCost &gt; freightThreshold;
+<span class="kw">const</span> newStatus        = mgmtRequired ? <span class="st">'MANAGEMENT_REVIEW'</span> : <span class="st">'FINANCE_REVIEW'</span>;</code></pre>
+
+  <h3>Planning Approval Validation</h3>
+  <p>Shipping Planning cannot approve without filling the mandatory fields. The backend validates this before writing:</p>
+  <pre><code><span class="kw">if</span> (approved &amp;&amp; (!mpn_number || !batch_number || !expiration_date)) {
+  res.status(<span class="tp">400</span>).json({ message: <span class="st">'MPN Number, Batch Number and Expiration Date are required to approve'</span> });
+  <span class="kw">return</span>;
+}</code></pre>
+
+  <h3>Audit Log</h3>
+  <p>Every transition writes an append-only row to <code>sto_audit_log</code>. Nothing in the codebase deletes from this table. The log is shown in the STO detail view and powers the dashboard's Recent Activity feed via <code>GET /api/sto/audit-log</code>.</p>
+</div>
+<div class="page-break"></div>
+
+<!-- 4. FIELD OWNERSHIP PER GROUP -->
+<div class="content">
+  <div class="section-header"><div class="section-num">4</div><h2>Field Ownership Per Group</h2></div>
+  <p>Based on the original process flow matrix. <span class="field-mandatory">Red = mandatory</span>, <span class="field-optional">plain = optional</span>, <span class="field-auto">italic = auto-generated/computed</span>.</p>
+
+  <table class="swimlane">
+    <thead>
+      <tr>
+        <th style="width:160px; background:#1e3a5f;">Group</th>
+        <th style="background:#1e3a5f;">Fields They Fill In</th>
+        <th style="width:120px; background:#1e3a5f;">Stage</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="group-cell sw-receiving" style="color:#fff; border:none;">Receiving Site</td>
+        <td style="background:#ebf8ff;">
+          <span class="field-mandatory">Receiving Site, Request Date, Rush Request (Y/N), Priority, Public Holiday (Y/N), Requesting Plant, Toll MFG (Y/N), Requestor Name, Requestor Email, Material SAP#, Material Description, Quantity, UOM, Shipping Conditions, Receiving Site Need By Date</span><br/>
+          <span class="field-optional">Repeat Shipment (Calendar Year), INCO Terms, Brand at Receiving Site, Rush Reason (required if rush), Standard Est. Ship Date, Estimated Ship By Date, Expedited Est. Ship Date (rush only), Controlled Shipping Required (Y/N), Insurance Loss Required (Y/N), Material Value, STO Number, Shipment ID, Corporate STO Tracker Status</span><br/>
+          <span class="field-auto">STO ID (auto-generated: STO-YYYY-00001)</span>
+        </td>
+        <td>DRAFT → creates STO</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-planning" style="color:#fff; border:none;">Shipping Site Planning</td>
+        <td style="background:#fffaf0;">
+          <span class="field-mandatory">MPN Number, Batch Number, Expiration Date, Inventory Request Approved (Y/N)</span><br/>
+          <span class="field-optional">Planning Notes (required on rejection)</span><br/>
+          <span class="field-auto">Material Value &gt; Threshold flag (displayed, computed)</span>
+        </td>
+        <td>PLANNING_REVIEW</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-logistics" style="color:#fff; border:none;">Shipping Site Logistics</td>
+        <td style="background:#f0fff4;">
+          <span class="field-mandatory">Container Information (UOM Conversion), Freight Cost, Ready to Ship (Y/N), PGI (Product Goods Issued from SAP), Estimated Delivery Date, Actual Ship Date, Tracking ID</span>
+        </td>
+        <td>SHIPPING_LOGISTICS</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-mgmt" style="color:#fff; border:none;">Management</td>
+        <td style="background:#faf5ff;">
+          <span class="field-mandatory">Management Approved (Y/N), IGB Complete (Y/N)</span><br/>
+          <span class="field-optional">Management Notes</span>
+        </td>
+        <td>MANAGEMENT_REVIEW (if triggered)</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-mgmt" style="color:#fff; border:none;">Finance</td>
+        <td style="background:#faf5ff;">
+          <span class="field-mandatory">Finance Approved (Y/N), IGB Complete (Y/N)</span><br/>
+          <span class="field-optional">Finance Notes</span>
+        </td>
+        <td>FINANCE_REVIEW</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-recv-log" style="color:#fff; border:none;">Receiving Site Logistics</td>
+        <td style="background:#e6fffa;">
+          <span class="field-mandatory">Actual Receipt Date, Delivery Closed Out (Y/N)</span>
+        </td>
+        <td>RECEIVING_LOGISTICS → CLOSED</td>
+      </tr>
+      <tr>
+        <td class="group-cell" style="background:#718096; color:#fff; border:none;">Calculated</td>
+        <td style="background:#f7fafc; color:#718096; font-style:italic;">
+          Standard Estimated Ship Date, Expedited Estimated Ship Date, Management Approval Required — computed server-side, not entered by any group
+        </td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <p><strong>Enforcement:</strong> The frontend shows an editable form only to the group whose turn it is at the current status. All other groups see read-only values. The backend independently validates the group and status on every write endpoint — frontend enforcement is UI-only and cannot be bypassed.</p>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- 5. DATABASE DESIGN -->
+<div class="content">
+  <div class="section-header"><div class="section-num">5</div><h2>Database Design</h2></div>
+  <p>Three tables. Designed for SQLite (<code>better-sqlite3</code>) for zero-dependency local development. Moving to SQL Server requires only changing column types (<code>INTEGER→BIT</code>, <code>TEXT→NVARCHAR</code>, <code>datetime('now')→GETDATE()</code>) — no route or frontend changes.</p>
+
+  <h3>sto_requests — Main Table</h3>
+  <table>
+    <thead><tr><th>Column Group</th><th>Key Fields</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Identity</td><td>id, sto_id</td><td>sto_id format: STO-YYYY-00001 (auto-generated from row count)</td></tr>
+      <tr><td>Request Info</td><td>request_date, priority, rush_request, public_holiday, repeat_shipment_calendar_year, rush_reason</td><td>Priority: 1=Urgent (15d), 2=Expedited, 3=Standard (45d)</td></tr>
+      <tr><td>Sites</td><td>requesting_plant, shipping_site, receiving_site, toll_mfg</td><td>toll_mfg = contract manufacturing flag</td></tr>
+      <tr><td>Requestor</td><td>requestor_user_id, requestor_name, requestor_email</td><td>Denormalized from JWT at create time — survives AD migration</td></tr>
+      <tr><td>Material</td><td>material_sap, material_description, quantity, uom, inco_terms, shipping_conditions, brand_at_receiving_site</td><td>Filled by Receiving Site at creation</td></tr>
+      <tr><td>Material (Planning)</td><td>mpn_number, batch_number, expiration_date</td><td>Filled by Shipping Planning during inventory review</td></tr>
+      <tr><td>Financials</td><td>material_value, freight_cost, insurance_loss_required, management_approval_required</td><td>material_value entered by Receiving Site; freight_cost by Logistics; mgmt flag computed</td></tr>
+      <tr><td>Scheduling</td><td>standard_estimated_ship_date, expedited_estimated_ship_date, receiving_site_need_by_date, estimated_ship_by_date, estimated_delivery_date</td><td>estimated_delivery_date filled by Shipping Logistics</td></tr>
+      <tr><td>Tracking Reference</td><td>sto_number, shipment_id, corporate_sto_tracker_status</td><td>Pre-filled by Receiving Site; displayed throughout lifecycle</td></tr>
+      <tr><td>Shipping</td><td>container_information, controlled_shipping_required, ready_to_ship, pgi_date, actual_ship_date, tracking_id</td><td>Filled by Shipping Logistics</td></tr>
+      <tr><td>Planning Approval</td><td>planning_approved, planning_approved_by_user_id, planning_approved_at, planning_notes</td><td>Set by shipping_planning group</td></tr>
+      <tr><td>Management Approval</td><td>management_approved, management_approved_by_user_id, management_approved_at, management_notes, igb_complete</td><td>Only set when management_approval_required = 1</td></tr>
+      <tr><td>Finance Approval</td><td>finance_approved, finance_approved_by_user_id, finance_approved_at, finance_notes, igb_complete</td><td>Final financial gate before Receiving Logistics</td></tr>
+      <tr><td>Receipt</td><td>actual_receipt_date, delivery_closed_out</td><td>Filled by Receiving Site Logistics</td></tr>
+      <tr><td>Lifecycle</td><td>status, rejection_reason, created_at, updated_at</td><td>updated_at set on every write</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Safe Column Migrations</h3>
+  <p>Three columns were added after the initial schema (<code>inco_terms</code>, <code>estimated_delivery_date</code>, <code>igb_complete</code>). Since SQLite's <code>CREATE TABLE IF NOT EXISTS</code> does not alter existing tables, the connection module runs safe migrations at startup:</p>
+  <pre><code><span class="kw">for</span> (<span class="kw">const</span> col <span class="kw">of</span> [
+  <span class="st">'ALTER TABLE sto_requests ADD COLUMN inco_terms TEXT'</span>,
+  <span class="st">'ALTER TABLE sto_requests ADD COLUMN estimated_delivery_date TEXT'</span>,
+  <span class="st">'ALTER TABLE sto_requests ADD COLUMN igb_complete INTEGER DEFAULT 0'</span>,
+]) {
+  <span class="kw">try</span> { db.exec(col); } <span class="kw">catch</span> { <span class="cm">/* column already exists — ignore */</span> }
+}</code></pre>
+
+  <h3>sto_audit_log — Append-only</h3>
+  <table>
+    <thead><tr><th>Column</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>sto_request_id</td><td>FK → sto_requests.id</td></tr>
+      <tr><td>action</td><td>CREATED | SUBMITTED | PLANNING_APPROVED | PLANNING_REJECTED | LOGISTICS_SUBMITTED | MANAGEMENT_APPROVED | MANAGEMENT_REJECTED | FINANCE_APPROVED | FINANCE_REJECTED | DELIVERY_CLOSED | RECEIPT_UPDATED</td></tr>
+      <tr><td>old_status / new_status</td><td>State before and after the action</td></tr>
+      <tr><td>performed_by / performed_by_name</td><td>User ID and display name (denormalized)</td></tr>
+      <tr><td>notes</td><td>Reviewer comments / rejection reasons</td></tr>
+      <tr><td>performed_at</td><td>datetime('now') default</td></tr>
+    </tbody>
+  </table>
+
+  <h3>sto_config — Threshold Key/Value Store</h3>
+  <p>Pre-seeded with <code>management_approval_material_threshold</code> (10000) and <code>management_approval_freight_threshold</code> (5000). Overridable via <code>.env</code> without touching the DB.</p>
+</div>
+<div class="page-break"></div>
+
+<!-- 6. API DESIGN -->
+<div class="content">
+  <div class="section-header"><div class="section-num">6</div><h2>API Design</h2></div>
+  <p>RESTful API at <code>http://localhost:4000/api</code>. All routes except <code>/auth/groups</code> and <code>/auth/select-group</code> require a valid JWT. Role enforcement happens inside each route handler — not just at middleware level.</p>
+
+  <table>
+    <thead><tr><th>Method</th><th>Route</th><th>Group(s)</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td>/auth/groups</td><td>Public</td><td>Returns the 6 demo group cards for the selector screen</td></tr>
+      <tr><td>POST</td><td>/auth/select-group</td><td>Public</td><td>{ groupId } → signs and returns a JWT (no password)</td></tr>
+      <tr><td>GET</td><td>/auth/me</td><td>Any</td><td>Returns current user decoded from JWT</td></tr>
+      <tr><td>GET</td><td>/sto</td><td>All</td><td>All STOs visible to everyone. Query: ?status= &amp;priority= &amp;search=</td></tr>
+      <tr><td>GET</td><td>/sto/audit-log</td><td>All</td><td>Last 20 audit entries across all STOs (joined with sto_id). Powers dashboard activity feed. Must be registered before /:id.</td></tr>
+      <tr><td>POST</td><td>/sto</td><td>receiving_site</td><td>Create STO → saved as DRAFT, sto_id auto-generated</td></tr>
+      <tr><td>GET</td><td>/sto/:id</td><td>All</td><td>Full STO detail + audit_log array</td></tr>
+      <tr><td>PUT</td><td>/sto/:id</td><td>receiving_site</td><td>Edit DRAFT STO only</td></tr>
+      <tr><td>POST</td><td>/sto/:id/submit</td><td>receiving_site</td><td>DRAFT → PLANNING_REVIEW</td></tr>
+      <tr><td>POST</td><td>/sto/:id/planning</td><td>shipping_planning</td><td>{ approved, notes, mpn_number, batch_number, expiration_date } → SHIPPING_LOGISTICS or REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/logistics</td><td>shipping_logistics</td><td>Saves 7 logistics fields → MANAGEMENT_REVIEW or FINANCE_REVIEW (auto-computed)</td></tr>
+      <tr><td>POST</td><td>/sto/:id/management</td><td>management</td><td>{ approved, notes, igb_complete } → FINANCE_REVIEW or REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/finance</td><td>finance</td><td>{ approved, notes, igb_complete } → RECEIVING_LOGISTICS or REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/receiving-logistics</td><td>receiving_logistics</td><td>{ actual_receipt_date, delivery_closed_out } → CLOSED or stays RECEIVING_LOGISTICS</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <p><strong>Route ordering note:</strong> <code>GET /sto/audit-log</code> is registered before <code>GET /sto/:id</code> in the Express router. If registered after, Express would match <code>audit-log</code> as the <code>:id</code> parameter and return a 404.</p>
+  </div>
+
+  <h3>Frontend API Client</h3>
+  <pre><code><span class="cm">// src/api/client.ts</span>
+<span class="kw">const</span> api = axios.create({ baseURL: <span class="st">'http://localhost:4000/api'</span> });
+
+api.interceptors.request.use(cfg => {
+  <span class="kw">const</span> token = localStorage.getItem(<span class="st">'sto_token'</span>);
+  <span class="kw">if</span> (token) cfg.headers.Authorization = <span class="st">`Bearer ${token}`</span>;
+  <span class="kw">return</span> cfg;
+});
+
+api.interceptors.response.use(r => r, err => {
+  <span class="kw">if</span> (err.response?.status === <span class="tp">401</span>) {
+    localStorage.removeItem(<span class="st">'sto_token'</span>);
+    window.location.href = <span class="st">'/select-group'</span>;
+  }
+  <span class="kw">return</span> Promise.reject(err);
+});</code></pre>
+</div>
+<div class="page-break"></div>
+
+<!-- 7. FRONTEND ARCHITECTURE -->
+<div class="content">
+  <div class="section-header"><div class="section-num">7</div><h2>Frontend Architecture</h2></div>
+
+  <h3>Key Pages</h3>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">GroupSelector.tsx</div>
+      Six coloured group cards fetched from <code>GET /api/auth/groups</code>. Clicking a card calls <code>selectGroup(id)</code> → stores JWT → navigates to /dashboard. Shows a "Demo mode — Active Directory integration pending" notice.
+    </div>
+    <div class="card">
+      <div class="card-title">Dashboard.tsx</div>
+      Role-aware action queue table, urgency KPI cards (My Queue / Rush Active / Due This Week / Overdue), rush + overdue alert panels, clickable pipeline with bottleneck indicators, Recent Activity feed (audit log), and Upcoming Need-By dates sorted chronologically.
+    </div>
+    <div class="card">
+      <div class="card-title">STOForm.tsx (Receiving Site only)</div>
+      Sections: Requestor Info, Request Information, Material Details, Tracking Reference. Rush checkbox unlocks Expedited ESD + Rush Reason fields. Material Value field shown for management threshold awareness. MPN#, Batch#, Expiration Date are NOT on this form — Shipping Planning fills those.
+    </div>
+    <div class="card">
+      <div class="card-title">STODetail.tsx</div>
+      Six role-gated sections. Each section shows an editable form to the active group at the right stage, and read-only data to everyone else. "Your Turn" badge highlights the active section. Includes full audit log at bottom.
+    </div>
+    <div class="card">
+      <div class="card-title">STOList.tsx</div>
+      Filterable table: status dropdown, priority dropdown, free-text search (queries API with query params). Rows link to STODetail. StatusBadge and PriorityBadge components colour-code every row.
+    </div>
+    <div class="card">
+      <div class="card-title">Layout.tsx</div>
+      Nav bar with group-coloured badge showing current group. "Switch Group" button instead of logout (clears token → /select-group). Links: Dashboard, All STOs.
+    </div>
+  </div>
+
+  <h3>STODetail Section Structure</h3>
+  <table>
+    <thead><tr><th>#</th><th>Section Title</th><th>Active Group</th><th>Active Status</th><th>What they can edit</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Request &amp; Material Info</td><td>receiving_site</td><td>DRAFT</td><td>Read-only display (edit via STOForm)</td></tr>
+      <tr><td>2</td><td>Shipping Site Planning Review</td><td>shipping_planning</td><td>PLANNING_REVIEW</td><td>MPN#, Batch#, Expiry Date + Approve/Reject</td></tr>
+      <tr><td>3</td><td>Shipping Site Logistics</td><td>shipping_logistics</td><td>SHIPPING_LOGISTICS</td><td>Container Info, Freight Cost, Ready to Ship, PGI Date, Est. Delivery Date, Actual Ship Date, Tracking ID</td></tr>
+      <tr><td>4</td><td>Management Approval</td><td>management</td><td>MANAGEMENT_REVIEW</td><td>IGB Complete checkbox + Approve/Reject with notes</td></tr>
+      <tr><td>5</td><td>Finance Approval</td><td>finance</td><td>FINANCE_REVIEW</td><td>IGB Complete checkbox + Approve/Reject with notes</td></tr>
+      <tr><td>6</td><td>Receiving Site Logistics</td><td>receiving_logistics</td><td>RECEIVING_LOGISTICS</td><td>Actual Receipt Date + Delivery Closed Out checkbox</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Dashboard — Role-Aware Action Queue</h3>
+  <p>The dashboard fetches STOs and audit log independently (so audit-log errors don't block STO display). The My Action Queue table highlights urgency with colour-coded need-by dates and stall warnings:</p>
+  <pre><code><span class="cm">// Red if overdue, orange if ≤7 days, gray otherwise</span>
+<span class="kw">function</span> <span class="fn">needByColor</span>(dateStr: <span class="tp">string</span>): <span class="tp">string</span> {
+  <span class="kw">const</span> d = daysUntil(dateStr);
+  <span class="kw">if</span> (d &lt; <span class="tp">0</span>)  <span class="kw">return</span> <span class="st">'text-red-600 font-semibold'</span>;
+  <span class="kw">if</span> (d &lt;= <span class="tp">7</span>) <span class="kw">return</span> <span class="st">'text-orange-500 font-medium'</span>;
+  <span class="kw">return</span> <span class="st">'text-gray-600'</span>;
+}
+<span class="cm">// ⚠ shown when item has been waiting ≥3 days in current status</span>
+<span class="kw">const</span> isStalled = daysSince(sto.updated_at) &gt;= <span class="tp">3</span>;</code></pre>
+</div>
+<div class="page-break"></div>
+
+<!-- 8. KEY DESIGN DECISIONS -->
+<div class="content">
+  <div class="section-header"><div class="section-num">8</div><h2>Key Design Decisions</h2></div>
+
+  <div class="decision-row">
+    <div class="decision-num">1</div>
+    <div class="decision-body">
+      <strong>No login page — group selector instead</strong>
+      <p>The system is intended for internal use where identity will eventually come from Active Directory. Rather than building a placeholder login that will be ripped out, we implemented a group selector that issues the same JWT shape AD will produce. Swapping in an LDAP call requires no changes to middleware, routes, or frontend code.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">2</div>
+    <div class="decision-body">
+      <strong>MPN#, Batch#, Expiry Date owned by Shipping Planning — not Receiving Site</strong>
+      <p>Per the process flow matrix, these fields are in the Shipping Planning (orange) row, not the Receiving Site (blue) row. The receiving site may not know the exact MPN or batch at request time — Shipping Planning verifies these during their inventory review. The creation form therefore omits them; the planning section of STODetail makes them mandatory before approval is allowed.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">3</div>
+    <div class="decision-body">
+      <strong>STO Number and Shipment ID owned by Receiving Site</strong>
+      <p>Per the process flow matrix, these are in the blue (Receiving Site) row. The receiving site pre-fills them from their corporate systems when creating the request. Shipping Logistics does NOT write these — they were removed from the logistics form/endpoint.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">4</div>
+    <div class="decision-body">
+      <strong>Corporate STO Tracker Status owned by Receiving Site</strong>
+      <p>Also in the blue row — it's entered at request creation time as a reference to the corporate tracker. It does NOT appear in the Receiving Logistics section (which has only Actual Receipt Date and Delivery Closed Out per the matrix).</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">5</div>
+    <div class="decision-body">
+      <strong>Management approval computed server-side from thresholds</strong>
+      <p>No group can set the <code>management_approval_required</code> flag — it's computed at logistics submission time from <code>material_value</code> and <code>freight_cost</code> against configurable thresholds. Thresholds live in <code>sto_config</code> and in <code>.env</code>, overridable without code changes.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">6</div>
+    <div class="decision-body">
+      <strong>better-sqlite3 named parameter requirement</strong>
+      <p>SQLite via <code>better-sqlite3</code> requires ALL named parameters present in the passed object, even if null/undefined. The seed script uses a <code>DEFAULTS</code> object and a <code>normalize()</code> function that spreads defaults before each insert to satisfy this requirement.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">7</div>
+    <div class="decision-body">
+      <strong>Audit-log endpoint must precede /:id route</strong>
+      <p><code>GET /sto/audit-log</code> is registered before <code>GET /sto/:id</code> in the Express router. If the order were reversed, Express would match the literal string <code>audit-log</code> as the <code>:id</code> parameter and the endpoint would never be reached.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">8</div>
+    <div class="decision-body">
+      <strong>Dashboard fetches independently, not Promise.all</strong>
+      <p>The dashboard calls <code>/sto</code> and <code>/sto/audit-log</code> as separate fetches. If the audit-log fetch fails (e.g., before a backend restart picks up the new route), the STO data still loads and the activity feed silently stays empty — the whole page doesn't break.</p>
+    </div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- 9. SEED DATA & SETUP -->
+<div class="content">
+  <div class="section-header"><div class="section-num">9</div><h2>Seed Data &amp; Setup</h2></div>
+
+  <h3>Demo Seed Data</h3>
+  <p>Running <code>npm run seed</code> from the backend directory clears and repopulates the database with 8 demo STOs — one at every pipeline stage — plus realistic audit log entries for each:</p>
+  <table>
+    <thead><tr><th>STO ID</th><th>Status</th><th>Material</th><th>Highlights</th></tr></thead>
+    <tbody>
+      <tr><td>STO-2026-00001</td><td>DRAFT</td><td>API Active Ingredient — Batch R22</td><td>Controlled shipping, refrigerated, $8,500</td></tr>
+      <tr><td>STO-2026-00002</td><td>PLANNING_REVIEW</td><td>Packaging Components — Blister Foil</td><td>RUSH — line stoppage risk, need-by in 2 days</td></tr>
+      <tr><td>STO-2026-00003</td><td>SHIPPING_LOGISTICS</td><td>Excipient — MCC PH-102</td><td>Planning approved, toll MFG</td></tr>
+      <tr><td>STO-2026-00004</td><td>MANAGEMENT_REVIEW</td><td>Bulk Drug Substance — XR-77</td><td>$45,000 value — management auto-triggered, frozen dry ice</td></tr>
+      <tr><td>STO-2026-00005</td><td>FINANCE_REVIEW</td><td>Finished Goods — Tablet 10mg</td><td>Management approved, freight $2,100</td></tr>
+      <tr><td>STO-2026-00006</td><td>RECEIVING_LOGISTICS</td><td>Primary Packaging — Amber Vials</td><td>Finance approved, shipped FEDEX, fragile</td></tr>
+      <tr><td>STO-2026-00007</td><td>CLOSED</td><td>Stability Samples — Reference Standard Q1</td><td>Fully closed out, receipt confirmed April 2026</td></tr>
+      <tr><td>STO-2026-00008</td><td>REJECTED</td><td>Obsolete Intermediary — Phase-out Z</td><td>Planning rejected — material discontinued</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>Node.js v18+ (v26 confirmed working)</li>
+    <li>npm v9+</li>
+    <li>No external database required — <code>sto.db</code> is created automatically on first backend start</li>
+  </ul>
+
+  <h3>Running the App</h3>
+  <pre><code><span class="cm"># Terminal 1 — Backend</span>
+cd sto-management/backend
+npm install
+npm run dev         <span class="cm"># → http://localhost:4000</span>
+npm run seed        <span class="cm"># optional: populate demo data</span>
+
+<span class="cm"># Terminal 2 — Frontend</span>
+cd sto-management/frontend
+npm install
+npm run dev         <span class="cm"># → http://localhost:5173</span></code></pre>
+
+  <h3>Environment Variables (backend/.env)</h3>
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>JWT_SECRET</td><td>dev-secret</td><td>Signs JWTs — use a long random string in production</td></tr>
+      <tr><td>PORT</td><td>4000</td><td>Backend HTTP port</td></tr>
+      <tr><td>MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD</td><td>10000</td><td>USD value above which management sign-off is required</td></tr>
+      <tr><td>MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD</td><td>5000</td><td>Freight cost above which management sign-off is required</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Project File Map</h3>
+  <pre><code>sto-management/
+├── backend/
+│   ├── src/
+│   │   ├── index.ts                  <span class="cm">Express entry, CORS, route mounting</span>
+│   │   ├── types/index.ts            <span class="cm">Group, STOStatus, JwtPayload types</span>
+│   │   ├── db/
+│   │   │   ├── connection.ts         <span class="cm">SQLite init, schema, safe migrations, singleton</span>
+│   │   │   └── seed.ts               <span class="cm">8 demo STOs + audit log entries</span>
+│   │   ├── middleware/
+│   │   │   └── auth.ts               <span class="cm">JWT verify, requireGroup() helper</span>
+│   │   └── routes/
+│   │       ├── auth.ts               <span class="cm">GET /groups, POST /select-group, GET /me</span>
+│   │       ├── sto.ts                <span class="cm">GET /, GET /audit-log, GET /:id, POST /, PUT /:id</span>
+│   │       └── approvals.ts          <span class="cm">POST /:id/{submit,planning,logistics,management,finance,receiving-logistics}</span>
+│   ├── sto.db                        <span class="cm">SQLite database (auto-created)</span>
+│   └── .env
+└── frontend/
+    └── src/
+        ├── App.tsx                   <span class="cm">Router + ProtectedRoute</span>
+        ├── types/index.ts            <span class="cm">Group, STOStatus, STORequest, AuditEntry</span>
+        ├── context/AuthContext.tsx   <span class="cm">selectGroup(), switchGroup(), user state</span>
+        ├── api/client.ts             <span class="cm">Axios + JWT interceptor + 401 → /select-group</span>
+        ├── components/
+        │   ├── Layout.tsx            <span class="cm">Nav + group badge + Switch Group button</span>
+        │   └── StatusBadge.tsx       <span class="cm">StatusBadge + PriorityBadge components</span>
+        └── pages/
+            ├── GroupSelector.tsx     <span class="cm">6 group cards, no password</span>
+            ├── Dashboard.tsx         <span class="cm">KPI cards, action queue, alerts, pipeline, activity feed</span>
+            ├── STOList.tsx           <span class="cm">Filterable table (status, priority, search)</span>
+            ├── STOForm.tsx           <span class="cm">Receiving Site creation form (blue fields)</span>
+            └── STODetail.tsx         <span class="cm">6 role-gated sections + audit log</span></code></pre>
+
+  <div class="highlight-box" style="margin-top:24px;">
+    <p><strong>Migrating to SQL Server:</strong> (1) Replace <code>better-sqlite3</code> with <code>mssql</code> in connection.ts. (2) Change column types in the CREATE TABLE statement. (3) Update <code>.env</code> with DB connection string. No route files or frontend changes needed.</p>
+  </div>
+</div>
+
+</body>
+</html>
