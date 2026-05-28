@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { PingCallback } from './pages/PingCallback';
 import { Dashboard } from './pages/Dashboard';
+import { Analytics } from './pages/Analytics';
 import { STOList } from './pages/STOList';
 import { STOForm } from './pages/STOForm';
 import { STODetail } from './pages/STODetail';
@@ -70,10 +71,11 @@ function AppRoutes() {
       />
 
       {/* Protected app routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/sto"       element={<ProtectedRoute><STOList /></ProtectedRoute>} />
-      <Route path="/sto/new"   element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
-      <Route path="/sto/:id"   element={<ProtectedRoute><STODetail /></ProtectedRoute>} />
+      <Route path="/dashboard"  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/analytics"  element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+      <Route path="/sto"        element={<ProtectedRoute><STOList /></ProtectedRoute>} />
+      <Route path="/sto/new"    element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
+      <Route path="/sto/:id"    element={<ProtectedRoute><STODetail /></ProtectedRoute>} />
 
       <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : (devBypassMode ? <Navigate to="/login" replace /> : <PingRedirect />)} />
       <Route path="*" element={<Navigate to="/" replace />} />

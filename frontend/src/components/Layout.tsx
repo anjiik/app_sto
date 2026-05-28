@@ -33,8 +33,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const canCreateNew = user?.group === 'receiving_site';
 
   const navLinks = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/sto', label: 'All STOs' },
+    { to: '/dashboard',  label: 'Dashboard' },
+    { to: '/sto',        label: 'All STOs' },
+    { to: '/analytics',  label: 'Analytics' },
     ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
   ];
 
