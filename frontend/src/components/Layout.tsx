@@ -21,13 +21,13 @@ const GROUP_COLORS: Record<Group, string> = {
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, switchGroup } = useAuth();
+  const { user, logout, devBypassMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   function handleSwitch() {
-    switchGroup();
-    navigate('/select-group');
+    logout();
+    navigate('/', { replace: true });
   }
 
   const canCreateNew = user?.group === 'receiving_site';
@@ -75,7 +75,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 onClick={handleSwitch}
                 className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-sm transition-colors border border-white/20"
               >
-                Switch Group
+                {devBypassMode ? 'Switch Group' : 'Sign Out'}
               </button>
             </div>
           </div>

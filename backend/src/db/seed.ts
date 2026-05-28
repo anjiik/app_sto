@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import bcrypt from 'bcryptjs';
 import { dbExecute, dbInsert, dbQueryOne } from './connection';
 
 const now = new Date().toISOString().slice(0, 10);
@@ -338,6 +339,58 @@ async function insertAudit(stoId: number, action: string, oldStatus: string | nu
   `, { stoId, action, oldStatus, newStatus, performedBy, performedByName, notes });
 }
 
+// ── Demo users ────────────────────────────────────────────────────────────────
+// 3 sites × 6 groups = 18 users. All share the password Demo123!
+// In production, users come from AD via PingFederate — this table is ignored.
+
+const DEMO_PASSWORD = 'Demo123!';
+
+interface DemoUser {
+  username: string;
+  display_name: string;
+  site: string;
+  group_key: string;
+}
+
+const DEMO_USERS: DemoUser[] = [
+  // ── Site ABC ──────────────────────────────────────────────────────────────
+  { username: 'abc.recv',  display_name: 'Alice Carter',  site: 'ABC', group_key: 'receiving_site' },
+  { username: 'abc.plan',  display_name: 'Brian Scott',   site: 'ABC', group_key: 'shipping_planning' },
+  { username: 'abc.slog',  display_name: 'Carol White',   site: 'ABC', group_key: 'shipping_logistics' },
+  { username: 'abc.mgmt',  display_name: 'Daniel Ross',   site: 'ABC', group_key: 'management' },
+  { username: 'abc.fin',   display_name: 'Elena Marsh',   site: 'ABC', group_key: 'finance' },
+  { username: 'abc.rlog',  display_name: 'Frank Lopez',   site: 'ABC', group_key: 'receiving_logistics' },
+
+  // ── Site ABL ──────────────────────────────────────────────────────────────
+  { username: 'abl.recv',  display_name: 'Grace Kim',     site: 'ABL', group_key: 'receiving_site' },
+  { username: 'abl.plan',  display_name: 'Henry Wu',      site: 'ABL', group_key: 'shipping_planning' },
+  { username: 'abl.slog',  display_name: 'Isabel Cruz',   site: 'ABL', group_key: 'shipping_logistics' },
+  { username: 'abl.mgmt',  display_name: 'James Ford',    site: 'ABL', group_key: 'management' },
+  { username: 'abl.fin',   display_name: 'Karen Bell',    site: 'ABL', group_key: 'finance' },
+  { username: 'abl.rlog',  display_name: 'Leo Singh',     site: 'ABL', group_key: 'receiving_logistics' },
+
+  // ── Site XYZ ──────────────────────────────────────────────────────────────
+  { username: 'xyz.recv',  display_name: 'Maria Evans',   site: 'XYZ', group_key: 'receiving_site' },
+  { username: 'xyz.plan',  display_name: 'Nathan Cole',   site: 'XYZ', group_key: 'shipping_planning' },
+  { username: 'xyz.slog',  display_name: 'Olivia Reed',   site: 'XYZ', group_key: 'shipping_logistics' },
+  { username: 'xyz.mgmt',  display_name: 'Patrick James', site: 'XYZ', group_key: 'management' },
+  { username: 'xyz.fin',   display_name: 'Quinn Patel',   site: 'XYZ', group_key: 'finance' },
+  { username: 'xyz.rlog',  display_name: 'Rachel Tran',   site: 'XYZ', group_key: 'receiving_logistics' },
+];
+
+async function seedDemoUsers(): Promise<void> {
+  await dbExecute('DELETE FROM demo_users');
+  const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  for (const u of DEMO_USERS) {
+    await dbExecute(
+      `INSERT INTO demo_users (username, password_hash, display_name, site, group_key)
+       VALUES (@username, @hash, @display_name, @site, @group_key)`,
+      { username: u.username, hash, display_name: u.display_name, site: u.site, group_key: u.group_key }
+    );
+  }
+  console.log(`✓ Seeded ${DEMO_USERS.length} demo users (password: ${DEMO_PASSWORD})`);
+}
+
 async function seed() {
   await dbExecute('DELETE FROM sto_audit_log');
   await dbExecute('DELETE FROM sto_requests');
@@ -371,6 +424,8 @@ async function seed() {
 
   const row = await dbQueryOne<{ cnt: number }>('SELECT COUNT(*) AS cnt FROM sto_requests');
   console.log(`✓ Seeded ${row?.cnt ?? 0} demo STOs across all pipeline stages.`);
+
+  await seedDemoUsers();
 }
 
 seed().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });

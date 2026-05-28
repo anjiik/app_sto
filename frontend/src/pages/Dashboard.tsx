@@ -183,7 +183,7 @@ export function Dashboard() {
                 </span>
               )}
               <span className="text-gray-400 text-sm">
-                {user?.plant !== 'ALL' ? `Plant ${user?.plant}` : 'All Plants'}
+                {user?.site ?? 'All Sites'}
               </span>
             </div>
           </div>

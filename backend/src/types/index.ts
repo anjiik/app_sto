@@ -28,7 +28,7 @@ export interface JwtPayload {
   userId: number;
   group: Group;
   name: string;
-  plant: string;
+  site: string;  // facility code, e.g. ABC — comes from AD/demo data
 }
 
 export interface AuthRequest extends Express.Request {

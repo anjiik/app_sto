@@ -144,7 +144,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       rush_request: body.rush_request ? 1 : 0,
       priority: body.priority || 3,
       public_holiday: body.public_holiday ? 1 : 0,
-      requesting_plant: body.requesting_plant || user.plant,
+      requesting_plant: body.requesting_plant || user.site,
       shipping_site: body.shipping_site || null,
       receiving_site: body.receiving_site || null,
       toll_mfg: body.toll_mfg ? 1 : 0,

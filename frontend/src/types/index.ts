@@ -20,7 +20,7 @@ export interface User {
   userId: number;
   group: Group;
   name: string;
-  plant: string;
+  site: string;  // facility code, e.g. ABC — comes from AD/demo data
 }
 
 export interface STORequest {

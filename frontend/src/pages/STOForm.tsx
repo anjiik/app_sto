@@ -94,7 +94,7 @@ export function STOForm() {
                 </select>
               </Field>
               <Field label="Requesting Plant" required>
-                <input {...register('requesting_plant', { required: true })} defaultValue={user?.plant !== 'ALL' ? user?.plant : ''} className={INPUT} placeholder="e.g. Plant B" />
+                <input {...register('requesting_plant', { required: true })} defaultValue={user?.site ?? ''} className={INPUT} placeholder="e.g. Plant B" />
               </Field>
               <Field label="Repeat Shipment (Calendar Year)" hint="Enter year if this is a repeat">
                 <input {...register('repeat_shipment_calendar_year')} className={INPUT} placeholder="e.g. 2026" />

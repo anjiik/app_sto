@@ -101,3 +101,15 @@ CREATE TABLE sto_config (
 INSERT INTO sto_config (config_key, config_value) VALUES
     ('management_approval_material_threshold', '10000'),
     ('management_approval_freight_threshold',  '5000');
+
+-- Demo users table — used for local development / testing.
+-- In production this table is bypassed; authentication comes from PingFederate/AD.
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='demo_users' AND xtype='U')
+CREATE TABLE demo_users (
+    id           INT PRIMARY KEY IDENTITY(1,1),
+    username     VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(200) NOT NULL,
+    display_name VARCHAR(200) NOT NULL,
+    site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, XYZ
+    group_key    VARCHAR(50)  NOT NULL    -- matches Group type: receiving_site, etc.
+);
