@@ -27,7 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   function handleSwitch() {
     logout();
-    navigate('/', { replace: true });
+    navigate(devBypassMode ? '/login' : '/', { replace: true });
   }
 
   const canCreateNew = user?.group === 'receiving_site';

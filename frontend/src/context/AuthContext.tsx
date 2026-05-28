@@ -22,6 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [devBypassMode, setDevBypassMode] = useState(false);
 
+  // Determine auth mode once on mount — always runs regardless of token state
+  useEffect(() => {
+    api.get('/auth/ping-login-url')
+      .then(r => { setDevBypassMode(r.data.devBypass === true); })
+      .catch(() => {});
+  }, []);
+
+  // Validate existing token or finish loading
   useEffect(() => {
     if (token) {
       api.get('/auth/me')
@@ -29,10 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => { localStorage.removeItem('sto_token'); setToken(null); })
         .finally(() => setLoading(false));
     } else {
-      api.get('/auth/ping-login-url')
-        .then(r => { setDevBypassMode(r.data.devBypass === true); })
-        .catch(() => {})
-        .finally(() => setLoading(false));
+      setLoading(false);
     }
   }, [token]);
 
