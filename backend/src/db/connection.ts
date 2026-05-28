@@ -4,15 +4,28 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function getPool(): Promise<sql.ConnectionPool> {
   if (!poolPromise) {
-    const driver  = process.env.DB_ODBC_DRIVER || 'ODBC Driver 17 for SQL Server';
-    const server  = process.env.DB_SERVER       || 'localhost';
-    const database = process.env.DB_DATABASE    || 'sto_management';
+    const fullServer = process.env.DB_SERVER || 'localhost';
+    const database   = process.env.DB_DATABASE || 'sto_management';
 
-    const connectionString =
-      `Driver={${driver}};Server=${server};Database=${database};` +
-      `TrustServerCertificate=Yes;Trusted_Connection=Yes;`;
+    // Split "SERVERNAME\INSTANCENAME" into separate fields
+    const [server, instanceName] = fullServer.includes('\\')
+      ? fullServer.split('\\')
+      : [fullServer, undefined];
 
-    const pool = new sql.ConnectionPool(connectionString);
+    const config: sql.config = {
+      server,
+      database,
+      driver: 'msnodesqlv8',
+      options: {
+        trustedConnection: true,
+        trustServerCertificate: true,
+        instanceName,
+      },
+    };
+
+    console.log(`DB connecting → server: ${server}, instance: ${instanceName ?? 'default'}, database: ${database}`);
+
+    const pool = new sql.ConnectionPool(config);
     poolPromise = pool.connect().catch(err => {
       poolPromise = null;
       throw err;
