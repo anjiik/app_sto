@@ -1,16 +1,16 @@
-import db from './connection';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Clear existing data
-db.exec(`DELETE FROM sto_audit_log; DELETE FROM sto_requests;`);
+import { dbExecute, dbInsert, dbQueryOne } from './connection';
 
 const now = new Date().toISOString().slice(0, 10);
 
 interface StoRow {
   sto_id: string;
   request_date: string;
-  standard_estimated_ship_date?: string;
-  expedited_estimated_ship_date?: string;
-  repeat_shipment_calendar_year?: string;
+  standard_estimated_ship_date?: string | null;
+  expedited_estimated_ship_date?: string | null;
+  repeat_shipment_calendar_year?: string | null;
   rush_request: number;
   priority: number;
   public_holiday: number;
@@ -23,91 +23,70 @@ interface StoRow {
   requestor_email: string;
   material_sap: string;
   material_description: string;
-  mpn_number?: string;
+  mpn_number?: string | null;
   quantity: number;
   uom: string;
-  batch_number?: string;
-  expiration_date?: string;
-  container_information?: string;
-  shipping_conditions?: string;
+  batch_number?: string | null;
+  expiration_date?: string | null;
+  container_information?: string | null;
+  shipping_conditions?: string | null;
   controlled_shipping_required: number;
-  brand_at_receiving_site?: string;
-  material_value?: number;
-  freight_cost?: number;
+  brand_at_receiving_site?: string | null;
+  material_value?: number | null;
+  freight_cost?: number | null;
   insurance_loss_required: number;
-  rush_reason?: string;
+  rush_reason?: string | null;
   receiving_site_need_by_date: string;
-  estimated_ship_by_date?: string;
+  estimated_ship_by_date?: string | null;
   management_approval_required: number;
-  planning_approved?: number;
-  planning_approved_by_user_id?: number;
-  planning_approved_at?: string;
-  planning_notes?: string;
-  management_approved?: number;
-  management_approved_by_user_id?: number;
-  management_approved_at?: string;
-  management_notes?: string;
-  finance_approved?: number;
-  finance_approved_by_user_id?: number;
-  finance_approved_at?: string;
-  finance_notes?: string;
-  sto_number?: string;
-  shipment_id?: string;
-  ready_to_ship?: number;
-  pgi_date?: string;
-  actual_ship_date?: string;
-  tracking_id?: string;
-  actual_receipt_date?: string;
+  planning_approved?: number | null;
+  planning_approved_by_user_id?: number | null;
+  planning_approved_at?: string | null;
+  planning_notes?: string | null;
+  management_approved?: number | null;
+  management_approved_by_user_id?: number | null;
+  management_approved_at?: string | null;
+  management_notes?: string | null;
+  finance_approved?: number | null;
+  finance_approved_by_user_id?: number | null;
+  finance_approved_at?: string | null;
+  finance_notes?: string | null;
+  sto_number?: string | null;
+  shipment_id?: string | null;
+  ready_to_ship?: number | null;
+  pgi_date?: string | null;
+  actual_ship_date?: string | null;
+  tracking_id?: string | null;
+  actual_receipt_date?: string | null;
   delivery_closed_out: number;
-  corporate_sto_tracker_status?: string;
+  corporate_sto_tracker_status?: string | null;
   status: string;
-  rejection_reason?: string;
+  rejection_reason?: string | null;
 }
 
-const insert = db.prepare(`
-  INSERT INTO sto_requests (
-    sto_id, request_date, standard_estimated_ship_date, expedited_estimated_ship_date,
-    repeat_shipment_calendar_year, rush_request, priority, public_holiday,
-    requesting_plant, shipping_site, receiving_site, toll_mfg,
-    requestor_user_id, requestor_name, requestor_email,
-    material_sap, material_description, mpn_number, quantity, uom,
-    batch_number, expiration_date, container_information, shipping_conditions,
-    controlled_shipping_required, brand_at_receiving_site,
-    material_value, freight_cost, insurance_loss_required,
-    rush_reason, receiving_site_need_by_date, estimated_ship_by_date,
-    management_approval_required,
-    planning_approved, planning_approved_by_user_id, planning_approved_at, planning_notes,
-    management_approved, management_approved_by_user_id, management_approved_at, management_notes,
-    finance_approved, finance_approved_by_user_id, finance_approved_at, finance_notes,
-    sto_number, shipment_id, ready_to_ship, pgi_date,
-    actual_ship_date, tracking_id, actual_receipt_date, delivery_closed_out,
-    corporate_sto_tracker_status, status, rejection_reason
-  ) VALUES (
-    @sto_id, @request_date, @standard_estimated_ship_date, @expedited_estimated_ship_date,
-    @repeat_shipment_calendar_year, @rush_request, @priority, @public_holiday,
-    @requesting_plant, @shipping_site, @receiving_site, @toll_mfg,
-    @requestor_user_id, @requestor_name, @requestor_email,
-    @material_sap, @material_description, @mpn_number, @quantity, @uom,
-    @batch_number, @expiration_date, @container_information, @shipping_conditions,
-    @controlled_shipping_required, @brand_at_receiving_site,
-    @material_value, @freight_cost, @insurance_loss_required,
-    @rush_reason, @receiving_site_need_by_date, @estimated_ship_by_date,
-    @management_approval_required,
-    @planning_approved, @planning_approved_by_user_id, @planning_approved_at, @planning_notes,
-    @management_approved, @management_approved_by_user_id, @management_approved_at, @management_notes,
-    @finance_approved, @finance_approved_by_user_id, @finance_approved_at, @finance_notes,
-    @sto_number, @shipment_id, @ready_to_ship, @pgi_date,
-    @actual_ship_date, @tracking_id, @actual_receipt_date, @delivery_closed_out,
-    @corporate_sto_tracker_status, @status, @rejection_reason
-  )
-`);
+const DEFAULTS: Omit<StoRow, 'sto_id' | 'request_date' | 'rush_request' | 'priority' | 'public_holiday' | 'requesting_plant' | 'shipping_site' | 'receiving_site' | 'toll_mfg' | 'requestor_user_id' | 'requestor_name' | 'requestor_email' | 'material_sap' | 'material_description' | 'quantity' | 'uom' | 'controlled_shipping_required' | 'insurance_loss_required' | 'receiving_site_need_by_date' | 'management_approval_required' | 'delivery_closed_out' | 'status'> = {
+  standard_estimated_ship_date: null, expedited_estimated_ship_date: null,
+  repeat_shipment_calendar_year: null, mpn_number: null, batch_number: null,
+  expiration_date: null, container_information: null, shipping_conditions: null,
+  brand_at_receiving_site: null, material_value: null, freight_cost: null,
+  rush_reason: null, estimated_ship_by_date: null,
+  planning_approved: null, planning_approved_by_user_id: null,
+  planning_approved_at: null, planning_notes: null,
+  management_approved: null, management_approved_by_user_id: null,
+  management_approved_at: null, management_notes: null,
+  finance_approved: null, finance_approved_by_user_id: null,
+  finance_approved_at: null, finance_notes: null,
+  sto_number: null, shipment_id: null, ready_to_ship: null,
+  pgi_date: null, actual_ship_date: null, tracking_id: null,
+  actual_receipt_date: null, corporate_sto_tracker_status: null,
+  rejection_reason: null,
+};
 
-const insertAudit = db.prepare(`
-  INSERT INTO sto_audit_log (sto_request_id, action, old_status, new_status, performed_by, performed_by_name, notes)
-  VALUES (@stoId, @action, @oldStatus, @newStatus, @performedBy, @performedByName, @notes)
-`);
+function normalize(sto: Partial<StoRow> & Pick<StoRow, 'sto_id' | 'request_date' | 'rush_request' | 'priority' | 'public_holiday' | 'requesting_plant' | 'shipping_site' | 'receiving_site' | 'toll_mfg' | 'requestor_user_id' | 'requestor_name' | 'requestor_email' | 'material_sap' | 'material_description' | 'quantity' | 'uom' | 'controlled_shipping_required' | 'insurance_loss_required' | 'receiving_site_need_by_date' | 'management_approval_required' | 'delivery_closed_out' | 'status'>): StoRow {
+  return { ...DEFAULTS, ...sto } as StoRow;
+}
 
-const STOS: StoRow[] = [
+const STOS = [
   // ── 1. DRAFT ──────────────────────────────────────────────────────────────
   {
     sto_id: 'STO-2026-00001',
@@ -174,7 +153,7 @@ const STOS: StoRow[] = [
     delivery_closed_out: 0, status: 'SHIPPING_LOGISTICS',
   },
 
-  // ── 4. MANAGEMENT_REVIEW (high value — auto triggered) ────────────────────
+  // ── 4. MANAGEMENT_REVIEW ─────────────────────────────────────────────────
   {
     sto_id: 'STO-2026-00004',
     request_date: now,
@@ -310,62 +289,88 @@ const STOS: StoRow[] = [
     rejection_reason: 'Material discontinued — no longer in inventory. Transfer cannot proceed.',
     delivery_closed_out: 0, status: 'REJECTED',
   },
-];
+] as const;
 
-// Ensure every optional field is present (better-sqlite3 requires all named params)
-const DEFAULTS: Omit<StoRow, 'sto_id' | 'request_date' | 'rush_request' | 'priority' | 'public_holiday' | 'requesting_plant' | 'shipping_site' | 'receiving_site' | 'toll_mfg' | 'requestor_user_id' | 'requestor_name' | 'requestor_email' | 'material_sap' | 'material_description' | 'quantity' | 'uom' | 'controlled_shipping_required' | 'insurance_loss_required' | 'receiving_site_need_by_date' | 'management_approval_required' | 'delivery_closed_out' | 'status'> = {
-  standard_estimated_ship_date: undefined, expedited_estimated_ship_date: undefined,
-  repeat_shipment_calendar_year: undefined, mpn_number: undefined, batch_number: undefined,
-  expiration_date: undefined, container_information: undefined, shipping_conditions: undefined,
-  brand_at_receiving_site: undefined, material_value: undefined, freight_cost: undefined,
-  rush_reason: undefined, estimated_ship_by_date: undefined,
-  planning_approved: undefined, planning_approved_by_user_id: undefined,
-  planning_approved_at: undefined, planning_notes: undefined,
-  management_approved: undefined, management_approved_by_user_id: undefined,
-  management_approved_at: undefined, management_notes: undefined,
-  finance_approved: undefined, finance_approved_by_user_id: undefined,
-  finance_approved_at: undefined, finance_notes: undefined,
-  sto_number: undefined, shipment_id: undefined, ready_to_ship: undefined,
-  pgi_date: undefined, actual_ship_date: undefined, tracking_id: undefined,
-  actual_receipt_date: undefined, corporate_sto_tracker_status: undefined,
-  rejection_reason: undefined,
-};
-
-function normalize(sto: StoRow): StoRow {
-  return { ...DEFAULTS, ...sto } as StoRow;
+async function insertSto(sto: StoRow): Promise<number> {
+  return dbInsert(`
+    INSERT INTO sto_requests (
+      sto_id, request_date, standard_estimated_ship_date, expedited_estimated_ship_date,
+      repeat_shipment_calendar_year, rush_request, priority, public_holiday,
+      requesting_plant, shipping_site, receiving_site, toll_mfg,
+      requestor_user_id, requestor_name, requestor_email,
+      material_sap, material_description, mpn_number, quantity, uom,
+      batch_number, expiration_date, container_information, shipping_conditions,
+      controlled_shipping_required, brand_at_receiving_site,
+      material_value, freight_cost, insurance_loss_required,
+      rush_reason, receiving_site_need_by_date, estimated_ship_by_date,
+      management_approval_required,
+      planning_approved, planning_approved_by_user_id, planning_approved_at, planning_notes,
+      management_approved, management_approved_by_user_id, management_approved_at, management_notes,
+      finance_approved, finance_approved_by_user_id, finance_approved_at, finance_notes,
+      sto_number, shipment_id, ready_to_ship, pgi_date,
+      actual_ship_date, tracking_id, actual_receipt_date, delivery_closed_out,
+      corporate_sto_tracker_status, status, rejection_reason
+    ) OUTPUT INSERTED.id VALUES (
+      @sto_id, @request_date, @standard_estimated_ship_date, @expedited_estimated_ship_date,
+      @repeat_shipment_calendar_year, @rush_request, @priority, @public_holiday,
+      @requesting_plant, @shipping_site, @receiving_site, @toll_mfg,
+      @requestor_user_id, @requestor_name, @requestor_email,
+      @material_sap, @material_description, @mpn_number, @quantity, @uom,
+      @batch_number, @expiration_date, @container_information, @shipping_conditions,
+      @controlled_shipping_required, @brand_at_receiving_site,
+      @material_value, @freight_cost, @insurance_loss_required,
+      @rush_reason, @receiving_site_need_by_date, @estimated_ship_by_date,
+      @management_approval_required,
+      @planning_approved, @planning_approved_by_user_id, @planning_approved_at, @planning_notes,
+      @management_approved, @management_approved_by_user_id, @management_approved_at, @management_notes,
+      @finance_approved, @finance_approved_by_user_id, @finance_approved_at, @finance_notes,
+      @sto_number, @shipment_id, @ready_to_ship, @pgi_date,
+      @actual_ship_date, @tracking_id, @actual_receipt_date, @delivery_closed_out,
+      @corporate_sto_tracker_status, @status, @rejection_reason
+    )
+  `, sto as unknown as Record<string, unknown>);
 }
 
-const seedAll = db.transaction(() => {
-  for (const raw of STOS) {
-    const sto = normalize(raw);
-    const result = insert.run(sto);
-    const id = Number(result.lastInsertRowid);
+async function insertAudit(stoId: number, action: string, oldStatus: string | null, newStatus: string, performedBy: number, performedByName: string, notes: string | null = null): Promise<void> {
+  await dbExecute(`
+    INSERT INTO sto_audit_log (sto_request_id, action, old_status, new_status, performed_by, performed_by_name, notes)
+    VALUES (@stoId, @action, @oldStatus, @newStatus, @performedBy, @performedByName, @notes)
+  `, { stoId, action, oldStatus, newStatus, performedBy, performedByName, notes });
+}
 
-    insertAudit.run({ stoId: id, action: 'CREATED', oldStatus: null, newStatus: 'DRAFT', performedBy: 1, performedByName: sto.requestor_name, notes: null });
+async function seed() {
+  await dbExecute('DELETE FROM sto_audit_log');
+  await dbExecute('DELETE FROM sto_requests');
+
+  for (const raw of STOS) {
+    const sto = normalize(raw as Parameters<typeof normalize>[0]);
+    const id = await insertSto(sto);
+
+    await insertAudit(id, 'CREATED', null, 'DRAFT', 1, sto.requestor_name, null);
 
     if (sto.status !== 'DRAFT') {
-      insertAudit.run({ stoId: id, action: 'SUBMITTED', oldStatus: 'DRAFT', newStatus: 'PLANNING_REVIEW', performedBy: 1, performedByName: sto.requestor_name, notes: null });
+      await insertAudit(id, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', 1, sto.requestor_name, null);
     }
     if (['SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED'].includes(sto.status)) {
       const approved = sto.planning_approved === 1;
-      insertAudit.run({ stoId: id, action: approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED', oldStatus: 'PLANNING_REVIEW', newStatus: approved ? 'SHIPPING_LOGISTICS' : 'REJECTED', performedBy: 2, performedByName: 'Shipping Site Planning', notes: sto.planning_notes || null });
+      await insertAudit(id, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED', 'PLANNING_REVIEW', approved ? 'SHIPPING_LOGISTICS' : 'REJECTED', 2, 'Shipping Site Planning', sto.planning_notes || null);
     }
     if (['MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status)) {
-      insertAudit.run({ stoId: id, action: 'LOGISTICS_SUBMITTED', oldStatus: 'SHIPPING_LOGISTICS', newStatus: sto.management_approval_required ? 'MANAGEMENT_REVIEW' : 'FINANCE_REVIEW', performedBy: 3, performedByName: 'Shipping Site Logistics', notes: `Freight: $${sto.freight_cost || 0}` });
+      await insertAudit(id, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', sto.management_approval_required ? 'MANAGEMENT_REVIEW' : 'FINANCE_REVIEW', 3, 'Shipping Site Logistics', `Freight: $${sto.freight_cost || 0}`);
     }
     if (['FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status) && sto.management_approval_required) {
-      insertAudit.run({ stoId: id, action: 'MANAGEMENT_APPROVED', oldStatus: 'MANAGEMENT_REVIEW', newStatus: 'FINANCE_REVIEW', performedBy: 4, performedByName: 'Management', notes: sto.management_notes || null });
+      await insertAudit(id, 'MANAGEMENT_APPROVED', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 4, 'Management', sto.management_notes || null);
     }
     if (['RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status)) {
-      insertAudit.run({ stoId: id, action: 'FINANCE_APPROVED', oldStatus: 'FINANCE_REVIEW', newStatus: 'RECEIVING_LOGISTICS', performedBy: 5, performedByName: 'Finance', notes: sto.finance_notes || null });
+      await insertAudit(id, 'FINANCE_APPROVED', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 5, 'Finance', sto.finance_notes || null);
     }
     if (sto.status === 'CLOSED') {
-      insertAudit.run({ stoId: id, action: 'DELIVERY_CLOSED', oldStatus: 'RECEIVING_LOGISTICS', newStatus: 'CLOSED', performedBy: 6, performedByName: 'Receiving Site Logistics', notes: `Received: ${sto.actual_receipt_date}` });
+      await insertAudit(id, 'DELIVERY_CLOSED', 'RECEIVING_LOGISTICS', 'CLOSED', 6, 'Receiving Site Logistics', `Received: ${sto.actual_receipt_date}`);
     }
   }
-});
 
-seedAll();
+  const row = await dbQueryOne<{ cnt: number }>('SELECT COUNT(*) AS cnt FROM sto_requests');
+  console.log(`✓ Seeded ${row?.cnt ?? 0} demo STOs across all pipeline stages.`);
+}
 
-const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM sto_requests').get({}) as { cnt: number };
-console.log(`✓ Seeded ${cnt} demo STOs across all pipeline stages.`);
+seed().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });

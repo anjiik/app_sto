@@ -1,48 +1,50 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import db from '../db/connection';
+import { dbQueryOne, dbExecute } from '../db/connection';
 import { STOStatus } from '../types';
 
 const router = Router();
 router.use(authenticate);
 
-function logAudit(stoId: number, action: string, oldStatus: string, newStatus: string, userId: number, userName: string, notes?: string): void {
-  db.prepare(`
+async function logAudit(stoId: number, action: string, oldStatus: string | null, newStatus: string, userId: number, userName: string, notes?: string): Promise<void> {
+  await dbExecute(`
     INSERT INTO sto_audit_log (sto_request_id, action, old_status, new_status, performed_by, performed_by_name, notes)
     VALUES (@stoId, @action, @oldStatus, @newStatus, @performedBy, @performedByName, @notes)
-  `).run({ stoId, action, oldStatus, newStatus, performedBy: userId, performedByName: userName, notes: notes || null });
+  `, { stoId, action, oldStatus: oldStatus || null, newStatus, performedBy: userId, performedByName: userName, notes: notes || null });
 }
 
-function updateStatus(id: number, status: STOStatus): void {
-  db.prepare("UPDATE sto_requests SET status = @status, updated_at = datetime('now') WHERE id = @id")
-    .run({ id, status });
+async function updateStatus(id: number, status: STOStatus): Promise<void> {
+  await dbExecute(
+    'UPDATE sto_requests SET status = @status, updated_at = GETDATE() WHERE id = @id',
+    { id, status }
+  );
 }
 
-function getSto(id: number): Record<string, unknown> | undefined {
-  return db.prepare('SELECT * FROM sto_requests WHERE id = @id').get({ id }) as Record<string, unknown> | undefined;
+async function getSto(id: number): Promise<Record<string, unknown> | undefined> {
+  return dbQueryOne<Record<string, unknown>>('SELECT * FROM sto_requests WHERE id = @id', { id });
 }
 
-// POST /api/sto/:id/submit — receiving_site submits DRAFT → PLANNING_REVIEW
+// POST /api/sto/:id/submit
 router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'receiving_site') {
     res.status(403).json({ message: 'Only the Receiving Site can submit STOs' }); return;
   }
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'DRAFT') {
       res.status(400).json({ message: 'Only DRAFT STOs can be submitted' }); return;
     }
-    updateStatus(sto.id as number, 'PLANNING_REVIEW');
-    logAudit(sto.id as number, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', user.userId, user.name);
+    await updateStatus(sto.id as number, 'PLANNING_REVIEW');
+    await logAudit(sto.id as number, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', user.userId, user.name);
     res.json({ message: 'Submitted to Shipping Planning queue' });
   } catch (err) {
     res.status(500).json({ message: 'Error', error: String(err) });
   }
 });
 
-// POST /api/sto/:id/planning — shipping_planning approves/rejects
+// POST /api/sto/:id/planning
 router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'shipping_planning') {
@@ -52,7 +54,7 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
     approved: boolean; notes?: string; mpn_number?: string; batch_number?: string; expiration_date?: string;
   };
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'PLANNING_REVIEW') {
       res.status(400).json({ message: 'STO is not in Planning Review' }); return;
@@ -61,20 +63,20 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
       res.status(400).json({ message: 'MPN Number, Batch Number and Expiration Date are required to approve' }); return;
     }
     const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         planning_approved = @planningApproved,
         planning_approved_by_user_id = @approvedBy,
-        planning_approved_at = datetime('now'),
+        planning_approved_at = GETDATE(),
         planning_notes = @notes,
         mpn_number = @mpn_number,
         batch_number = @batch_number,
         expiration_date = @expiration_date,
         status = @status,
         rejection_reason = @rejectionReason,
-        updated_at = datetime('now')
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: sto.id,
       planningApproved: approved ? 1 : 0,
       approvedBy: user.userId,
@@ -85,7 +87,7 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
       status: newStatus,
       rejectionReason: approved ? null : (notes || 'Rejected by Shipping Planning'),
     });
-    logAudit(sto.id as number, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED',
+    await logAudit(sto.id as number, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED',
       'PLANNING_REVIEW', newStatus, user.userId, user.name, notes);
     res.json({ message: approved ? 'Approved — sent to Shipping Logistics' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -93,14 +95,14 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
   }
 });
 
-// POST /api/sto/:id/logistics — shipping_logistics fills fields and advances
+// POST /api/sto/:id/logistics
 router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'shipping_logistics') {
     res.status(403).json({ message: 'Shipping Logistics group required' }); return;
   }
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'SHIPPING_LOGISTICS') {
       res.status(400).json({ message: 'STO is not in Shipping Logistics step' }); return;
@@ -115,7 +117,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
 
     const newStatus: STOStatus = mgmtRequired ? 'MANAGEMENT_REVIEW' : 'FINANCE_REVIEW';
 
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         container_information = @container_information,
         freight_cost = @freight_cost,
@@ -126,9 +128,9 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         estimated_delivery_date = @estimated_delivery_date,
         management_approval_required = @management_approval_required,
         status = @status,
-        updated_at = datetime('now')
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: sto.id,
       container_information: body.container_information || null,
       freight_cost: freightCost || null,
@@ -141,7 +143,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
       status: newStatus,
     });
 
-    logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.userId, user.name,
+    await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.userId, user.name,
       `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? 'required' : 'not required'}.`);
     res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Finance review', new_status: newStatus });
   } catch (err) {
@@ -149,7 +151,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
   }
 });
 
-// POST /api/sto/:id/management — management approves/rejects
+// POST /api/sto/:id/management
 router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'management') {
@@ -157,24 +159,24 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
   }
   const { approved, notes, igb_complete } = req.body as { approved: boolean; notes?: string; igb_complete?: boolean };
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'MANAGEMENT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Management Review' }); return;
     }
     const newStatus: STOStatus = approved ? 'FINANCE_REVIEW' : 'REJECTED';
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         management_approved = @managementApproved,
         management_approved_by_user_id = @approvedBy,
-        management_approved_at = datetime('now'),
+        management_approved_at = GETDATE(),
         management_notes = @notes,
         igb_complete = @igb_complete,
         status = @status,
         rejection_reason = @rejectionReason,
-        updated_at = datetime('now')
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: sto.id,
       managementApproved: approved ? 1 : 0,
       approvedBy: user.userId,
@@ -183,7 +185,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
       status: newStatus,
       rejectionReason: approved ? null : (notes || 'Rejected by Management'),
     });
-    logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
+    await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
       'MANAGEMENT_REVIEW', newStatus, user.userId, user.name, notes);
     res.json({ message: approved ? 'Management approved — sent to Finance' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -191,7 +193,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
   }
 });
 
-// POST /api/sto/:id/finance — finance approves/rejects
+// POST /api/sto/:id/finance
 router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'finance') {
@@ -199,24 +201,24 @@ router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<voi
   }
   const { approved, notes, igb_complete } = req.body as { approved: boolean; notes?: string; igb_complete?: boolean };
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'FINANCE_REVIEW') {
       res.status(400).json({ message: 'STO is not in Finance Review' }); return;
     }
     const newStatus: STOStatus = approved ? 'RECEIVING_LOGISTICS' : 'REJECTED';
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         finance_approved = @financeApproved,
         finance_approved_by_user_id = @approvedBy,
-        finance_approved_at = datetime('now'),
+        finance_approved_at = GETDATE(),
         finance_notes = @notes,
         igb_complete = @igb_complete,
         status = @status,
         rejection_reason = @rejectionReason,
-        updated_at = datetime('now')
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: sto.id,
       financeApproved: approved ? 1 : 0,
       approvedBy: user.userId,
@@ -225,7 +227,7 @@ router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<voi
       status: newStatus,
       rejectionReason: approved ? null : (notes || 'Rejected by Finance'),
     });
-    logAudit(sto.id as number, approved ? 'FINANCE_APPROVED' : 'FINANCE_REJECTED',
+    await logAudit(sto.id as number, approved ? 'FINANCE_APPROVED' : 'FINANCE_REJECTED',
       'FINANCE_REVIEW', newStatus, user.userId, user.name, notes);
     res.json({ message: approved ? 'Finance approved — sent to Receiving Logistics' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -233,14 +235,14 @@ router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<voi
   }
 });
 
-// POST /api/sto/:id/receiving-logistics — receiving_logistics confirms receipt and closes
+// POST /api/sto/:id/receiving-logistics
 router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'receiving_logistics') {
     res.status(403).json({ message: 'Receiving Logistics group required' }); return;
   }
   try {
-    const sto = getSto(parseInt(req.params.id));
+    const sto = await getSto(parseInt(req.params.id));
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'RECEIVING_LOGISTICS') {
       res.status(400).json({ message: 'STO is not in Receiving Logistics step' }); return;
@@ -249,21 +251,21 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
     const body = req.body;
     const newStatus: STOStatus = body.delivery_closed_out ? 'CLOSED' : 'RECEIVING_LOGISTICS';
 
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         actual_receipt_date = @actual_receipt_date,
         delivery_closed_out = @delivery_closed_out,
         status = @status,
-        updated_at = datetime('now')
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: sto.id,
       actual_receipt_date: body.actual_receipt_date || null,
       delivery_closed_out: body.delivery_closed_out ? 1 : 0,
       status: newStatus,
     });
 
-    logAudit(sto.id as number,
+    await logAudit(sto.id as number,
       newStatus === 'CLOSED' ? 'DELIVERY_CLOSED' : 'RECEIPT_UPDATED',
       'RECEIVING_LOGISTICS', newStatus, user.userId, user.name,
       body.actual_receipt_date ? `Received: ${body.actual_receipt_date}` : undefined);

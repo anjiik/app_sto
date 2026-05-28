@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import db from '../db/connection';
+import { dbQuery, dbQueryOne, dbExecute, dbInsert } from '../db/connection';
 
 const router = Router();
 router.use(authenticate);
@@ -10,14 +10,14 @@ const BOOL_COLS = new Set([
   'controlled_shipping_required', 'insurance_loss_required',
   'management_approval_required', 'ready_to_ship', 'delivery_closed_out',
   'inventory_approved', 'management_approved', 'finance_approved',
-  'planning_approved',
+  'planning_approved', 'igb_complete',
 ]);
 
 function normalizeSto(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...row };
   for (const col of BOOL_COLS) {
     if (col in out && out[col] !== null && out[col] !== undefined) {
-      out[col] = out[col] === 1;
+      out[col] = Boolean(out[col]);
     }
   }
   return out;
@@ -27,7 +27,7 @@ function generateStoId(seqNum: number): string {
   return `STO-${new Date().getFullYear()}-${String(seqNum).padStart(5, '0')}`;
 }
 
-// GET /api/sto — everyone sees all STOs (field editing is role-restricted, not viewing)
+// GET /api/sto
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const conditions: string[] = [];
@@ -54,7 +54,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
     query += ' ORDER BY created_at DESC';
 
-    const rows = db.prepare(query).all(params) as Record<string, unknown>[];
+    const rows = await dbQuery<Record<string, unknown>>(query, params);
     res.json(rows.map(normalizeSto));
   } catch (err) {
     console.error(err);
@@ -62,17 +62,16 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// GET /api/audit-log — last 20 audit entries across all STOs
+// GET /api/sto/audit-log
 router.get('/audit-log', async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const rows = db.prepare(`
-      SELECT l.id, l.sto_request_id, r.sto_id, l.action, l.old_status, l.new_status,
+    const rows = await dbQuery<Record<string, unknown>>(`
+      SELECT TOP 20 l.id, l.sto_request_id, r.sto_id, l.action, l.old_status, l.new_status,
              l.performed_by_name, l.notes, l.performed_at
       FROM sto_audit_log l
       JOIN sto_requests r ON r.id = l.sto_request_id
       ORDER BY l.performed_at DESC
-      LIMIT 20
-    `).all({}) as Record<string, unknown>[];
+    `);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: 'Database error', error: String(err) });
@@ -82,12 +81,16 @@ router.get('/audit-log', async (_req: AuthRequest, res: Response): Promise<void>
 // GET /api/sto/:id
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sto = db.prepare('SELECT * FROM sto_requests WHERE id = @id').get({ id: parseInt(req.params.id) }) as Record<string, unknown> | undefined;
+    const sto = await dbQueryOne<Record<string, unknown>>(
+      'SELECT * FROM sto_requests WHERE id = @id',
+      { id: parseInt(req.params.id) }
+    );
     if (!sto) { res.status(404).json({ message: 'STO not found' }); return; }
 
-    const auditLog = db.prepare(
-      'SELECT * FROM sto_audit_log WHERE sto_request_id = @stoId ORDER BY performed_at ASC'
-    ).all({ stoId: sto.id }) as Record<string, unknown>[];
+    const auditLog = await dbQuery<Record<string, unknown>>(
+      'SELECT * FROM sto_audit_log WHERE sto_request_id = @stoId ORDER BY performed_at ASC',
+      { stoId: sto.id }
+    );
 
     res.json({ ...normalizeSto(sto), audit_log: auditLog });
   } catch (err) {
@@ -95,7 +98,7 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// POST /api/sto — receiving_site creates a new STO
+// POST /api/sto
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'receiving_site') {
@@ -105,36 +108,34 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const body = req.body;
     const matVal = parseFloat(body.material_value || '0');
 
-    const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM sto_requests').get({}) as { cnt: number };
-    const stoId = generateStoId(cnt + 1);
+    const countRow = await dbQueryOne<{ cnt: number }>('SELECT COUNT(*) AS cnt FROM sto_requests');
+    const stoId = generateStoId((countRow?.cnt ?? 0) + 1);
 
-    const result = db.prepare(`
+    const newId = await dbInsert(`
       INSERT INTO sto_requests (
         sto_id, request_date, standard_estimated_ship_date, expedited_estimated_ship_date,
         repeat_shipment_calendar_year, rush_request, priority, public_holiday,
         requesting_plant, shipping_site, receiving_site, toll_mfg,
         requestor_user_id, requestor_name, requestor_email,
-        material_sap, material_description, mpn_number, quantity, uom,
-        batch_number, expiration_date, shipping_conditions,
-        controlled_shipping_required, brand_at_receiving_site,
+        material_sap, material_description, quantity, uom,
+        shipping_conditions, controlled_shipping_required, brand_at_receiving_site,
         material_value, insurance_loss_required,
         rush_reason, receiving_site_need_by_date, estimated_ship_by_date,
         sto_number, shipment_id, corporate_sto_tracker_status, inco_terms,
         status
-      ) VALUES (
+      ) OUTPUT INSERTED.id VALUES (
         @sto_id, @request_date, @standard_estimated_ship_date, @expedited_estimated_ship_date,
         @repeat_shipment_calendar_year, @rush_request, @priority, @public_holiday,
         @requesting_plant, @shipping_site, @receiving_site, @toll_mfg,
         @requestor_user_id, @requestor_name, @requestor_email,
         @material_sap, @material_description, @quantity, @uom,
-        @shipping_conditions,
-        @controlled_shipping_required, @brand_at_receiving_site,
+        @shipping_conditions, @controlled_shipping_required, @brand_at_receiving_site,
         @material_value, @insurance_loss_required,
         @rush_reason, @receiving_site_need_by_date, @estimated_ship_by_date,
         @sto_number, @shipment_id, @corporate_sto_tracker_status, @inco_terms,
         'DRAFT'
       )
-    `).run({
+    `, {
       sto_id: stoId,
       request_date: body.request_date || new Date().toISOString().slice(0, 10),
       standard_estimated_ship_date: body.standard_estimated_ship_date || null,
@@ -168,11 +169,10 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       inco_terms: body.inco_terms || null,
     });
 
-    const newId = Number(result.lastInsertRowid);
-    db.prepare(`
+    await dbExecute(`
       INSERT INTO sto_audit_log (sto_request_id, action, new_status, performed_by, performed_by_name)
       VALUES (@stoId, 'CREATED', 'DRAFT', @performedBy, @performedByName)
-    `).run({ stoId: newId, performedBy: user.userId, performedByName: user.name });
+    `, { stoId: newId, performedBy: user.userId, performedByName: user.name });
 
     res.status(201).json({ id: newId, sto_id: stoId });
   } catch (err) {
@@ -181,21 +181,24 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// PUT /api/sto/:id — receiving_site edits their own DRAFT
+// PUT /api/sto/:id
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'receiving_site') {
     res.status(403).json({ message: 'Only the Receiving Site can edit STOs' }); return;
   }
   try {
-    const existing = db.prepare('SELECT requestor_user_id, status FROM sto_requests WHERE id = @id').get({ id: parseInt(req.params.id) }) as { requestor_user_id: number; status: string } | undefined;
+    const existing = await dbQueryOne<{ requestor_user_id: number; status: string }>(
+      'SELECT requestor_user_id, status FROM sto_requests WHERE id = @id',
+      { id: parseInt(req.params.id) }
+    );
     if (!existing) { res.status(404).json({ message: 'STO not found' }); return; }
     if (existing.status !== 'DRAFT') {
       res.status(400).json({ message: 'Only DRAFT STOs can be edited' }); return;
     }
 
     const body = req.body;
-    db.prepare(`
+    await dbExecute(`
       UPDATE sto_requests SET
         standard_estimated_ship_date = @standard_estimated_ship_date,
         expedited_estimated_ship_date = @expedited_estimated_ship_date,
@@ -214,9 +217,10 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
         requestor_name = @requestor_name, requestor_email = @requestor_email,
         sto_number = @sto_number, shipment_id = @shipment_id,
         corporate_sto_tracker_status = @corporate_sto_tracker_status,
-        updated_at = datetime('now')
+        inco_terms = @inco_terms,
+        updated_at = GETDATE()
       WHERE id = @id
-    `).run({
+    `, {
       id: parseInt(req.params.id),
       standard_estimated_ship_date: body.standard_estimated_ship_date || null,
       expedited_estimated_ship_date: body.expedited_estimated_ship_date || null,
