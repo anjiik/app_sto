@@ -1,12 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config(); // must run before any route imports read process.env
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import stoRoutes from './routes/sto';
 import approvalRoutes from './routes/approvals';
 import analyticsRoutes from './routes/analytics';
-
-dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '4000');
