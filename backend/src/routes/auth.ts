@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { JwtPayload, Group } from '../types';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { dbQueryOne } from '../db/connection';
+import { authenticateWithAD } from '../lib/ldap';
 
 const router = Router();
 
@@ -47,44 +48,40 @@ function issueToken(userId: number, group: Group, displayName: string, site: str
 // ── Demo login (DEV_BYPASS only) ───────────────────────────────────────────────
 
 // POST /api/auth/login — { username, password } → JWT
-// Only active when PING_DEV_BYPASS=true. In production, auth goes through PingFederate.
+// Dev bypass mode  (PING_DEV_BYPASS=true):  validates against demo_users table
+// Production mode  (PING_DEV_BYPASS=false): validates against Active Directory via LDAP
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  if (!DEV_BYPASS) {
-    res.status(403).json({ message: 'Direct login is disabled — authenticate via PingFederate' });
-    return;
-  }
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ message: 'username and password are required' });
     return;
   }
 
-  interface DemoUserRow {
-    id: number;
-    password_hash: string;
-    display_name: string;
-    site: string;
-    group_key: string;
+  if (DEV_BYPASS) {
+    // ── Demo mode: check against demo_users table ────────────────────────────
+    interface DemoUserRow { id: number; password_hash: string; display_name: string; site: string; group_key: string; }
+    const user = await dbQueryOne<DemoUserRow>(
+      'SELECT id, password_hash, display_name, site, group_key FROM demo_users WHERE username = @username',
+      { username }
+    );
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      res.status(401).json({ message: 'Invalid username or password' });
+      return;
+    }
+    const { token, user: payload } = issueToken(user.id, user.group_key as Group, user.display_name, user.site);
+    res.json({ token, user: payload });
+
+  } else {
+    // ── Production mode: authenticate against Active Directory ───────────────
+    try {
+      const { displayName, mapping } = await authenticateWithAD(username, password);
+      const { token, user: payload } = issueToken(0, mapping.appGroup, displayName, mapping.site);
+      res.json({ token, user: payload });
+    } catch (err: any) {
+      const isAuthError = err.message?.includes('Invalid username') || err.message?.includes('not in any STO group');
+      res.status(isAuthError ? 401 : 500).json({ message: err.message || 'Authentication failed' });
+    }
   }
-
-  const user = await dbQueryOne<DemoUserRow>(
-    'SELECT id, password_hash, display_name, site, group_key FROM demo_users WHERE username = @username',
-    { username }
-  );
-
-  if (!user) {
-    res.status(401).json({ message: 'Invalid username or password' });
-    return;
-  }
-
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) {
-    res.status(401).json({ message: 'Invalid username or password' });
-    return;
-  }
-
-  const { token, user: payload } = issueToken(user.id, user.group_key as Group, user.display_name, user.site);
-  res.json({ token, user: payload });
 });
 
 // GET /api/auth/demo-users — returns demo user list with plaintext credentials for the hints panel
