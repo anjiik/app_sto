@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -18,6 +19,17 @@ interface ByMonth   { month: string; count: number; value: number; }
 interface SiteCount { site: string; count: number; value?: number; }
 interface SiteFlow  { from: string; to: string; count: number; value: number; }
 interface RushSplit { month: string; rush: number; normal: number; }
+interface RawRow {
+  id: number; sto_id: string; request_date: string; requestor_name: string;
+  shipping_site: string | null; receiving_site: string | null;
+  status: string; rush_request: boolean;
+  material_description: string | null; material_sap: string | null;
+  quantity: number | null; uom: string | null; material_value: number;
+}
+
+interface Filters {
+  site: string; status: string; rush: string; dateFrom: string; dateTo: string;
+}
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
 
@@ -58,7 +70,12 @@ function fmtMonth(ym: string) {
   return new Date(+y, +m - 1).toLocaleString('default', { month: 'short', year: '2-digit' });
 }
 
-// ── KPI card ───────────────────────────────────────────────────────────────────
+function fmtDate(d: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function KPI({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
   return (
@@ -70,18 +87,30 @@ function KPI({ label, value, sub, color }: { label: string; value: string | numb
   );
 }
 
-// ── Section wrapper ────────────────────────────────────────────────────────────
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-5">{title}</h3>
+      <div className="flex items-center gap-2 mb-5">
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{title}</h3>
+        {sub && (
+          <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full font-medium">
+            {sub}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
 }
 
-// ── Custom tooltip ─────────────────────────────────────────────────────────────
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-100">
+      {label}
+      <button onClick={onRemove} className="text-blue-400 hover:text-blue-700 leading-none">✕</button>
+    </span>
+  );
+}
 
 function ValueTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -97,9 +126,27 @@ function ValueTooltip({ active, payload, label }: any) {
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] ?? '#94a3b8';
+  const label = STATUS_LABELS[status] ?? status;
+  return (
+    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+      style={{ backgroundColor: color + '1a', color }}>
+      {label}
+    </span>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
+const EMPTY_FILTERS: Filters = { site: '', status: '', rush: '', dateFrom: '', dateTo: '' };
+
 export function Analytics() {
+  const navigate = useNavigate();
+
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [availableSites, setAvailableSites] = useState<string[]>([]);
+
   const [summary,   setSummary]   = useState<Summary | null>(null);
   const [byStatus,  setByStatus]  = useState<ByStatus[]>([]);
   const [byMonth,   setByMonth]   = useState<ByMonth[]>([]);
@@ -108,14 +155,62 @@ export function Analytics() {
   const [rushSplit, setRushSplit] = useState<RushSplit[]>([]);
   const [loading,   setLoading]   = useState(true);
 
+  const [rawData,      setRawData]      = useState<RawRow[]>([]);
+  const [rawTotal,     setRawTotal]     = useState(0);
+  const [rawPage,      setRawPage]      = useState(1);
+  const [tableLoading, setTableLoading] = useState(false);
+
+  const isFirstLoad = useRef(true);
+
+  const hasFilters = Object.values(filters).some(Boolean);
+
+  function setFilter(key: keyof Filters, value: string) {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setRawPage(1);
+  }
+
+  function toggleFilter(key: keyof Filters, value: string) {
+    setFilter(key, filters[key] === value ? '' : value);
+  }
+
+  function resetFilters() {
+    setFilters(EMPTY_FILTERS);
+    setRawPage(1);
+  }
+
+  function buildParams(extra: Record<string, string> = {}): string {
+    const p = new URLSearchParams();
+    if (filters.site)     p.set('site',     filters.site);
+    if (filters.status)   p.set('status',   filters.status);
+    if (filters.rush)     p.set('rush',     filters.rush);
+    if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
+    if (filters.dateTo)   p.set('dateTo',   filters.dateTo);
+    Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+    return p.toString();
+  }
+
+  // Fetch site list once for the dropdown (unfiltered)
   useEffect(() => {
+    api.get('/analytics/by-site').then(r => {
+      const sites = new Set<string>();
+      [...(r.data.shipping as SiteCount[]), ...(r.data.receiving as SiteCount[])]
+        .forEach(s => sites.add(s.site));
+      setAvailableSites([...sites].sort());
+    });
+  }, []);
+
+  // Fetch chart data whenever filters change
+  useEffect(() => {
+    const q = buildParams();
+    const first = isFirstLoad.current;
+
     Promise.all([
-      api.get('/analytics/summary'),
-      api.get('/analytics/by-status'),
-      api.get('/analytics/by-month'),
-      api.get('/analytics/by-site'),
-      api.get('/analytics/site-flow'),
-      api.get('/analytics/rush-split'),
+      api.get(`/analytics/summary?${q}`),
+      api.get(`/analytics/by-status?${q}`),
+      api.get(`/analytics/by-month?${q}`),
+      api.get(`/analytics/by-site?${q}`),
+      api.get(`/analytics/site-flow?${q}`),
+      api.get(`/analytics/rush-split?${q}`),
     ]).then(([s, st, m, si, sf, rs]) => {
       setSummary(s.data);
       setByStatus(st.data);
@@ -123,8 +218,19 @@ export function Analytics() {
       setBySite(si.data);
       setSiteFlow(sf.data);
       setRushSplit(rs.data);
-    }).finally(() => setLoading(false));
-  }, []);
+    }).finally(() => {
+      if (first) { isFirstLoad.current = false; setLoading(false); }
+    });
+  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch raw data whenever filters or page changes
+  useEffect(() => {
+    setTableLoading(true);
+    const q = buildParams({ page: String(rawPage) });
+    api.get(`/analytics/raw-data?${q}`)
+      .then(r => { setRawData(r.data.rows); setRawTotal(r.data.total); })
+      .finally(() => setTableLoading(false));
+  }, [filters, rawPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -137,20 +243,22 @@ export function Analytics() {
   }
 
   const rushPct = summary && summary.totalCount > 0
-    ? Math.round((summary.rushCount / summary.totalCount) * 100)
-    : 0;
+    ? Math.round((summary.rushCount / summary.totalCount) * 100) : 0;
 
   const pieData = byStatus.map(d => ({
-    name:  STATUS_LABELS[d.status] ?? d.status,
-    value: d.count,
-    color: STATUS_COLORS[d.status] ?? '#94a3b8',
+    name:      STATUS_LABELS[d.status] ?? d.status,
+    statusKey: d.status,
+    value:     d.count,
+    color:     STATUS_COLORS[d.status] ?? '#94a3b8',
   }));
+
+  const totalPages = Math.max(1, Math.ceil(rawTotal / 50));
 
   return (
     <Layout>
       <div className="space-y-6">
 
-        {/* Page header */}
+        {/* ── Page header ──────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
@@ -159,28 +267,115 @@ export function Analytics() {
           <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-full">Live data</span>
         </div>
 
-        {/* ── KPI row ─────────────────────────────────────────────────────────── */}
+        {/* ── Filter bar ───────────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            {/* Site */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Site</label>
+              <select
+                value={filters.site}
+                onChange={e => setFilter('site', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                <option value="">All Sites</option>
+                {availableSites.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
+              <select
+                value={filters.status}
+                onChange={e => setFilter('status', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[170px]">
+                <option value="">All Statuses</option>
+                {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Rush */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Priority</label>
+              <select
+                value={filters.rush}
+                onChange={e => setFilter('rush', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All</option>
+                <option value="1">Rush</option>
+                <option value="0">Normal</option>
+              </select>
+            </div>
+
+            {/* Date From */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From</label>
+              <input type="month" value={filters.dateFrom} onChange={e => setFilter('dateFrom', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {/* Date To */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">To</label>
+              <input type="month" value={filters.dateTo} onChange={e => setFilter('dateTo', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {hasFilters && (
+              <button onClick={resetFilters}
+                className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100">
+                ✕ Reset
+              </button>
+            )}
+          </div>
+
+          {/* Active filter chips */}
+          {hasFilters && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+              {filters.site     && <FilterChip label={`Site: ${filters.site}`} onRemove={() => setFilter('site', '')} />}
+              {filters.status   && <FilterChip label={`Status: ${STATUS_LABELS[filters.status] ?? filters.status}`} onRemove={() => setFilter('status', '')} />}
+              {filters.rush     && <FilterChip label={filters.rush === '1' ? 'Rush only' : 'Normal only'} onRemove={() => setFilter('rush', '')} />}
+              {filters.dateFrom && <FilterChip label={`From: ${filters.dateFrom}`} onRemove={() => setFilter('dateFrom', '')} />}
+              {filters.dateTo   && <FilterChip label={`To: ${filters.dateTo}`} onRemove={() => setFilter('dateTo', '')} />}
+            </div>
+          )}
+        </div>
+
+        {/* ── KPI row ──────────────────────────────────────────────────────────── */}
         {summary && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <KPI label="Total STOs"       value={summary.total}          sub={`${summary.active} active`}          color="border-blue-500" />
-            <KPI label="Closed"           value={summary.closed}         sub={`${summary.rejected} rejected`}      color="border-green-500" />
-            <KPI label="Total Value"      value={fmt$(summary.totalValue)} sub={`${fmt$(summary.monthValue)} this month`} color="border-purple-500" />
-            <KPI label="Rush Requests"    value={`${rushPct}%`}          sub={`${summary.rushCount} of ${summary.totalCount}`} color="border-orange-500" />
+            <KPI label="Total STOs"    value={summary.total}           sub={`${summary.active} active`}                    color="border-blue-500" />
+            <KPI label="Closed"        value={summary.closed}          sub={`${summary.rejected} rejected`}                color="border-green-500" />
+            <KPI label="Total Value"   value={fmt$(summary.totalValue)} sub={`${fmt$(summary.monthValue)} this month`}     color="border-purple-500" />
+            <KPI label="Rush Requests" value={`${rushPct}%`}           sub={`${summary.rushCount} of ${summary.totalCount}`} color="border-orange-500" />
           </div>
         )}
 
-        {/* ── Row 1: Status donut + Monthly trend ─────────────────────────────── */}
+        {/* ── Row 1: Status donut + Monthly trend ──────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Status breakdown — donut */}
-          <Section title="STOs by Status">
+          <Section title="STOs by Status" sub="click to filter">
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="55%" height={220}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90}
-                    paddingAngle={2} dataKey="value">
+                  <Pie
+                    data={pieData}
+                    cx="50%" cy="50%"
+                    innerRadius={55} outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                    cursor="pointer"
+                    onClick={(data: any) => toggleFilter('status', data.statusKey)}>
                     {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                      <Cell
+                        key={i}
+                        fill={entry.color}
+                        opacity={filters.status && filters.status !== entry.statusKey ? 0.3 : 1}
+                        stroke={filters.status === entry.statusKey ? entry.color : 'none'}
+                        strokeWidth={2}
+                      />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any) => [v, 'STOs']} />
@@ -188,19 +383,22 @@ export function Analytics() {
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
                 {pieData.map(d => (
-                  <div key={d.name} className="flex items-center justify-between text-sm">
+                  <button
+                    key={d.name}
+                    onClick={() => toggleFilter('status', d.statusKey)}
+                    className={`w-full flex items-center justify-between text-sm rounded-lg px-2 py-1 transition-colors text-left
+                      ${filters.status === d.statusKey ? 'bg-gray-100' : 'hover:bg-gray-50'}`}>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
                       <span className="text-gray-600">{d.name}</span>
                     </div>
                     <span className="font-semibold text-gray-800">{d.value}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           </Section>
 
-          {/* Monthly volume trend */}
           <Section title="Monthly Volume (last 12 months)">
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={byMonth.map(d => ({ ...d, month: fmtMonth(d.month) }))}
@@ -211,18 +409,18 @@ export function Analytics() {
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickFormatter={fmt$} />
                 <Tooltip content={<ValueTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line yAxisId="left"  type="monotone" dataKey="count" name="STOs"  stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-                <Line yAxisId="right" type="monotone" dataKey="value" name="Value" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                <Line yAxisId="left"  type="monotone" dataKey="count" name="STOs"  stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line yAxisId="right" type="monotone" dataKey="value" name="Value" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </Section>
         </div>
 
-        {/* ── Row 2: Site shipping + Site receiving ───────────────────────────── */}
+        {/* ── Row 2: Top shipping sites + Top receiving sites ───────────────────── */}
         {bySite && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <Section title="Top Shipping Sites">
+            <Section title="Top Shipping Sites" sub="click to filter">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={bySite.shipping} layout="vertical"
                   margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
@@ -230,16 +428,19 @@ export function Analytics() {
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={60} />
                   <Tooltip content={<ValueTooltip />} />
-                  <Bar dataKey="count" name="STOs Shipped" radius={[0, 4, 4, 0]}>
-                    {bySite.shipping.map((_, i) => (
-                      <Cell key={i} fill={SITE_COLORS[i % SITE_COLORS.length]} />
+                  <Bar dataKey="count" name="STOs Shipped" radius={[0, 4, 4, 0]}
+                    cursor="pointer"
+                    onClick={(data: any) => toggleFilter('site', data.site)}>
+                    {bySite.shipping.map((d, i) => (
+                      <Cell key={i} fill={SITE_COLORS[i % SITE_COLORS.length]}
+                        opacity={filters.site && filters.site !== d.site ? 0.3 : 1} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </Section>
 
-            <Section title="Top Receiving Sites">
+            <Section title="Top Receiving Sites" sub="click to filter">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={bySite.receiving} layout="vertical"
                   margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
@@ -247,9 +448,12 @@ export function Analytics() {
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={60} />
                   <Tooltip content={<ValueTooltip />} />
-                  <Bar dataKey="count" name="STOs Received" radius={[0, 4, 4, 0]}>
-                    {bySite.receiving.map((_, i) => (
-                      <Cell key={i} fill={SITE_COLORS[(i + 3) % SITE_COLORS.length]} />
+                  <Bar dataKey="count" name="STOs Received" radius={[0, 4, 4, 0]}
+                    cursor="pointer"
+                    onClick={(data: any) => toggleFilter('site', data.site)}>
+                    {bySite.receiving.map((d, i) => (
+                      <Cell key={i} fill={SITE_COLORS[(i + 3) % SITE_COLORS.length]}
+                        opacity={filters.site && filters.site !== d.site ? 0.3 : 1} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -258,11 +462,10 @@ export function Analytics() {
           </div>
         )}
 
-        {/* ── Row 3: Rush split + Site flow table ─────────────────────────────── */}
+        {/* ── Row 3: Rush split + Site flow table ──────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Rush vs Normal stacked bar */}
-          <Section title="Rush vs Normal Requests">
+          <Section title="Rush vs Normal Requests" sub="click to filter">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={rushSplit.map(d => ({ ...d, month: fmtMonth(d.month) }))}
                 margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -271,13 +474,16 @@ export function Analytics() {
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip content={<ValueTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="normal" name="Normal" stackId="a" fill="#3b82f6" />
-                <Bar dataKey="rush"   name="Rush"   stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="normal" name="Normal" stackId="a" fill="#3b82f6"
+                  cursor="pointer" opacity={filters.rush === '1' ? 0.3 : 1}
+                  onClick={() => toggleFilter('rush', '0')} />
+                <Bar dataKey="rush" name="Rush" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]}
+                  cursor="pointer" opacity={filters.rush === '0' ? 0.3 : 1}
+                  onClick={() => toggleFilter('rush', '1')} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
 
-          {/* Site-to-site flow table */}
           <Section title="Site-to-Site Transfer Flow">
             {siteFlow.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-8">No transfer data yet</p>
@@ -294,12 +500,13 @@ export function Analytics() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {siteFlow.map((r, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
+                      <tr key={i}
+                        className={`cursor-pointer transition-colors
+                          ${(filters.site === r.from || filters.site === r.to) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggleFilter('site', r.from)}>
                         <td className="px-4 py-2.5 font-medium text-gray-800">{r.from}</td>
                         <td className="px-4 py-2.5 text-gray-600">
-                          <span className="flex items-center gap-1">
-                            <span className="text-gray-300">→</span> {r.to}
-                          </span>
+                          <span className="flex items-center gap-1"><span className="text-gray-300">→</span> {r.to}</span>
                         </td>
                         <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{r.count}</td>
                         <td className="px-4 py-2.5 text-right text-gray-600">{fmt$(r.value)}</td>
@@ -312,24 +519,132 @@ export function Analytics() {
           </Section>
         </div>
 
-        {/* ── Value by status bar ──────────────────────────────────────────────── */}
-        <Section title="Total Material Value by Status">
+        {/* ── Value by status bar ───────────────────────────────────────────────── */}
+        <Section title="Total Material Value by Status" sub="click to filter">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart
-              data={byStatus.map(d => ({ name: STATUS_LABELS[d.status] ?? d.status, value: d.value }))}
-              margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
-            >
+              data={byStatus.map(d => ({ name: STATUS_LABELS[d.status] ?? d.status, value: d.value, statusKey: d.status }))}
+              margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={fmt$} />
               <Tooltip formatter={(v: any) => [fmt$(v), 'Material Value']} />
-              <Bar dataKey="value" name="Value" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="value" name="Value" radius={[4, 4, 0, 0]}
+                cursor="pointer"
+                onClick={(data: any) => toggleFilter('status', data.statusKey)}>
                 {byStatus.map((d, i) => (
-                  <Cell key={i} fill={STATUS_COLORS[d.status] ?? SITE_COLORS[i % SITE_COLORS.length]} />
+                  <Cell key={i}
+                    fill={STATUS_COLORS[d.status] ?? SITE_COLORS[i % SITE_COLORS.length]}
+                    opacity={filters.status && filters.status !== d.status ? 0.3 : 1} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </Section>
+
+        {/* ── Raw data table ────────────────────────────────────────────────────── */}
+        <Section title={`Raw Data — ${rawTotal.toLocaleString()} STOs`}>
+          {tableLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : rawData.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-400 text-sm">No STOs match the current filters.</p>
+              {hasFilters && (
+                <button onClick={resetFilters} className="mt-3 text-sm text-blue-600 hover:underline">
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto -mx-6 px-6">
+                <table className="w-full text-sm min-w-[900px]">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-100">
+                      <th className="px-4 py-3 text-left font-medium">STO ID</th>
+                      <th className="px-4 py-3 text-left font-medium">Date</th>
+                      <th className="px-4 py-3 text-left font-medium">From</th>
+                      <th className="px-4 py-3 text-left font-medium">To</th>
+                      <th className="px-4 py-3 text-left font-medium">Status</th>
+                      <th className="px-4 py-3 text-left font-medium">Priority</th>
+                      <th className="px-4 py-3 text-left font-medium">Material</th>
+                      <th className="px-4 py-3 text-right font-medium">Qty</th>
+                      <th className="px-4 py-3 text-right font-medium">Value</th>
+                      <th className="px-4 py-3 text-left font-medium">Requestor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rawData.map(row => (
+                      <tr key={row.sto_id}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors group"
+                        onClick={() => navigate(`/sto/${row.id}`)}>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-semibold text-blue-600 group-hover:underline">
+                            {row.sto_id}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(row.request_date)}</td>
+                        <td className="px-4 py-3">
+                          {row.shipping_site
+                            ? <span className="font-medium text-gray-800">{row.shipping_site}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.receiving_site
+                            ? <span className="font-medium text-gray-800">{row.receiving_site}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3">
+                          {row.rush_request
+                            ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-600">Rush</span>
+                            : <span className="text-gray-400 text-xs">Normal</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 max-w-[200px]">
+                          <span className="truncate block" title={row.material_description ?? ''}>
+                            {row.material_description || row.material_sap || <span className="text-gray-300">—</span>}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">
+                          {row.quantity != null ? `${row.quantity.toLocaleString()} ${row.uom ?? ''}`.trim() : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-800 whitespace-nowrap">
+                          {row.material_value > 0 ? fmt$(row.material_value) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{row.requestor_name || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Showing {((rawPage - 1) * 50 + 1).toLocaleString()}–{Math.min(rawPage * 50, rawTotal).toLocaleString()} of {rawTotal.toLocaleString()}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRawPage(p => p - 1)}
+                    disabled={rawPage === 1}
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors">
+                    ← Prev
+                  </button>
+                  <span className="px-3 py-1.5 text-sm font-medium text-gray-700">
+                    {rawPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setRawPage(p => p + 1)}
+                    disabled={rawPage >= totalPages}
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors">
+                    Next →
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </Section>
 
       </div>
