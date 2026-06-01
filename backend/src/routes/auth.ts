@@ -73,11 +73,14 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   } else {
     // ── Production mode: authenticate against Active Directory ───────────────
+    console.log(`[AD auth] Login attempt for: ${username}`);
     try {
       const { displayName, mapping } = await authenticateWithAD(username, password);
+      console.log(`[AD auth] Success: ${displayName} → ${mapping.appGroup} @ ${mapping.site}`);
       const { token, user: payload } = issueToken(0, mapping.appGroup, displayName, mapping.site);
       res.json({ token, user: payload });
     } catch (err: any) {
+      console.error(`[AD auth] Failed for ${username}:`, err.message);
       const isAuthError = err.message?.includes('Invalid username') || err.message?.includes('not in any STO group');
       res.status(isAuthError ? 401 : 500).json({ message: err.message || 'Authentication failed' });
     }
