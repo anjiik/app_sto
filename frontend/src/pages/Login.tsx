@@ -29,7 +29,7 @@ const SITE_COLORS: Record<string, string> = {
 };
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, ldapMode } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -95,7 +95,7 @@ export function Login() {
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. abc.recv"
+                placeholder={ldapMode ? 'e.g. john.doe or john.doe@company.com' : 'e.g. abc.recv'}
                 autoComplete="username"
                 required
               />
@@ -122,7 +122,9 @@ export function Login() {
           </form>
 
           <p className="text-xs text-center text-gray-400 mt-6">
-            Dev mode — click any account on the right to auto-fill
+            {ldapMode
+              ? 'Sign in with your Active Directory credentials'
+              : 'Dev mode — click any account on the right to auto-fill'}
           </p>
         </div>
 

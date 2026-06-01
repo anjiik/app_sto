@@ -125,7 +125,8 @@ router.get('/ping-login-url', (_req: Request, res: Response): void => {
     return;
   }
   if (!PING_ISSUER || !PING_CLIENT_ID) {
-    res.status(503).json({ message: 'PingFederate not configured — set PING_ISSUER_URL and PING_CLIENT_ID' });
+    // LDAP mode — tell the frontend to show the regular login form
+    res.json({ ldapMode: true });
     return;
   }
   const state = crypto.randomBytes(16).toString('hex');

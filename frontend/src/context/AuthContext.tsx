@@ -6,10 +6,9 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  devBypassMode: boolean;
-  // Dev mode: username/password login against demo_users table
+  devBypassMode: boolean; // true in demo mode OR ldap mode — both show the login form
+  ldapMode: boolean;      // true when AD/LDAP auth is active (hides demo cards)
   login: (username: string, password: string) => Promise<void>;
-  // Ping OIDC: exchange auth code returned by PingFederate for an app JWT
   exchangePingCode: (code: string) => Promise<void>;
   logout: () => void;
 }
@@ -21,11 +20,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem('sto_token'));
   const [loading, setLoading] = useState(true);
   const [devBypassMode, setDevBypassMode] = useState(false);
+  const [ldapMode, setLdapMode] = useState(false);
 
   // Determine auth mode once on mount — always runs regardless of token state
   useEffect(() => {
     api.get('/auth/ping-login-url')
-      .then(r => { setDevBypassMode(r.data.devBypass === true); })
+      .then(r => {
+        const isDevBypass = r.data.devBypass === true;
+        const isLdap      = r.data.ldapMode   === true;
+        setLdapMode(isLdap);
+        setDevBypassMode(isDevBypass || isLdap); // both modes use the login form
+      })
       .catch(() => {});
   }, []);
 
@@ -64,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, devBypassMode, login, exchangePingCode, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, devBypassMode, ldapMode, login, exchangePingCode, logout }}>
       {children}
     </AuthContext.Provider>
   );

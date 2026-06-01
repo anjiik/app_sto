@@ -10,15 +10,22 @@ import { STOForm } from './pages/STOForm';
 import { STODetail } from './pages/STODetail';
 import api from './api/client';
 
-// Shown when unauthenticated and NOT in dev bypass mode — redirects to PingFederate
+// Shown when unauthenticated and NOT in dev bypass mode.
+// Redirects to PingFederate if configured, or to /login for LDAP mode.
 function PingRedirect() {
+  const navigate = useNavigate();
   useEffect(() => {
-    api.get('/auth/ping-login-url').then(r => {
-      if (r.data.url) {
-        sessionStorage.setItem('ping_oauth_state', r.data.state);
-        window.location.href = r.data.url;
-      }
-    });
+    api.get('/auth/ping-login-url')
+      .then(r => {
+        if (r.data.url) {
+          sessionStorage.setItem('ping_oauth_state', r.data.state);
+          window.location.href = r.data.url;
+        } else {
+          // ldapMode or devBypass — show the regular login form
+          navigate('/login', { replace: true });
+        }
+      })
+      .catch(() => navigate('/login', { replace: true }));
   }, []);
 
   return (
