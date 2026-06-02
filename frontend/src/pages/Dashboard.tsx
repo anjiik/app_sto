@@ -129,9 +129,20 @@ export function Dashboard() {
   const byStatus = countByStatus(stos);
   const queueConfig = user ? GROUP_QUEUE[user.group] : undefined;
 
-  // My queue items — the STOs needing the current user's action
+  // My queue items — the STOs needing the current user's action, filtered by site
   const myQueueStatuses = queueConfig?.statuses ?? [];
-  const myQueue = stos.filter(s => myQueueStatuses.includes(s.status));
+  const myQueue = stos.filter(s => {
+    if (!myQueueStatuses.includes(s.status)) return false;
+    if (!user) return false;
+    if (['shipping_planning', 'shipping_logistics'].includes(user.group)) {
+      return s.shipping_site === user.site;
+    }
+    if (['receiving_site', 'receiving_logistics'].includes(user.group)) {
+      return s.receiving_site === user.site;
+    }
+    // management and finance see all sites
+    return true;
+  });
 
   // Urgency buckets
   const rushActive = stos.filter(s => s.rush_request && !['CLOSED', 'REJECTED'].includes(s.status));
