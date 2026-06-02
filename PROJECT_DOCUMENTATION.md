@@ -2,13 +2,14 @@
 
 ## Table of Contents
 1. [What the App Does](#1-what-the-app-does)
-2. [Tech Stack](#2-tech-stack)
-3. [Workflow & Roles](#3-workflow--roles)
-4. [Authentication Modes](#4-authentication-modes)
-5. [Environment Configuration](#5-environment-configuration)
-6. [Database](#6-database)
-7. [How to Run](#7-how-to-run)
-8. [File-by-File Reference](#8-file-by-file-reference)
+2. [High-Level Architecture](#2-high-level-architecture)
+3. [Tech Stack](#3-tech-stack)
+4. [Workflow & Roles](#4-workflow--roles)
+5. [Authentication Modes](#5-authentication-modes)
+6. [Environment Configuration](#6-environment-configuration)
+7. [Database](#7-database)
+8. [How to Run](#8-how-to-run)
+9. [File-by-File Reference](#9-file-by-file-reference)
 
 ---
 
@@ -20,7 +21,356 @@ A request moves through a fixed pipeline of stages, with different teams at each
 
 ---
 
-## 2. Tech Stack
+## 2. High-Level Architecture
+
+### System Overview
+
+The app is a two-tier web application. The frontend is a single-page React app served by Vite. The backend is a REST API built with Express. Both run locally on the same machine as the SQL Server database.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          User's Browser                             │
+│                                                                     │
+│   ┌──────────────────────────────────────────────────────────────┐  │
+│   │              React SPA  (port 5173)                          │  │
+│   │                                                              │  │
+│   │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │  │
+│   │  │ Login /  │  │Dashboard │  │ STOList  │  │ Analytics  │  │  │
+│   │  │ Auth     │  │          │  │ STOForm  │  │            │  │  │
+│   │  │          │  │          │  │ STODetail│  │            │  │  │
+│   │  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │  │
+│   │                                                              │  │
+│   │  ┌────────────────┐  ┌──────────────┐  ┌─────────────────┐ │  │
+│   │  │  AuthContext   │  │  api/client  │  │  React Router   │ │  │
+│   │  │  (JWT + state) │  │  (Axios)     │  │  (routing)      │ │  │
+│   │  └────────────────┘  └──────────────┘  └─────────────────┘ │  │
+│   └──────────────────────────────────────────────────────────────┘  │
+│                              │  HTTP + JWT                          │
+└──────────────────────────────│──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Express API Server  (port 4000)                  │
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
+│  │ /api/auth    │  │  /api/sto    │  │/api/analytics│             │
+│  │              │  │              │  │              │             │
+│  │ login        │  │ GET list     │  │ summary      │             │
+│  │ demo-users   │  │ GET by id    │  │ by-status    │             │
+│  │ ping-login   │  │ POST create  │  │ by-month     │             │
+│  │ ping-exchange│  │ PUT update   │  │ by-site      │             │
+│  │ me           │  │ submit       │  │ rush-split   │             │
+│  └──────────────┘  │ planning     │  │ raw-data     │             │
+│                    │ logistics    │  └──────────────┘             │
+│  ┌──────────────┐  │ management   │                               │
+│  │ JWT Auth     │  │ finance      │  ┌──────────────┐             │
+│  │ Middleware   │  │ recv-logist. │  │ lib/ldap.ts  │             │
+│  │              │  └──────────────┘  │ (AD bind)    │             │
+│  └──────────────┘                    └──────────────┘             │
+│                              │                                      │
+└──────────────────────────────│──────────────────────────────────────┘
+                               │  Windows Auth (no password)
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   Microsoft SQL Server                              │
+│                                                                     │
+│   ┌──────────────────┐   ┌────────────────┐   ┌───────────────┐   │
+│   │   sto_requests   │   │ sto_audit_log  │   │  demo_users   │   │
+│   │  (main data)     │   │ (audit trail)  │   │  (dev only)   │   │
+│   └──────────────────┘   └────────────────┘   └───────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+
+           (LDAP mode only)
+                 │
+                 ▼
+┌─────────────────────────────┐
+│   Active Directory / LDAP   │
+│   (validates credentials,   │
+│    returns AD group names)  │
+└─────────────────────────────┘
+```
+
+---
+
+### Authentication Flow
+
+#### Demo mode (`PING_DEV_BYPASS=true`)
+
+```
+Browser                    Express                    SQL Server
+   │                          │                            │
+   │── POST /auth/login ──────►│                            │
+   │   { username, password } │                            │
+   │                          │── SELECT demo_users ──────►│
+   │                          │◄── row with password_hash ─│
+   │                          │                            │
+   │                          │  bcrypt.compare(password)  │
+   │                          │                            │
+   │◄── { token, user } ──────│  jwt.sign(payload, secret) │
+   │                          │                            │
+   │  localStorage.setItem    │                            │
+   │  ('sto_token', token)    │                            │
+```
+
+#### LDAP / Active Directory mode (`PING_DEV_BYPASS=false`)
+
+```
+Browser                    Express                  Active Directory
+   │                          │                            │
+   │── POST /auth/login ──────►│                            │
+   │   { username, password } │                            │
+   │                          │── bind(serviceAccount) ───►│
+   │                          │── search(userPrincipal) ───►│
+   │                          │◄── { dn, memberOf[] } ─────│
+   │                          │                            │
+   │                          │── bind(userDN, password) ──►│
+   │                          │◄── success / error 49 ─────│
+   │                          │                            │
+   │                          │  map memberOf → appGroup   │
+   │                          │  (ldapGroups.ts lookup)    │
+   │                          │                            │
+   │◄── { token, user } ──────│  jwt.sign(payload, secret) │
+```
+
+#### Every subsequent API request
+
+```
+Browser                         Express
+   │                               │
+   │── GET /api/sto ───────────────►│
+   │   Authorization: Bearer <JWT> │
+   │                               │  jwt.verify(token, secret)
+   │                               │  → attaches req.user
+   │                               │
+   │                               │── SELECT sto_requests ──► SQL Server
+   │                               │◄── rows ────────────────────────────
+   │◄── JSON array ────────────────│
+```
+
+---
+
+### STO State Machine
+
+Each STO moves through a fixed set of states. Only specific roles can trigger each transition.
+
+```
+                    ┌─────────┐
+                    │  DRAFT  │  ← created by receiving_site
+                    └────┬────┘
+                         │ submit (receiving_site)
+                         ▼
+               ┌──────────────────┐
+               │ PLANNING_REVIEW  │  ← action by shipping_planning (XYZ)
+               └────────┬─────────┘
+              approve   │   reject
+             ┌──────────┘     └──────────────┐
+             ▼                               ▼
+  ┌───────────────────────┐           ┌──────────┐
+  │  SHIPPING_LOGISTICS   │           │ REJECTED │
+  └───────────┬───────────┘           └──────────┘
+              │ submit (shipping_logistics)
+              │
+     ┌────────┴────────┐
+     │                 │
+     │ material >$10k  │ under threshold
+     │ OR freight >$5k │
+     ▼                 ▼
+┌──────────────┐  ┌───────────────┐
+│  MANAGEMENT  │  │ FINANCE_REVIEW│
+│   _REVIEW    │  └───────┬───────┘
+└──────┬───────┘          │
+       │ approve          │ approve (finance)
+       ▼                  │
+┌───────────────┐         │
+│ FINANCE_REVIEW│─────────┘
+└───────┬───────┘
+        │ approve (finance)
+        ▼
+┌────────────────────┐
+│ RECEIVING_LOGISTICS│  ← action by receiving_logistics (ABC)
+└─────────┬──────────┘
+          │ close out
+          ▼
+       ┌────────┐
+       │ CLOSED │
+       └────────┘
+
+  Any stage except CLOSED can also → REJECTED (by the acting role)
+```
+
+---
+
+### Frontend Component Architecture
+
+```
+App.tsx  (Router + AuthProvider)
+│
+├── AuthProvider  (context/AuthContext.tsx)
+│   └── provides: user, token, login(), logout(), devBypassMode, ldapMode
+│
+├── /login          → Login.tsx
+│   └── uses: useAuth(), api/client
+│
+├── /auth/callback  → PingCallback.tsx
+│   └── uses: useAuth().exchangePingCode()
+│
+└── ProtectedRoute (requires user in context)
+    │
+    └── Layout.tsx  (nav bar wrapper)
+        │
+        ├── /dashboard   → Dashboard.tsx
+        │   └── fetches: GET /api/sto, GET /api/sto/audit-log
+        │
+        ├── /sto         → STOList.tsx
+        │   └── fetches: GET /api/sto?status=&search=
+        │
+        ├── /sto/new     → STOForm.tsx
+        │   └── posts:   POST /api/sto
+        │
+        ├── /sto/:id     → STODetail.tsx
+        │   └── fetches: GET /api/sto/:id
+        │   └── posts:   POST /api/sto/:id/submit|planning|logistics|...
+        │
+        └── /analytics   → Analytics.tsx
+            └── fetches: GET /api/analytics/summary|by-status|by-month|...
+```
+
+---
+
+### Backend Request Handling Flow
+
+Every incoming request goes through this chain:
+
+```
+Incoming HTTP Request
+        │
+        ▼
+   CORS check
+   (only http://localhost:5173 allowed)
+        │
+        ▼
+   express.json()
+   (parse request body)
+        │
+        ▼
+   Route match
+   (auth / sto / analytics)
+        │
+        ▼
+   authenticate middleware
+   (verify JWT, attach req.user)
+        │
+        ├── 401 if no/invalid token
+        │
+        ▼
+   requireGroup() middleware  ← only on role-restricted routes
+        │
+        ├── 403 if wrong role
+        │
+        ▼
+   Route handler
+   (business logic + DB query)
+        │
+        ▼
+   dbQuery / dbQueryOne / dbInsert / dbExecute
+   (parameterised SQL — no injection possible)
+        │
+        ▼
+   SQL Server (Windows Auth pool)
+        │
+        ▼
+   JSON response
+```
+
+---
+
+### Data Flow: Submitting a New STO
+
+```
+User (receiving_site @ ABC)          Frontend                Backend               DB
+         │                              │                       │                    │
+         │── fills form ───────────────►│                       │                    │
+         │── clicks Submit ────────────►│                       │                    │
+         │                             │── POST /api/sto ──────►│                    │
+         │                             │   { shipping_site: XYZ,│                    │
+         │                             │     receiving_site: ABC│                    │
+         │                             │     material, qty... } │                    │
+         │                             │                        │── INSERT ─────────►│
+         │                             │                        │   sto_requests     │
+         │                             │                        │   status='DRAFT'   │
+         │                             │                        │◄── id: 42 ─────────│
+         │                             │                        │                    │
+         │                             │                        │── INSERT ─────────►│
+         │                             │                        │   sto_audit_log    │
+         │                             │                        │   action='CREATED' │
+         │                             │◄── { id:42, sto_id }──│                    │
+         │◄── redirect /sto/42 ────────│                       │                    │
+```
+
+---
+
+### Data Flow: Queue Filtering on Dashboard
+
+```
+User logs in
+    │
+    ▼
+JWT issued: { group: 'shipping_planning', site: 'XYZ' }
+    │
+    ▼
+Dashboard loads: GET /api/sto  (returns ALL STOs)
+    │
+    ▼
+Frontend filters in-memory:
+    myQueue = stos.filter(s =>
+        s.status === 'PLANNING_REVIEW'        // role's required status
+        && s.shipping_site === user.site      // only XYZ's STOs
+    )
+    │
+    ▼
+Dashboard shows only STOs where XYZ is the shipper, waiting for planning
+```
+
+---
+
+### Deployment Architecture (Current — Local)
+
+```
+┌─────────────────── Windows PC ──────────────────────────────┐
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │   Terminal 1                                         │  │
+│   │   cd backend && npm run dev                          │  │
+│   │   → Express on :4000                                 │  │
+│   └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │   Terminal 2                                         │  │
+│   │   cd frontend && npm run dev                         │  │
+│   │   → Vite dev server on :5173                         │  │
+│   └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │   SQL Server (SQLEXPRESS instance)                   │  │
+│   │   Windows Authentication — no credentials needed     │  │
+│   │   Database: sto_management                           │  │
+│   └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │   Active Directory  (LDAP mode only)                 │  │
+│   │   Reached over network via LDAP_URL                  │  │
+│   │   e.g. ldap://ad.yourcompany.com                     │  │
+│   └──────────────────────────────────────────────────────┘  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+         ↑
+  Users access via http://[PC-IP]:5173 on the local network
+```
+
+---
+
+## 3. Tech Stack
+
 
 | Layer | Technology |
 |---|---|
@@ -36,7 +386,7 @@ A request moves through a fixed pipeline of stages, with different teams at each
 
 ---
 
-## 3. Workflow & Roles
+## 4. Workflow & Roles
 
 ### The 6 roles
 
@@ -85,7 +435,7 @@ The All STOs page (`/sto`) shows every STO regardless of site.
 
 ---
 
-## 4. Authentication Modes
+## 5. Authentication Modes
 
 The app supports three auth modes controlled by `.env`:
 
@@ -111,7 +461,7 @@ The app supports three auth modes controlled by `.env`:
 
 ---
 
-## 5. Environment Configuration
+## 6. Environment Configuration
 
 File: `backend/.env` (copy from `backend/.env.example`)
 
@@ -154,7 +504,7 @@ LDAP_BIND_PASSWORD=service-account-password
 
 ---
 
-## 6. Database
+## 7. Database
 
 **Engine:** Microsoft SQL Server  
 **Authentication:** Windows Authentication (no SQL username/password)  
@@ -190,7 +540,7 @@ Only used in dev mode. Stores hashed passwords and role/site for test accounts. 
 
 ---
 
-## 7. How to Run
+## 8. How to Run
 
 ### First time setup
 
@@ -242,7 +592,7 @@ cd ../frontend && npm install
 
 ---
 
-## 8. File-by-File Reference
+## 9. File-by-File Reference
 
 ---
 
