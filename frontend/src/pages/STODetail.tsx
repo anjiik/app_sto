@@ -220,15 +220,34 @@ export function STODetail() {
               {myTurn && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold">Action Required from You</span>}
             </div>
           </div>
-          {g === 'receiving_site' && sto.status === 'DRAFT' && (
-            <button
-              onClick={() => doAction('submit', {})}
-              disabled={actionLoading}
-              className="bg-blue-700 text-white px-5 py-2.5 rounded-lg hover:bg-blue-800 font-medium disabled:opacity-50"
-            >
-              Submit for Planning Review →
-            </button>
-          )}
+          <div className="flex gap-2 flex-wrap">
+            {(g === 'receiving_site' || g === 'admin') && sto.status === 'DRAFT' && (
+              <button
+                onClick={() => doAction('submit', {})}
+                disabled={actionLoading}
+                className="bg-blue-700 text-white px-5 py-2.5 rounded-lg hover:bg-blue-800 font-medium disabled:opacity-50"
+              >
+                Submit for Planning Review →
+              </button>
+            )}
+            {g === 'admin' && (
+              <button
+                onClick={() => navigate(`/sto/${id}/edit`)}
+                className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 font-medium text-sm"
+              >
+                Edit
+              </button>
+            )}
+            {g === 'admin' && sto.status !== 'DRAFT' && (
+              <button
+                onClick={() => { if (window.confirm(`Revert this STO one step back from ${sto.status}?`)) doAction('revert', {}); }}
+                disabled={actionLoading}
+                className="bg-white border border-red-300 text-red-700 px-4 py-2.5 rounded-lg hover:bg-red-50 font-medium text-sm disabled:opacity-50"
+              >
+                Revert One Step
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Message */}

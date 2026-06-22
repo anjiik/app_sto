@@ -3,40 +3,44 @@ import { useAuth } from '../context/AuthContext';
 import { Group } from '../types';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site:     'Receiving Site',
-  shipping_planning:  'Shipping Planning',
-  shipping_logistics: 'Shipping Logistics',
-  management:         'Management',
-  finance:            'Finance',
-  receiving_logistics:'Receiving Logistics',
+  receiving_site:      'Receiving Site',
+  shipping_planning:   'Shipping Planning',
+  shipping_logistics:  'Shipping Logistics',
+  management:          'Management',
+  finance:             'Finance',
+  receiving_logistics: 'Receiving Logistics',
+  admin:               'Admin',
 };
 
 const GROUP_COLORS: Record<Group, string> = {
-  receiving_site:     'bg-blue-700',
-  shipping_planning:  'bg-amber-600',
-  shipping_logistics: 'bg-teal-600',
-  management:         'bg-purple-700',
-  finance:            'bg-green-700',
-  receiving_logistics:'bg-orange-600',
+  receiving_site:      'bg-blue-700',
+  shipping_planning:   'bg-amber-600',
+  shipping_logistics:  'bg-teal-600',
+  management:          'bg-purple-700',
+  finance:             'bg-green-700',
+  receiving_logistics: 'bg-orange-600',
+  admin:               'bg-red-700',
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout, devBypassMode } = useAuth();
+  const { user, logout, ldapMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   function handleSwitch() {
     logout();
-    navigate(devBypassMode ? '/login' : '/', { replace: true });
+    navigate('/login', { replace: true });
   }
 
-  const canCreateNew = user?.group === 'receiving_site';
+  const canCreateNew = user?.group === 'receiving_site' || user?.group === 'admin';
+  const isAdmin = user?.group === 'admin';
 
   const navLinks = [
     { to: '/dashboard',  label: 'Dashboard' },
     { to: '/sto',        label: 'All STOs' },
     { to: '/analytics',  label: 'Analytics' },
     ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
+    ...(isAdmin ? [{ to: '/users', label: 'Users' }] : []),
   ];
 
   const groupColor = user ? GROUP_COLORS[user.group] : 'bg-blue-900';
@@ -76,7 +80,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 onClick={handleSwitch}
                 className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-sm transition-colors border border-white/20"
               >
-                {devBypassMode ? 'Switch Group' : 'Sign Out'}
+                {ldapMode ? 'Sign Out' : 'Switch Group'}
               </button>
             </div>
           </div>

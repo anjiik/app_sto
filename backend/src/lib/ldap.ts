@@ -1,39 +1,75 @@
 import { Client } from 'ldapts';
-import { findMappingByAdGroup, LdapGroupMapping } from '../config/ldapGroups';
 
 const LDAP_URL       = process.env.LDAP_URL          || '';
 const LDAP_DOMAIN    = process.env.LDAP_DOMAIN        || '';
 const LDAP_BASE_DN   = process.env.LDAP_BASE_DN       || '';
-const LDAP_BIND_DN   = process.env.LDAP_BIND_DN       || ''; // service account UPN or DN
-const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || ''; // service account password
+const LDAP_BIND_DN   = process.env.LDAP_BIND_DN       || '';
+const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
+const LDAP_APP_GROUP = process.env.LDAP_APP_GROUP     || 'STO_App_Users';
 
 export interface LdapAuthResult {
   displayName: string;
-  email: string;
-  mapping: LdapGroupMapping;
+  adUsername:  string;
+  email:       string;
 }
 
-// Extracts CN from a full AD distinguished name.
-// "CN=ABC_STO_Receiving_Site,OU=Groups,DC=company,DC=com" → "ABC_STO_Receiving_Site"
+// Sanitise values before embedding them in LDAP filter strings.
+// Escapes: \ ( ) * and NUL per RFC 4515.
+function escapeLdap(value: string): string {
+  return value.replace(/[\\()*\x00]/g, ch =>
+    `\\${ch.charCodeAt(0).toString(16).padStart(2, '0')}`,
+  );
+}
+
 function extractCN(dn: string): string {
   const match = dn.match(/^CN=([^,]+)/i);
   return match ? match[1] : dn;
 }
 
-// Normalises a username to UPN format: john.doe → john.doe@LDAP_DOMAIN
 function toUPN(username: string): string {
   if (username.includes('@')) return username;
   if (username.includes('\\')) return `${username.split('\\')[1]}@${LDAP_DOMAIN}`;
   return `${username}@${LDAP_DOMAIN}`;
 }
 
+function toSAM(username: string): string {
+  if (username.includes('\\')) return username.split('\\')[1];
+  if (username.includes('@'))  return username.split('@')[0];
+  return username;
+}
+
 const CLIENT_OPTS = () => ({
   url: LDAP_URL,
   timeout: 5000,
   connectTimeout: 5000,
-  // Uncomment for LDAPS with self-signed cert:
+  // Uncomment for LDAPS with a self-signed cert:
   // tlsOptions: { rejectUnauthorized: false },
 });
+
+function assertGroupMembership(entry: Record<string, unknown>): void {
+  const memberOf = entry.memberOf
+    ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
+    : [];
+  const groupCNs = memberOf.map(extractCN);
+  const isMember = groupCNs.some(
+    cn => cn.toLowerCase() === LDAP_APP_GROUP.toLowerCase(),
+  );
+  if (!isMember) {
+    throw new Error(
+      `Your account is not authorised for this application. ` +
+      `Contact your administrator to be added to the ${LDAP_APP_GROUP} AD group.`,
+    );
+  }
+}
+
+function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
+  assertGroupMembership(entry);
+  return {
+    displayName: (entry.displayName as string) || sam,
+    adUsername:  (entry.sAMAccountName as string) || sam,
+    email:       (entry.mail as string) || '',
+  };
+}
 
 export async function authenticateWithAD(username: string, password: string): Promise<LdapAuthResult> {
   if (!LDAP_URL || !LDAP_DOMAIN || !LDAP_BASE_DN) {
@@ -41,37 +77,34 @@ export async function authenticateWithAD(username: string, password: string): Pr
   }
 
   const upn = toUPN(username);
+  const sam = toSAM(username);
+  const attrs = ['dn', 'displayName', 'mail', 'memberOf', 'sAMAccountName'];
 
-  // ── Service account flow (production) ─────────────────────────────────────
-  // Bind with a dedicated service account to search the directory, then
-  // validate the user's password with a separate bind attempt.
+  // ── Service-account search + user bind (preferred for production) ─────────
   if (LDAP_BIND_DN && LDAP_BIND_PASS) {
     const searchClient = new Client(CLIENT_OPTS());
     try {
       await searchClient.bind(LDAP_BIND_DN, LDAP_BIND_PASS);
 
-      // Find user by UPN, fall back to sAMAccountName
       let entry: Record<string, unknown> | null = null;
+
       const { searchEntries } = await searchClient.search(LDAP_BASE_DN, {
         scope: 'sub',
-        filter: `(userPrincipalName=${upn})`,
-        attributes: ['dn', 'displayName', 'mail', 'memberOf'],
+        filter: `(userPrincipalName=${escapeLdap(upn)})`,
+        attributes: attrs,
       });
-
       if (searchEntries.length > 0) {
         entry = searchEntries[0] as Record<string, unknown>;
       } else {
-        const sam = username.includes('\\') ? username.split('\\')[1] : username.split('@')[0];
-        const { searchEntries: fallback } = await searchClient.search(LDAP_BASE_DN, {
+        const { searchEntries: bySam } = await searchClient.search(LDAP_BASE_DN, {
           scope: 'sub',
-          filter: `(sAMAccountName=${sam})`,
-          attributes: ['dn', 'displayName', 'mail', 'memberOf'],
+          filter: `(sAMAccountName=${escapeLdap(sam)})`,
+          attributes: attrs,
         });
-        if (fallback.length === 0) throw new Error('User account not found in Active Directory');
-        entry = fallback[0] as Record<string, unknown>;
+        if (!bySam.length) throw new Error('User account not found in Active Directory');
+        entry = bySam[0] as Record<string, unknown>;
       }
 
-      // Validate the user's password via a separate bind using their full DN
       const authClient = new Client(CLIENT_OPTS());
       try {
         await authClient.bind(entry.dn as string, password);
@@ -84,37 +117,36 @@ export async function authenticateWithAD(username: string, password: string): Pr
         await authClient.unbind().catch(() => {});
       }
 
-      return buildResult(entry, username);
+      return buildResult(entry, sam);
 
     } finally {
       await searchClient.unbind().catch(() => {});
     }
   }
 
-  // ── Direct user bind flow (fallback when no service account is set) ────────
+  // ── Direct user bind (fallback when no service account is configured) ─────
   const client = new Client(CLIENT_OPTS());
   try {
     await client.bind(upn, password);
 
     const { searchEntries } = await client.search(LDAP_BASE_DN, {
       scope: 'sub',
-      filter: `(userPrincipalName=${upn})`,
-      attributes: ['displayName', 'mail', 'memberOf'],
+      filter: `(userPrincipalName=${escapeLdap(upn)})`,
+      attributes: attrs,
     });
 
     let entries = searchEntries;
     if (!entries.length) {
-      const sam = username.includes('\\') ? username.split('\\')[1] : username.split('@')[0];
-      const { searchEntries: fallback } = await client.search(LDAP_BASE_DN, {
+      const { searchEntries: bySam } = await client.search(LDAP_BASE_DN, {
         scope: 'sub',
-        filter: `(sAMAccountName=${sam})`,
-        attributes: ['displayName', 'mail', 'memberOf'],
+        filter: `(sAMAccountName=${escapeLdap(sam)})`,
+        attributes: attrs,
       });
-      if (!fallback.length) throw new Error('User account not found in Active Directory');
-      entries = fallback;
+      if (!bySam.length) throw new Error('User account not found in Active Directory');
+      entries = bySam;
     }
 
-    return buildResult(entries[0] as Record<string, unknown>, username);
+    return buildResult(entries[0] as Record<string, unknown>, sam);
 
   } catch (err: any) {
     if (err?.code === 49 || err?.message?.includes('Invalid Credentials')) {
@@ -124,30 +156,4 @@ export async function authenticateWithAD(username: string, password: string): Pr
   } finally {
     await client.unbind().catch(() => {});
   }
-}
-
-function buildResult(entry: Record<string, unknown>, fallbackUsername: string): LdapAuthResult {
-  const displayName = (entry.displayName as string) || fallbackUsername;
-  const email       = (entry.mail as string)        || '';
-
-  const rawGroups = entry.memberOf
-    ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
-    : [];
-  const groupCNs = rawGroups.map(extractCN);
-
-  let mapping: LdapGroupMapping | undefined;
-  for (const cn of groupCNs) {
-    mapping = findMappingByAdGroup(cn);
-    if (mapping) break;
-  }
-
-  if (!mapping) {
-    throw new Error(
-      `Your account is not in any STO group. ` +
-      `Found AD groups: ${groupCNs.join(', ') || '(none)'}. ` +
-      `Contact your administrator to be added to the correct group.`
-    );
-  }
-
-  return { displayName, email, mapping };
 }

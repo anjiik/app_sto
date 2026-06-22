@@ -19,7 +19,14 @@ interface AuditEntry {
   performed_at: string;
 }
 
+interface Kpis {
+  rushActive: number;
+  dueSoon:    number;
+  overdue:    number;
+}
+
 // ─── config ──────────────────────────────────────────────────────────────────
+
 const GROUP_QUEUE: Partial<Record<Group, { label: string; statuses: STOStatus[] }>> = {
   shipping_planning:   { label: 'Awaiting your Planning Review',      statuses: ['PLANNING_REVIEW'] },
   shipping_logistics:  { label: 'Awaiting your Logistics Submission', statuses: ['SHIPPING_LOGISTICS'] },
@@ -40,11 +47,6 @@ const PIPELINE_STAGES: { label: string; status: STOStatus; color: string }[] = [
 ];
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-function countByStatus(stos: STORequest[]): Partial<Record<STOStatus, number>> {
-  const m: Partial<Record<STOStatus, number>> = {};
-  for (const s of stos) m[s.status] = (m[s.status] || 0) + 1;
-  return m;
-}
 
 function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
@@ -64,16 +66,16 @@ function needByColor(dateStr: string | null): string {
 
 function actionLabel(action: string): string {
   const map: Record<string, string> = {
-    CREATED: 'Created',
-    SUBMITTED: 'Submitted for planning',
-    PLANNING_APPROVED: 'Planning approved',
-    PLANNING_REJECTED: 'Planning rejected',
+    CREATED:             'Created',
+    SUBMITTED:           'Submitted for planning',
+    PLANNING_APPROVED:   'Planning approved',
+    PLANNING_REJECTED:   'Planning rejected',
     LOGISTICS_SUBMITTED: 'Logistics submitted',
     MANAGEMENT_APPROVED: 'Management approved',
     MANAGEMENT_REJECTED: 'Management rejected',
-    FINANCE_APPROVED: 'Finance approved',
-    FINANCE_REJECTED: 'Finance rejected',
-    RECEIPT_CONFIRMED: 'Receipt confirmed',
+    FINANCE_APPROVED:    'Finance approved',
+    FINANCE_REJECTED:    'Finance rejected',
+    RECEIPT_CONFIRMED:   'Receipt confirmed',
   };
   return map[action] ?? action;
 }
@@ -113,53 +115,94 @@ function StagePill({ stage, count, loading }: { stage: typeof PIPELINE_STAGES[0]
 // ─── main ─────────────────────────────────────────────────────────────────────
 export function Dashboard() {
   const { user } = useAuth();
-  const [stos, setStos] = useState<STORequest[]>([]);
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Each piece of state maps directly to one DB query — no derived counting in JS.
+  const [stageCounts,    setStageCounts]    = useState<Partial<Record<STOStatus, number>>>({});
+  const [myQueueItems,   setMyQueueItems]   = useState<STORequest[]>([]);
+  const [myQueueTotal,   setMyQueueTotal]   = useState(0);
+  const [kpis,           setKpis]           = useState<Kpis>({ rushActive: 0, dueSoon: 0, overdue: 0 });
+  const [rushAlertItems, setRushAlertItems] = useState<STORequest[]>([]);
+  const [needByItems,    setNeedByItems]    = useState<STORequest[]>([]);
+  const [audit,          setAudit]          = useState<AuditEntry[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [queueSearch,    setQueueSearch]    = useState('');
 
   useEffect(() => {
-    api.get('/sto')
-      .then(r => setStos(r.data))
-      .finally(() => setLoading(false));
-    api.get('/sto/audit-log')
-      .then(r => setAudit(r.data))
-      .catch(() => {});
-  }, []);
+    if (!user) return;
 
-  const byStatus = countByStatus(stos);
-  const queueConfig = user ? GROUP_QUEUE[user.group] : undefined;
+    const queueConfig = GROUP_QUEUE[user.group];
+    if (!queueConfig) { setLoading(false); return; }
 
-  // My queue items — the STOs needing the current user's action, filtered by site
-  const myQueueStatuses = queueConfig?.statuses ?? [];
-  const myQueue = stos.filter(s => {
-    if (!myQueueStatuses.includes(s.status)) return false;
-    if (!user) return false;
-    if (['shipping_planning', 'shipping_logistics'].includes(user.group)) {
-      return s.shipping_site === user.site;
+    // Build site-scoping params based on the user's role.
+    // Shipping roles scope by shipping_site; receiving roles by receiving_site;
+    // management and finance see all sites (no site param).
+    const siteParams: Record<string, string> = {};
+    if (['shipping_planning', 'shipping_logistics'].includes(user.group) && user.site) {
+      siteParams.shipping_site = user.site;
+    } else if (['receiving_site', 'receiving_logistics'].includes(user.group) && user.site) {
+      siteParams.receiving_site = user.site;
     }
-    if (['receiving_site', 'receiving_logistics'].includes(user.group)) {
-      return s.receiving_site === user.site;
+
+    function qs(extra: Record<string, string> = {}): string {
+      const p = new URLSearchParams({ ...siteParams, ...extra });
+      const s = p.toString();
+      return s ? `?${s}` : '';
     }
-    // management and finance see all sites
-    return true;
-  });
 
-  // Urgency buckets
-  const rushActive = stos.filter(s => s.rush_request && !['CLOSED', 'REJECTED'].includes(s.status));
-  const dueSoon = stos.filter(s =>
-    !['CLOSED', 'REJECTED'].includes(s.status) &&
-    s.receiving_site_need_by_date &&
-    daysUntil(s.receiving_site_need_by_date) <= 7 &&
-    daysUntil(s.receiving_site_need_by_date) >= 0
-  );
-  const overdue = stos.filter(s =>
-    !['CLOSED', 'REJECTED'].includes(s.status) &&
-    s.receiving_site_need_by_date &&
-    daysUntil(s.receiving_site_need_by_date) < 0
-  );
+    const queueStatus = queueConfig.statuses[0];
 
-  const inProgress = (['PLANNING_REVIEW', 'SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS'] as STOStatus[])
-    .reduce((n, s) => n + (byStatus[s] || 0), 0);
+    Promise.all([
+      // 1. Pipeline stage counts — GROUP BY in SQL, zero rows transferred
+      api.get('/analytics/by-status'),
+      // 2. My Action Queue — scoped by role status + site, 20 items
+      api.get(`/sto${qs({ status: queueStatus, limit: '20' })}`),
+      // 3. KPI counts — three COUNT(*) queries, no rows transferred
+      api.get(`/sto/kpis${qs()}`),
+      // 4. Rush alert items — active rush STOs for this site, top 4
+      api.get(`/sto${qs({ rush_only: '1', active_only: '1', limit: '4' })}`),
+      // 5. Need-by items — active STOs with a date, sorted most-urgent first, top 12
+      //    (used for both the overdue alert list and the upcoming need-by section)
+      api.get(`/sto${qs({ has_need_by: '1', active_only: '1', sort: 'need_by_asc', limit: '12' })}`),
+      // 6. Recent audit activity
+      api.get('/sto/audit-log'),
+    ]).then(([byStatusRes, queueRes, kpisRes, rushRes, needByRes, auditRes]) => {
+      const counts: Partial<Record<STOStatus, number>> = {};
+      (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
+        counts[r.status] = r.count;
+      });
+      setStageCounts(counts);
+      setMyQueueItems(queueRes.data.data);
+      setMyQueueTotal(queueRes.data.pagination.total);
+      setKpis(kpisRes.data);
+      setRushAlertItems(rushRes.data.data);
+      setNeedByItems(needByRes.data.data);
+      setAudit(auditRes.data);
+    }).finally(() => setLoading(false));
+  }, [user]);
+
+  const queueConfig      = user ? GROUP_QUEUE[user.group] : undefined;
+  const myQueueStatuses  = queueConfig?.statuses ?? [];
+
+  const filteredQueueItems = queueSearch.trim()
+    ? myQueueItems.filter(s => {
+        const q = queueSearch.toLowerCase();
+        return (
+          s.sto_id?.toLowerCase().includes(q) ||
+          s.material_description?.toLowerCase().includes(q) ||
+          s.material_sap?.toLowerCase().includes(q) ||
+          s.requestor_name?.toLowerCase().includes(q)
+        );
+      })
+    : myQueueItems;
+
+  // needByItems is sorted most-overdue → most-urgent → further out.
+  // Split into two views: overdue alert list and upcoming section.
+  const overdueAlertItems = needByItems.filter(s => daysUntil(s.receiving_site_need_by_date!) < 0).slice(0, 4);
+  const upcomingItems     = needByItems.filter(s => daysUntil(s.receiving_site_need_by_date!) >= 0).slice(0, 8);
+
+  const inProgress = (
+    ['PLANNING_REVIEW', 'SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS'] as STOStatus[]
+  ).reduce((n, s) => n + (stageCounts[s] || 0), 0);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -169,12 +212,12 @@ export function Dashboard() {
   };
 
   const groupLabel: Partial<Record<Group, string>> = {
-    receiving_site: 'Receiving Site',
-    shipping_planning: 'Shipping Planning',
+    receiving_site:     'Receiving Site',
+    shipping_planning:  'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
-    management: 'Management',
-    finance: 'Finance',
-    receiving_logistics: 'Receiving Logistics',
+    management:         'Management',
+    finance:            'Finance',
+    receiving_logistics:'Receiving Logistics',
   };
 
   return (
@@ -207,34 +250,45 @@ export function Dashboard() {
 
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard value={loading ? '–' : myQueue.length}    label="My Queue"    sub="Needs your action"   color="blue" />
-          <KpiCard value={loading ? '–' : rushActive.length} label="Rush / Urgent" sub="Active rush STOs"  color="red" />
-          <KpiCard value={loading ? '–' : dueSoon.length}    label="Due This Week" sub="Need-by ≤ 7 days"  color="orange" />
-          <KpiCard value={loading ? '–' : overdue.length}    label="Overdue"       sub="Past need-by date" color="rose" />
+          <KpiCard value={loading ? '–' : myQueueTotal}    label="My Queue"     sub="Needs your action"   color="blue" />
+          <KpiCard value={loading ? '–' : kpis.rushActive} label="Rush / Urgent" sub="Active rush STOs"   color="red" />
+          <KpiCard value={loading ? '–' : kpis.dueSoon}    label="Due This Week" sub="Need-by ≤ 7 days"   color="orange" />
+          <KpiCard value={loading ? '–' : kpis.overdue}    label="Overdue"       sub="Past need-by date"  color="rose" />
         </div>
 
         {/* ── My Action Queue ── */}
         {queueConfig && (
           <div className="bg-white rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 gap-4">
+              <div className="flex items-center gap-2 shrink-0">
                 <h2 className="font-semibold text-gray-900">My Action Queue</h2>
-                {myQueue.length > 0 && (
-                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{myQueue.length}</span>
+                {myQueueTotal > 0 && (
+                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{myQueueTotal}</span>
                 )}
               </div>
-              <Link to={`/sto?status=${myQueueStatuses[0]}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+              <input
+                type="text"
+                placeholder="Search queue…"
+                value={queueSearch}
+                onChange={e => setQueueSearch(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Link to={`/sto?status=${myQueueStatuses[0]}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium shrink-0">
                 View all →
               </Link>
             </div>
 
             {loading ? (
               <div className="p-8 text-center text-gray-400">Loading...</div>
-            ) : myQueue.length === 0 ? (
+            ) : myQueueItems.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="text-2xl mb-2">✓</div>
                 <div className="text-gray-500 font-medium">Queue is clear</div>
                 <div className="text-gray-400 text-sm mt-1">Nothing waiting for your action</div>
+              </div>
+            ) : filteredQueueItems.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-sm">
+                No queue items match &ldquo;{queueSearch}&rdquo;
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -250,7 +304,7 @@ export function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {myQueue.map(sto => {
+                    {filteredQueueItems.map(sto => {
                       const waiting = daysSince(sto.updated_at);
                       const isStalled = waiting >= 3;
                       return (
@@ -304,16 +358,16 @@ export function Dashboard() {
         )}
 
         {/* ── Alerts: Rush + Overdue ── */}
-        {!loading && (rushActive.length > 0 || overdue.length > 0) && (
+        {!loading && (kpis.rushActive > 0 || kpis.overdue > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {rushActive.length > 0 && (
+            {kpis.rushActive > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-red-600 font-semibold text-sm">🚨 Rush STOs in Progress</span>
-                  <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{rushActive.length}</span>
+                  <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{kpis.rushActive}</span>
                 </div>
                 <div className="space-y-2">
-                  {rushActive.slice(0, 4).map(sto => (
+                  {rushAlertItems.map(sto => (
                     <Link key={sto.id} to={`/sto/${sto.id}`} className="flex items-center justify-between p-2 bg-white rounded-lg hover:bg-red-50 transition-colors group">
                       <div>
                         <span className="font-mono text-sm font-medium text-gray-900">{sto.sto_id}</span>
@@ -322,17 +376,22 @@ export function Dashboard() {
                       <StatusBadge status={sto.status} />
                     </Link>
                   ))}
+                  {kpis.rushActive > rushAlertItems.length && (
+                    <Link to="/sto?priority=1" className="text-xs text-red-600 hover:underline block mt-1">
+                      +{kpis.rushActive - rushAlertItems.length} more →
+                    </Link>
+                  )}
                 </div>
               </div>
             )}
-            {overdue.length > 0 && (
+            {kpis.overdue > 0 && (
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-orange-700 font-semibold text-sm">⏰ Past Need-By Date</span>
-                  <span className="bg-orange-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{overdue.length}</span>
+                  <span className="bg-orange-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{kpis.overdue}</span>
                 </div>
                 <div className="space-y-2">
-                  {overdue.slice(0, 4).map(sto => (
+                  {overdueAlertItems.map(sto => (
                     <Link key={sto.id} to={`/sto/${sto.id}`} className="flex items-center justify-between p-2 bg-white rounded-lg hover:bg-orange-50 transition-colors">
                       <div>
                         <span className="font-mono text-sm font-medium text-gray-900">{sto.sto_id}</span>
@@ -343,6 +402,11 @@ export function Dashboard() {
                       <StatusBadge status={sto.status} />
                     </Link>
                   ))}
+                  {kpis.overdue > overdueAlertItems.length && (
+                    <Link to="/sto" className="text-xs text-orange-600 hover:underline block mt-1">
+                      +{kpis.overdue - overdueAlertItems.length} more →
+                    </Link>
+                  )}
                 </div>
               </div>
             )}
@@ -361,7 +425,7 @@ export function Dashboard() {
           <div className="flex items-center flex-wrap gap-1">
             {PIPELINE_STAGES.map((stage, i) => (
               <div key={stage.status} className="flex items-center">
-                <StagePill stage={stage} count={byStatus[stage.status] || 0} loading={loading} />
+                <StagePill stage={stage} count={stageCounts[stage.status] || 0} loading={loading} />
                 {i < PIPELINE_STAGES.length - 1 && (
                   <span className="text-gray-300 text-base mx-1 shrink-0">→</span>
                 )}
@@ -411,36 +475,28 @@ export function Dashboard() {
             </div>
             {loading ? (
               <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+            ) : upcomingItems.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-sm">No pending need-by dates</div>
             ) : (
-              (() => {
-                const upcoming = stos
-                  .filter(s => !['CLOSED', 'REJECTED'].includes(s.status) && s.receiving_site_need_by_date)
-                  .sort((a, b) => new Date(a.receiving_site_need_by_date!).getTime() - new Date(b.receiving_site_need_by_date!).getTime())
-                  .slice(0, 8);
-                return upcoming.length === 0 ? (
-                  <div className="p-6 text-center text-gray-400 text-sm">No pending need-by dates</div>
-                ) : (
-                  <div className="divide-y divide-gray-50">
-                    {upcoming.map(sto => {
-                      const d = daysUntil(sto.receiving_site_need_by_date!);
-                      return (
-                        <Link key={sto.id} to={`/sto/${sto.id}`} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors">
-                          <div>
-                            <div className="font-mono text-sm font-medium text-gray-900">{sto.sto_id}</div>
-                            <div className="text-xs text-gray-500 truncate max-w-[180px]">{sto.material_description || sto.material_sap}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`text-sm font-medium ${d < 0 ? 'text-red-600' : d <= 7 ? 'text-orange-500' : 'text-gray-600'}`}>
-                              {d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? 'Today' : `${d}d left`}
-                            </div>
-                            <div className="text-xs text-gray-400">{new Date(sto.receiving_site_need_by_date!).toLocaleDateString()}</div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                );
-              })()
+              <div className="divide-y divide-gray-50">
+                {upcomingItems.map(sto => {
+                  const d = daysUntil(sto.receiving_site_need_by_date!);
+                  return (
+                    <Link key={sto.id} to={`/sto/${sto.id}`} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors">
+                      <div>
+                        <div className="font-mono text-sm font-medium text-gray-900">{sto.sto_id}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-[180px]">{sto.material_description || sto.material_sap}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-medium ${d <= 7 ? 'text-orange-500' : 'text-gray-600'}`}>
+                          {d === 0 ? 'Today' : `${d}d left`}
+                        </div>
+                        <div className="text-xs text-gray-400">{new Date(sto.receiving_site_need_by_date!).toLocaleDateString()}</div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

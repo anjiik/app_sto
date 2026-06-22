@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import bcrypt from 'bcryptjs';
-import { dbExecute, dbInsert, dbQueryOne } from './connection';
+import { dbExecute, dbQuery, dbQueryOne } from './connection';
 
 const now = new Date().toISOString().slice(0, 10);
 
@@ -293,7 +293,7 @@ const STOS = [
 ] as const;
 
 async function insertSto(sto: StoRow): Promise<number> {
-  return dbInsert(`
+  const rows = await dbQuery<{ id: number }>(`
     INSERT INTO sto_requests (
       sto_id, request_date, standard_estimated_ship_date, expedited_estimated_ship_date,
       repeat_shipment_calendar_year, rush_request, priority, public_holiday,
@@ -330,6 +330,7 @@ async function insertSto(sto: StoRow): Promise<number> {
       @corporate_sto_tracker_status, @status, @rejection_reason
     )
   `, sto as unknown as Record<string, unknown>);
+  return rows[0]?.id ?? 0;
 }
 
 async function insertAudit(stoId: number, action: string, oldStatus: string | null, newStatus: string, performedBy: number, performedByName: string, notes: string | null = null): Promise<void> {
@@ -341,7 +342,7 @@ async function insertAudit(stoId: number, action: string, oldStatus: string | nu
 
 // ── Demo users ────────────────────────────────────────────────────────────────
 // 3 sites × 6 groups = 18 users. All share the password Demo123!
-// In production, users come from AD via PingFederate — this table is ignored.
+// In production, users come from Active Directory via LDAP — this table is ignored.
 
 const DEMO_PASSWORD = 'Demo123!';
 
@@ -391,6 +392,34 @@ async function seedDemoUsers(): Promise<void> {
   console.log(`✓ Seeded ${DEMO_USERS.length} demo users (password: ${DEMO_PASSWORD})`);
 }
 
+async function seedSites(): Promise<void> {
+  const existing = await dbQueryOne<{ cnt: number }>('SELECT COUNT(*) AS cnt FROM sites');
+  if (existing && existing.cnt > 0) {
+    console.log('✓ sites table already has rows — skipped.');
+    return;
+  }
+  await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABC', 'Site ABC')`);
+  await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABL', 'Site ABL')`);
+  await dbExecute(`INSERT INTO sites (code, name) VALUES ('XYZ', 'Site XYZ')`);
+  console.log('✓ Seeded 3 sites (ABC, ABL, XYZ).');
+}
+
+async function seedAppUsers(): Promise<void> {
+  await dbExecute('DELETE FROM app_users');
+  // Reset IDENTITY so app_users.id always starts at 1 after re-seeding.
+  // This keeps the values consistent with requestor_user_id in the seeded STOs.
+  await dbExecute("DBCC CHECKIDENT ('app_users', RESEED, 0)");
+  for (const u of DEMO_USERS) {
+    await dbExecute(
+      `INSERT INTO app_users (ad_username, display_name, site, app_group)
+       VALUES (@username, @display_name, @site, @group_key)`,
+      { username: u.username, display_name: u.display_name, site: u.site, group_key: u.group_key }
+    );
+  }
+  console.log(`✓ Seeded ${DEMO_USERS.length} app_users from demo user list.`);
+  console.log('  To add an admin in dev: UPDATE app_users SET app_group = \'admin\' WHERE ad_username = \'your.username\';');
+}
+
 async function seed() {
   await dbExecute('DELETE FROM sto_audit_log');
   await dbExecute('DELETE FROM sto_requests');
@@ -426,6 +455,8 @@ async function seed() {
   console.log(`✓ Seeded ${row?.cnt ?? 0} demo STOs across all pipeline stages.`);
 
   await seedDemoUsers();
+  await seedSites();
+  await seedAppUsers();
 }
 
 seed().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });

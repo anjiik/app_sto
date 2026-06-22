@@ -4,7 +4,8 @@ export type Group =
   | 'shipping_logistics'
   | 'management'
   | 'finance'
-  | 'receiving_logistics';
+  | 'receiving_logistics'
+  | 'admin';
 
 export type STOStatus =
   | 'DRAFT'
@@ -20,7 +21,7 @@ export interface User {
   userId: number;
   group: Group;
   name: string;
-  site: string;  // facility code, e.g. ABC — comes from AD/demo data
+  site: string | null;
 }
 
 export interface STORequest {

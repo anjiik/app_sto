@@ -6,11 +6,10 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  devBypassMode: boolean; // true in demo mode OR ldap mode — both show the login form
-  ldapMode: boolean;      // true when AD/LDAP auth is active (hides demo cards)
+  ldapMode: boolean;
   login: (username: string, password: string) => Promise<void>;
-  exchangePingCode: (code: string) => Promise<void>;
   logout: () => void;
+  updateSession: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -19,18 +18,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('sto_token'));
   const [loading, setLoading] = useState(true);
-  const [devBypassMode, setDevBypassMode] = useState(false);
   const [ldapMode, setLdapMode] = useState(false);
 
-  // Determine auth mode once on mount — always runs regardless of token state
+  // Determine auth mode once on mount — controls login page hint text
   useEffect(() => {
     api.get('/auth/ping-login-url')
-      .then(r => {
-        const isDevBypass = r.data.devBypass === true;
-        const isLdap      = r.data.ldapMode   === true;
-        setLdapMode(isLdap);
-        setDevBypassMode(isDevBypass || isLdap); // both modes use the login form
-      })
+      .then(r => { setLdapMode(r.data.ldapMode === true); })
       .catch(() => {});
   }, []);
 
@@ -57,11 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeSession(r.data.token, r.data.user);
   }
 
-  async function exchangePingCode(code: string) {
-    const r = await api.post('/auth/ping-exchange', { code });
-    storeSession(r.data.token, r.data.user);
-  }
-
   function logout() {
     localStorage.removeItem('sto_token');
     setToken(null);
@@ -69,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, devBypassMode, ldapMode, login, exchangePingCode, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, ldapMode, login, logout, updateSession: storeSession }}>
       {children}
     </AuthContext.Provider>
   );

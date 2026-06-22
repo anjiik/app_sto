@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Layout } from '../components/Layout';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,8 @@ const EMPTY_FILTERS: Filters = { site: '', status: '', rush: '', dateFrom: '', d
 
 export function Analytics() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canFilterSite = user?.group === 'admin' || user?.group === 'management' || user?.group === 'finance';
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [availableSites, setAvailableSites] = useState<string[]>([]);
@@ -159,6 +162,7 @@ export function Analytics() {
   const [rawTotal,     setRawTotal]     = useState(0);
   const [rawPage,      setRawPage]      = useState(1);
   const [tableLoading, setTableLoading] = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
 
   const isFirstLoad = useRef(true);
 
@@ -178,7 +182,9 @@ export function Analytics() {
     setRawPage(1);
   }
 
-  function buildParams(extra: Record<string, string> = {}): string {
+  // Memoised so effects that depend on buildParams only re-run when filters change,
+  // not on every render — this lets us list it honestly in dependency arrays.
+  const buildParams = useCallback((extra: Record<string, string> = {}): string => {
     const p = new URLSearchParams();
     if (filters.site)     p.set('site',     filters.site);
     if (filters.status)   p.set('status',   filters.status);
@@ -187,7 +193,7 @@ export function Analytics() {
     if (filters.dateTo)   p.set('dateTo',   filters.dateTo);
     Object.entries(extra).forEach(([k, v]) => p.set(k, v));
     return p.toString();
-  }
+  }, [filters]);
 
   // Fetch site list once for the dropdown (unfiltered)
   useEffect(() => {
@@ -199,10 +205,11 @@ export function Analytics() {
     });
   }, []);
 
-  // Fetch chart data whenever filters change
+  // Fetch chart data whenever filters change (buildParams changes with filters)
   useEffect(() => {
     const q = buildParams();
     const first = isFirstLoad.current;
+    setError(null);
 
     Promise.all([
       api.get(`/analytics/summary?${q}`),
@@ -218,10 +225,12 @@ export function Analytics() {
       setBySite(si.data);
       setSiteFlow(sf.data);
       setRushSplit(rs.data);
+    }).catch(err => {
+      setError(err.response?.data?.message || 'Failed to load analytics data');
     }).finally(() => {
       if (first) { isFirstLoad.current = false; setLoading(false); }
     });
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [buildParams]);
 
   // Fetch raw data whenever filters or page changes
   useEffect(() => {
@@ -229,8 +238,9 @@ export function Analytics() {
     const q = buildParams({ page: String(rawPage) });
     api.get(`/analytics/raw-data?${q}`)
       .then(r => { setRawData(r.data.rows); setRawTotal(r.data.total); })
+      .catch(err => setError(err.response?.data?.message || 'Failed to load table data'))
       .finally(() => setTableLoading(false));
-  }, [filters, rawPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [buildParams, rawPage]);
 
   if (loading) {
     return (
@@ -267,20 +277,30 @@ export function Analytics() {
           <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-full">Live data</span>
         </div>
 
+        {/* ── Error banner ─────────────────────────────────────────────────────── */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4">✕</button>
+          </div>
+        )}
+
         {/* ── Filter bar ───────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex flex-wrap gap-3 items-end">
-            {/* Site */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Site</label>
-              <select
-                value={filters.site}
-                onChange={e => setFilter('site', e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
-                <option value="">All Sites</option>
-                {availableSites.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+            {/* Site — only management/finance/admin can cross-site filter */}
+            {canFilterSite && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Site</label>
+                <select
+                  value={filters.site}
+                  onChange={e => setFilter('site', e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                  <option value="">All Sites</option>
+                  {availableSites.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
 
             {/* Status */}
             <div>
@@ -334,7 +354,7 @@ export function Analytics() {
           {/* Active filter chips */}
           {hasFilters && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
-              {filters.site     && <FilterChip label={`Site: ${filters.site}`} onRemove={() => setFilter('site', '')} />}
+              {canFilterSite && filters.site && <FilterChip label={`Site: ${filters.site}`} onRemove={() => setFilter('site', '')} />}
               {filters.status   && <FilterChip label={`Status: ${STATUS_LABELS[filters.status] ?? filters.status}`} onRemove={() => setFilter('status', '')} />}
               {filters.rush     && <FilterChip label={filters.rush === '1' ? 'Rush only' : 'Normal only'} onRemove={() => setFilter('rush', '')} />}
               {filters.dateFrom && <FilterChip label={`From: ${filters.dateFrom}`} onRemove={() => setFilter('dateFrom', '')} />}

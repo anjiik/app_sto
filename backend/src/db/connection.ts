@@ -21,6 +21,15 @@ function getPool(): Promise<sql.ConnectionPool> {
         trustServerCertificate: true,
         instanceName,
       },
+      // Pool sizing: the Dashboard fires 6 parallel requests per page load.
+      // max=20 handles ~3 concurrent users loading the dashboard simultaneously
+      // without queueing; raise it if query times start climbing under load.
+      pool: {
+        max: 20,
+        min: 2,
+        idleTimeoutMillis: 30_000,
+        acquireTimeoutMillis: 15_000,
+      },
     };
 
     console.log(`DB connecting → server: ${server}, instance: ${instanceName ?? 'default'}, database: ${database}`);
@@ -68,10 +77,33 @@ export async function dbExecute(
   await req.query(queryStr);
 }
 
-export async function dbInsert(
-  queryStr: string,
-  params: Record<string, unknown> = {}
-): Promise<number> {
-  const rows = await dbQuery<{ id: number }>(queryStr, params);
-  return rows[0]?.id ?? 0;
+export type TxExecutor = (query: string, params?: Record<string, unknown>) => Promise<void>;
+
+export async function withTransaction(fn: (execute: TxExecutor) => Promise<void>): Promise<void> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const execute: TxExecutor = async (queryStr, params = {}) => {
+      const txReq = new sql.Request(transaction);
+      for (const [key, val] of Object.entries(params)) {
+        txReq.input(key, val !== undefined ? val : null);
+      }
+      await txReq.query(queryStr);
+    };
+    await fn(execute);
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
+
+export async function closePool(): Promise<void> {
+  if (poolPromise) {
+    const pool = await poolPromise;
+    await pool.close();
+    poolPromise = null;
+  }
+}
+

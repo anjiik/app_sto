@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -23,46 +23,108 @@ function Field({ label, hint, children, required }: {
 
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
+function toDate(v: string | null | undefined): string {
+  return v ? v.slice(0, 10) : '';
+}
+
 export function STOForm() {
+  const { id } = useParams<{ id?: string }>();
+  const isEdit = !!id;
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormData>();
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
 
   const rushRequest = watch('rush_request');
+
+  useEffect(() => {
+    if (!isEdit) return;
+    api.get(`/sto/${id}`)
+      .then(r => {
+        const s = r.data;
+        reset({
+          requestor_name:                s.requestor_name ?? '',
+          requestor_email:               s.requestor_email ?? '',
+          priority:                      String(s.priority ?? 3),
+          requesting_plant:              s.requesting_plant ?? '',
+          repeat_shipment_calendar_year: s.repeat_shipment_calendar_year ?? '',
+          shipping_site:                 s.shipping_site ?? '',
+          receiving_site:                s.receiving_site ?? '',
+          standard_estimated_ship_date:  toDate(s.standard_estimated_ship_date),
+          receiving_site_need_by_date:   toDate(s.receiving_site_need_by_date),
+          estimated_ship_by_date:        toDate(s.estimated_ship_by_date),
+          expedited_estimated_ship_date: toDate(s.expedited_estimated_ship_date),
+          rush_request:                  Boolean(s.rush_request),
+          public_holiday:                Boolean(s.public_holiday),
+          toll_mfg:                      Boolean(s.toll_mfg),
+          rush_reason:                   s.rush_reason ?? '',
+          material_sap:                  s.material_sap ?? '',
+          material_description:          s.material_description ?? '',
+          brand_at_receiving_site:       s.brand_at_receiving_site ?? '',
+          inco_terms:                    s.inco_terms ?? '',
+          quantity:                      s.quantity ?? '',
+          uom:                           s.uom ?? '',
+          shipping_conditions:           s.shipping_conditions ?? '',
+          material_value:                s.material_value ?? '',
+          controlled_shipping_required:  Boolean(s.controlled_shipping_required),
+          insurance_loss_required:       Boolean(s.insurance_loss_required),
+          sto_number:                    s.sto_number ?? '',
+          shipment_id:                   s.shipment_id ?? '',
+          corporate_sto_tracker_status:  s.corporate_sto_tracker_status ?? '',
+        });
+      })
+      .catch(() => setError('Failed to load STO for editing'))
+      .finally(() => setLoading(false));
+  }, [id, isEdit, reset]);
 
   async function onSubmit(data: FormData) {
     setSaving(true);
     setError('');
     try {
-      const res = await api.post('/sto', {
-        ...data,
-        request_date: new Date().toISOString().slice(0, 10),
-        requestor_name: data.requestor_name || user?.name,
-      });
-      navigate(`/sto/${res.data.id}`);
+      if (isEdit) {
+        await api.put(`/sto/${id}`, data);
+        navigate(`/sto/${id}`);
+      } else {
+        const res = await api.post('/sto', {
+          ...data,
+          request_date: new Date().toISOString().slice(0, 10),
+          requestor_name: data.requestor_name || user?.name,
+        });
+        navigate(`/sto/${res.data.id}`);
+      }
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-        : 'Failed to create STO';
-      setError(msg || 'Failed to create STO');
+        : undefined;
+      setError(msg || (isEdit ? 'Failed to update STO' : 'Failed to create STO'));
     } finally {
       setSaving(false);
     }
   }
+
+  if (loading) return <Layout><div className="p-12 text-center text-gray-400">Loading...</div></Layout>;
 
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600">← Back</button>
-          <h1 className="text-2xl font-bold text-gray-900">New STO Request</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{isEdit ? 'Edit STO' : 'New STO Request'}</h1>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 text-sm">
-          Fill in the transfer request details below. Once submitted, this goes to the Shipping Site Planning queue.
-        </div>
+        {!isEdit && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 text-sm">
+            Fill in the transfer request details below. Once submitted, this goes to the Shipping Site Planning queue.
+          </div>
+        )}
+
+        {isEdit && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-6 text-sm">
+            Editing STO — changes are saved immediately and logged in the audit trail.
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">{error}</div>
@@ -204,7 +266,7 @@ export function STOForm() {
               Cancel
             </button>
             <button type="submit" disabled={saving} className="px-6 py-2.5 bg-blue-700 text-white rounded-lg hover:bg-blue-800 font-medium disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save as Draft'}
+              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Save as Draft'}
             </button>
           </div>
         </form>

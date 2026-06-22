@@ -1,42 +1,13 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
-import { PingCallback } from './pages/PingCallback';
 import { Dashboard } from './pages/Dashboard';
 import { Analytics } from './pages/Analytics';
 import { STOList } from './pages/STOList';
 import { STOForm } from './pages/STOForm';
 import { STODetail } from './pages/STODetail';
-import api from './api/client';
-
-// Shown when unauthenticated and NOT in dev bypass mode.
-// Redirects to PingFederate if configured, or to /login for LDAP mode.
-function PingRedirect() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    api.get('/auth/ping-login-url')
-      .then(r => {
-        if (r.data.url) {
-          sessionStorage.setItem('ping_oauth_state', r.data.state);
-          window.location.href = r.data.url;
-        } else {
-          // ldapMode or devBypass — show the regular login form
-          navigate('/login', { replace: true });
-        }
-      })
-      .catch(() => navigate('/login', { replace: true }));
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="inline-block w-10 h-10 border-4 border-blue-700 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-gray-500 text-sm">Redirecting to sign-in…</p>
-      </div>
-    </div>
-  );
-}
+import { SitePicker } from './pages/SitePicker';
+import { UserManagement } from './pages/UserManagement';
 
 function Spinner() {
   return (
@@ -46,45 +17,47 @@ function Spinner() {
   );
 }
 
+// Redirects unauthenticated users to /login.
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, devBypassMode } = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return <Spinner />;
-  if (!user) return devBypassMode ? <Navigate to="/login" replace /> : <PingRedirect />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+// Redirects users who haven't picked a site yet to /setup-site.
+function SiteRequired({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user?.site) return <Navigate to="/setup-site" replace />;
   return <>{children}</>;
 }
 
 function AppRoutes() {
-  const { user, loading, devBypassMode } = useAuth();
-  const navigate = useNavigate();
-
-  // Once loading is done, if there's no user and we're in dev mode, go to login
-  useEffect(() => {
-    if (!loading && !user && devBypassMode) {
-      navigate('/login', { replace: true });
-    }
-  }, [loading, user, devBypassMode]);
-
+  const { user, loading } = useAuth();
   if (loading) return <Spinner />;
 
   return (
     <Routes>
-      {/* Ping OIDC callback */}
-      <Route path="/auth/callback" element={<PingCallback />} />
-
-      {/* Dev bypass login */}
       <Route
         path="/login"
         element={user ? <Navigate to="/dashboard" replace /> : <Login />}
       />
 
-      {/* Protected app routes */}
-      <Route path="/dashboard"  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/analytics"  element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-      <Route path="/sto"        element={<ProtectedRoute><STOList /></ProtectedRoute>} />
-      <Route path="/sto/new"    element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
-      <Route path="/sto/:id"    element={<ProtectedRoute><STODetail /></ProtectedRoute>} />
+      {/* Site setup — authenticated but no site assigned yet */}
+      <Route path="/setup-site" element={<ProtectedRoute><SitePicker /></ProtectedRoute>} />
 
-      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : (devBypassMode ? <Navigate to="/login" replace /> : <PingRedirect />)} />
+      {/* Admin-only */}
+      <Route path="/users" element={<ProtectedRoute><SiteRequired><UserManagement /></SiteRequired></ProtectedRoute>} />
+
+      {/* Main app — requires both auth and site */}
+      <Route path="/dashboard"  element={<ProtectedRoute><SiteRequired><Dashboard /></SiteRequired></ProtectedRoute>} />
+      <Route path="/analytics"  element={<ProtectedRoute><SiteRequired><Analytics /></SiteRequired></ProtectedRoute>} />
+      <Route path="/sto"        element={<ProtectedRoute><SiteRequired><STOList /></SiteRequired></ProtectedRoute>} />
+      <Route path="/sto/new"      element={<ProtectedRoute><SiteRequired><STOForm /></SiteRequired></ProtectedRoute>} />
+      <Route path="/sto/:id/edit" element={<ProtectedRoute><SiteRequired><STOForm /></SiteRequired></ProtectedRoute>} />
+      <Route path="/sto/:id"      element={<ProtectedRoute><SiteRequired><STODetail /></SiteRequired></ProtectedRoute>} />
+
+      <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

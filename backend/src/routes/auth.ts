@@ -4,53 +4,55 @@ dotenv.config();
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { JwtPayload, Group } from '../types';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { dbQueryOne } from '../db/connection';
+import { dbQuery, dbQueryOne, dbExecute } from '../db/connection';
 import { authenticateWithAD } from '../lib/ldap';
 
 const router = Router();
 
-const DEV_BYPASS = process.env.PING_DEV_BYPASS === 'true';
-const PING_ISSUER = process.env.PING_ISSUER_URL || '';
-const PING_CLIENT_ID = process.env.PING_CLIENT_ID || '';
-const PING_CLIENT_SECRET = process.env.PING_CLIENT_SECRET || '';
-const PING_REDIRECT_URI = process.env.PING_REDIRECT_URI || 'http://localhost:5173/auth/callback';
-const PING_GROUP_CLAIM = process.env.PING_GROUP_CLAIM || 'memberOf';
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { message: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-// Map AD group names from PingFederate → app group keys.
-// Update these keys once you know the exact AD group names in your PingFederate claims.
-const PING_GROUP_MAP: Record<string, Group> = {
-  STO_Receiving_Site:     'receiving_site',
-  STO_Shipping_Planning:  'shipping_planning',
-  STO_Shipping_Logistics: 'shipping_logistics',
-  STO_Management:         'management',
-  STO_Finance:            'finance',
-  STO_Receiving_Logistics:'receiving_logistics',
-};
+// true  → dev/test mode: login validates against the demo_users table (run npm run seed first)
+// false → production mode: login validates against Active Directory via LDAP
+const DEV_BYPASS = process.env.DEV_BYPASS === 'true';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site:     'Receiving Site',
-  shipping_planning:  'Shipping Site Planning',
-  shipping_logistics: 'Shipping Site Logistics',
-  management:         'Management',
-  finance:            'Finance',
-  receiving_logistics:'Receiving Site Logistics',
+  receiving_site:      'Receiving Site',
+  shipping_planning:   'Shipping Planning',
+  shipping_logistics:  'Shipping Logistics',
+  management:          'Management',
+  finance:             'Finance',
+  receiving_logistics: 'Receiving Logistics',
+  admin:               'Admin',
 };
 
-function issueToken(userId: number, group: Group, displayName: string, site: string): { token: string; user: JwtPayload } {
+interface AppUserRow {
+  id:           number;
+  ad_username:  string;
+  display_name: string;
+  site:         string | null;
+  app_group:    string;
+  is_active:    number | boolean; // BIT — truthy=active, falsy=disabled
+}
+
+function issueToken(
+  userId: number, group: Group, displayName: string, site: string | null,
+): { token: string; user: JwtPayload } {
   const payload: JwtPayload = { userId, group, name: displayName, site };
-  const token = jwt.sign(payload, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '8h' });
+  const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '8h' });
   return { token, user: payload };
 }
 
-// ── Demo login (DEV_BYPASS only) ───────────────────────────────────────────────
-
 // POST /api/auth/login — { username, password } → JWT
-// Dev bypass mode  (PING_DEV_BYPASS=true):  validates against demo_users table
-// Production mode  (PING_DEV_BYPASS=false): validates against Active Directory via LDAP
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', loginRateLimit, async (req: Request, res: Response): Promise<void> => {
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ message: 'username and password are required' });
@@ -58,146 +60,172 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   if (DEV_BYPASS) {
-    // ── Demo mode: check against demo_users table ────────────────────────────
-    interface DemoUserRow { id: number; password_hash: string; display_name: string; site: string; group_key: string; }
-    const user = await dbQueryOne<DemoUserRow>(
-      'SELECT id, password_hash, display_name, site, group_key FROM demo_users WHERE username = @username',
-      { username }
+    // ── Dev mode: validate password against demo_users, look up role in app_users ──
+    try {
+      interface DemoRow { id: number; password_hash: string; display_name: string; site: string; group_key: string; }
+      const demoUser = await dbQueryOne<DemoRow>(
+        'SELECT id, password_hash, display_name, site, group_key FROM demo_users WHERE username = @username',
+        { username },
+      );
+      if (!demoUser || !(await bcrypt.compare(password, demoUser.password_hash))) {
+        res.status(401).json({ message: 'Invalid username or password' });
+        return;
+      }
+
+      let appUser = await dbQueryOne<AppUserRow>(
+        'SELECT id, ad_username, display_name, site, app_group, is_active FROM app_users WHERE ad_username = @username',
+        { username },
+      );
+      if (!appUser) {
+        try {
+          const [created] = await dbQuery<AppUserRow>(`
+            INSERT INTO app_users (ad_username, display_name, site, app_group)
+            OUTPUT INSERTED.id, INSERTED.ad_username, INSERTED.display_name,
+                   INSERTED.site, INSERTED.app_group, INSERTED.is_active
+            VALUES (@username, @displayName, @site, @group)
+          `, { username, displayName: demoUser.display_name, site: demoUser.site, group: demoUser.group_key });
+          if (!created) throw new Error('INSERT INTO app_users returned no rows');
+          appUser = created;
+        } catch (insertErr: any) {
+          // Concurrent login — another request inserted the row first
+          const isDuplicate = insertErr.number === 2627 || insertErr.number === 2601
+            || insertErr.message?.includes('duplicate key') || insertErr.message?.includes('Violation of UNIQUE KEY');
+          if (!isDuplicate) throw insertErr;
+          appUser = await dbQueryOne<AppUserRow>(
+            'SELECT id, ad_username, display_name, site, app_group, is_active FROM app_users WHERE ad_username = @username',
+            { username },
+          );
+          if (!appUser) throw insertErr;
+        }
+      }
+      if (!appUser.is_active) {
+        res.status(403).json({ message: 'Your account has been disabled. Contact your administrator.' });
+        return;
+      }
+      const { token, user } = issueToken(appUser.id, appUser.app_group as Group, appUser.display_name, appUser.site);
+      res.json({ token, user });
+    } catch (err) {
+      console.error('[dev auth] Error:', err);
+      res.status(500).json({ message: 'Authentication error' });
+    }
+    return;
+  }
+
+  // ── Production mode: validate against AD, look up / auto-create in app_users ──
+  console.log(`[AD auth] Login attempt for: ${username}`);
+  try {
+    const { displayName, adUsername, email } = await authenticateWithAD(username, password);
+    console.log(`[AD auth] AD authentication succeeded for ${adUsername}`);
+
+    let appUser = await dbQueryOne<AppUserRow>(
+      'SELECT id, ad_username, display_name, site, app_group, is_active FROM app_users WHERE ad_username = @adUsername',
+      { adUsername },
     );
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      res.status(401).json({ message: 'Invalid username or password' });
+
+    if (!appUser) {
+      // First login: auto-create with no site (user must complete setup)
+      try {
+        const [created] = await dbQuery<AppUserRow>(`
+          INSERT INTO app_users (ad_username, display_name, email, app_group)
+          OUTPUT INSERTED.id, INSERTED.ad_username, INSERTED.display_name,
+                 INSERTED.site, INSERTED.app_group, INSERTED.is_active
+          VALUES (@adUsername, @displayName, @email, 'receiving_site')
+        `, { adUsername, displayName, email: email || null });
+        if (!created) throw new Error('INSERT INTO app_users returned no rows');
+        appUser = created;
+        console.log(`[AD auth] New user auto-created: ${adUsername}`);
+      } catch (insertErr: any) {
+        // Concurrent first login — another request inserted the row first
+        const isDuplicate = insertErr.number === 2627 || insertErr.number === 2601
+          || insertErr.message?.includes('duplicate key') || insertErr.message?.includes('Violation of UNIQUE KEY');
+        if (!isDuplicate) throw insertErr;
+        appUser = await dbQueryOne<AppUserRow>(
+          'SELECT id, ad_username, display_name, site, app_group, is_active FROM app_users WHERE ad_username = @adUsername',
+          { adUsername },
+        );
+        if (!appUser) throw insertErr;
+        console.log(`[AD auth] Concurrent first-login resolved for ${adUsername}`);
+      }
+    }
+
+    if (!appUser.is_active) {
+      res.status(403).json({ message: 'Your account has been disabled. Contact your administrator.' });
       return;
     }
-    const { token, user: payload } = issueToken(user.id, user.group_key as Group, user.display_name, user.site);
-    res.json({ token, user: payload });
 
-  } else {
-    // ── Production mode: authenticate against Active Directory ───────────────
-    console.log(`[AD auth] Login attempt for: ${username}`);
-    try {
-      const { displayName, mapping } = await authenticateWithAD(username, password);
-      console.log(`[AD auth] Success: ${displayName} → ${mapping.appGroup} @ ${mapping.site}`);
-      const { token, user: payload } = issueToken(0, mapping.appGroup, displayName, mapping.site);
-      res.json({ token, user: payload });
-    } catch (err: any) {
-      console.error(`[AD auth] Failed for ${username}:`, err.message);
-      const isAuthError = err.message?.includes('Invalid username') || err.message?.includes('not in any STO group');
-      res.status(isAuthError ? 401 : 500).json({ message: err.message || 'Authentication failed' });
+    const { token, user } = issueToken(appUser.id, appUser.app_group as Group, appUser.display_name, appUser.site);
+    res.json({ token, user });
+  } catch (err: any) {
+    console.error(`[AD auth] Failed for ${username}:`, err.message);
+    const isAuthError = err.message?.includes('Invalid username')
+      || err.message?.includes('not authorised')
+      || err.message?.includes('not found');
+    res.status(isAuthError ? 401 : 500).json({
+      message: isAuthError ? 'Invalid username or password' : 'Authentication failed',
+    });
+  }
+});
+
+// POST /api/auth/setup-site — called on first login when site is null
+// Sets the user's site and issues a new JWT with site populated.
+router.post('/setup-site', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = req.user!;
+  if (user.site) {
+    res.status(400).json({ message: 'Site is already set. Contact an admin to change it.' });
+    return;
+  }
+  const { site } = req.body as { site?: string };
+  if (!site) {
+    res.status(400).json({ message: 'site is required' });
+    return;
+  }
+  try {
+    const siteRow = await dbQueryOne<{ code: string }>(
+      'SELECT code FROM sites WHERE code = @site',
+      { site },
+    );
+    if (!siteRow) {
+      res.status(400).json({ message: 'Invalid site code' });
+      return;
     }
+    await dbExecute(
+      'UPDATE app_users SET site = @site, updated_at = GETDATE() WHERE id = @id',
+      { site, id: user.userId },
+    );
+    const { token, user: newPayload } = issueToken(user.userId, user.group, user.name, site);
+    res.json({ token, user: newPayload });
+  } catch (err) {
+    console.error('[setup-site] Error:', err);
+    res.status(500).json({ message: 'Error updating site' });
   }
 });
 
-// GET /api/auth/demo-users — returns demo user list with plaintext credentials for the hints panel
-// Only active when PING_DEV_BYPASS=true.
+// GET /api/auth/demo-users — returns demo credentials for the hints panel (DEV_BYPASS only)
 router.get('/demo-users', async (_req: Request, res: Response): Promise<void> => {
-  if (!DEV_BYPASS) {
-    res.json([]);
-    return;
-  }
-
-  interface DemoUserListRow { username: string; display_name: string; site: string; group_key: string; }
-  const rows = await dbQueryOne<{ cnt: number }>('SELECT COUNT(*) AS cnt FROM demo_users');
-
-  if (!rows || rows.cnt === 0) {
-    res.json([]);
-    return;
-  }
-
-  const { dbQuery } = await import('../db/connection');
-  const users = await dbQuery<DemoUserListRow>(
-    'SELECT username, display_name, site, group_key FROM demo_users ORDER BY site, group_key'
-  );
-
-  res.json(users.map(u => ({
-    username: u.username,
-    password: 'Demo123!',
-    displayName: u.display_name,
-    site: u.site,
-    group: u.group_key,
-    groupLabel: GROUP_LABELS[u.group_key as Group] || u.group_key,
-  })));
-});
-
-// ── PingFederate OIDC (production) ─────────────────────────────────────────────
-
-// GET /api/auth/ping-login-url
-// Returns { devBypass: true } in dev mode, or { url, state } for Ping redirect.
-router.get('/ping-login-url', (_req: Request, res: Response): void => {
-  if (DEV_BYPASS) {
-    res.json({ devBypass: true });
-    return;
-  }
-  if (!PING_ISSUER || !PING_CLIENT_ID) {
-    // LDAP mode — tell the frontend to show the regular login form
-    res.json({ ldapMode: true });
-    return;
-  }
-  const state = crypto.randomBytes(16).toString('hex');
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: PING_CLIENT_ID,
-    redirect_uri: PING_REDIRECT_URI,
-    scope: 'openid profile email',
-    state,
-  });
-  res.json({ url: `${PING_ISSUER}/as/authorization.oauth2?${params}`, state });
-});
-
-// POST /api/auth/ping-exchange — exchanges a PingFederate auth code for an app JWT
-router.post('/ping-exchange', async (req: Request, res: Response): Promise<void> => {
-  const { code } = req.body as { code?: string };
-  if (!code) { res.status(400).json({ message: 'Missing authorization code' }); return; }
+  if (!DEV_BYPASS) { res.json([]); return; }
 
   try {
-    const tokenRes = await fetch(`${PING_ISSUER}/as/token.oauth2`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: PING_REDIRECT_URI,
-        client_id: PING_CLIENT_ID,
-        client_secret: PING_CLIENT_SECRET,
-      }).toString(),
-    });
-
-    if (!tokenRes.ok) {
-      const detail = await tokenRes.text();
-      res.status(401).json({ message: 'PingFederate token exchange failed', detail });
-      return;
-    }
-
-    const tokens = await tokenRes.json() as { id_token?: string; access_token?: string };
-    const rawToken = tokens.id_token || tokens.access_token;
-    if (!rawToken) { res.status(401).json({ message: 'No token returned by PingFederate' }); return; }
-
-    // TODO: Replace jwt.decode with JWKS signature verification in production.
-    // Fetch JWKS from ${PING_ISSUER}/pf/JWKS, find key by kid, then jwt.verify(rawToken, publicKey)
-    const claims = jwt.decode(rawToken) as Record<string, unknown> | null;
-    if (!claims) { res.status(401).json({ message: 'Could not decode PingFederate token' }); return; }
-
-    const rawGroup = claims[PING_GROUP_CLAIM];
-    const pingGroupName = (Array.isArray(rawGroup) ? rawGroup[0] : rawGroup) as string;
-    const appGroup = PING_GROUP_MAP[pingGroupName];
-
-    if (!appGroup) {
-      res.status(403).json({
-        message: `Your AD group "${pingGroupName}" is not mapped to an app role. Contact your administrator.`,
-      });
-      return;
-    }
-
-    // AD will also provide the user's site — adjust claim name as needed
-    const site = (claims['site'] || claims['physicalDeliveryOfficeName'] || 'UNKNOWN') as string;
-    const displayName = (claims.name || claims.preferred_username || claims.sub) as string;
-    const { token, user } = issueToken(0, appGroup, displayName, site);
-    res.json({ token, user });
-  } catch (err) {
-    res.status(500).json({ message: 'Auth exchange error', detail: String(err) });
+    interface DemoUserListRow { username: string; display_name: string; site: string; group_key: string; }
+    const users = await dbQuery<DemoUserListRow>(
+      'SELECT username, display_name, site, group_key FROM demo_users ORDER BY site, group_key',
+    );
+    res.json(users.map(u => ({
+      username: u.username,
+      password: 'Demo123!',
+      displayName: u.display_name,
+      site: u.site,
+      group: u.group_key,
+      groupLabel: GROUP_LABELS[u.group_key as Group] || u.group_key,
+    })));
+  } catch {
+    res.json([]);
   }
 });
 
-// ── Shared ─────────────────────────────────────────────────────────────────────
+// GET /api/auth/ping-login-url — tells the frontend which auth mode is active
+router.get('/ping-login-url', (_req: Request, res: Response): void => {
+  res.json(DEV_BYPASS ? { devBypass: true } : { ldapMode: true });
+});
 
 // GET /api/auth/me
 router.get('/me', authenticate, (req: AuthRequest, res: Response): void => {

@@ -103,7 +103,7 @@ INSERT INTO sto_config (config_key, config_value) VALUES
     ('management_approval_freight_threshold',  '5000');
 
 -- Demo users table — used for local development / testing.
--- In production this table is bypassed; authentication comes from PingFederate/AD.
+-- In production this table is bypassed; authentication comes from Active Directory via LDAP.
 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='demo_users' AND xtype='U')
 CREATE TABLE demo_users (
     id           INT PRIMARY KEY IDENTITY(1,1),
@@ -113,3 +113,95 @@ CREATE TABLE demo_users (
     site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, XYZ
     group_key    VARCHAR(50)  NOT NULL    -- matches Group type: receiving_site, etc.
 );
+
+-- ── Referential integrity ──────────────────────────────────────────────────────
+ALTER TABLE sto_audit_log
+  ADD CONSTRAINT FK_audit_sto_request
+  FOREIGN KEY (sto_request_id) REFERENCES sto_requests(id);
+
+-- ── Atomic STO ID generation ──────────────────────────────────────────────────
+-- Using a SEQUENCE avoids the COUNT(*)+1 race condition that occurs when two
+-- concurrent inserts read the same row count and try to write the same sto_id.
+CREATE SEQUENCE sto_number_seq
+  START WITH 1
+  INCREMENT BY 1
+  NO CYCLE;
+
+-- ── Indexes ───────────────────────────────────────────────────────────────────
+-- Without these every WHERE clause does a full table scan.
+-- Composite indexes are ordered by selectivity: most-selective column first.
+
+-- Status is the most common filter across every queue and list query.
+CREATE NONCLUSTERED INDEX IX_sto_status
+  ON sto_requests (status)
+  INCLUDE (created_at, updated_at, rush_request, receiving_site_need_by_date);
+
+-- Shipping-role queue: shipping_planning and shipping_logistics filter by
+-- (shipping_site, status).  Covers all their dashboard and list queries.
+CREATE NONCLUSTERED INDEX IX_sto_shipping_site_status
+  ON sto_requests (shipping_site, status)
+  INCLUDE (sto_id, priority, rush_request, material_description, material_sap,
+           quantity, uom, receiving_site_need_by_date, updated_at);
+
+-- Receiving-role queue: same pattern for receiving side.
+CREATE NONCLUSTERED INDEX IX_sto_receiving_site_status
+  ON sto_requests (receiving_site, status)
+  INCLUDE (sto_id, priority, rush_request, material_description, material_sap,
+           quantity, uom, receiving_site_need_by_date, updated_at);
+
+-- Need-by date queries (due-soon, overdue, upcoming section).
+-- Filtered: only indexes the rows that actually have a date set.
+CREATE NONCLUSTERED INDEX IX_sto_need_by_status
+  ON sto_requests (receiving_site_need_by_date, status)
+  WHERE receiving_site_need_by_date IS NOT NULL;
+
+-- Default list sort order.
+CREATE NONCLUSTERED INDEX IX_sto_created_at
+  ON sto_requests (created_at DESC);
+
+-- Analytics monthly grouping.
+CREATE NONCLUSTERED INDEX IX_sto_request_date
+  ON sto_requests (request_date)
+  INCLUDE (status, material_value, rush_request, shipping_site, receiving_site);
+
+-- Audit log: JOIN target and ordering.
+CREATE NONCLUSTERED INDEX IX_audit_sto_request_id
+  ON sto_audit_log (sto_request_id);
+
+CREATE NONCLUSTERED INDEX IX_audit_performed_at
+  ON sto_audit_log (performed_at DESC)
+  INCLUDE (action, old_status, new_status, performed_by_name, notes);
+
+-- ── App users + sites ─────────────────────────────────────────────────────────
+-- sites: master list of valid site codes (e.g. ABC, ABL, XYZ).
+CREATE TABLE sites (
+    id    INT PRIMARY KEY IDENTITY(1,1),
+    code  VARCHAR(50)  UNIQUE NOT NULL,
+    name  VARCHAR(200) NOT NULL
+);
+
+INSERT INTO sites (code, name) VALUES
+    ('ABC', 'Site ABC'),
+    ('ABL', 'Site ABL'),
+    ('XYZ', 'Site XYZ');
+
+-- app_users: source of truth for roles and site assignments.
+-- AD only proves identity; roles/sites live here.
+-- New users are auto-created as receiving_site on first login and must pick
+-- their site via the setup-site page.  Admins can change any field.
+CREATE TABLE app_users (
+    id            INT          PRIMARY KEY IDENTITY(1,1),
+    ad_username   VARCHAR(200) NOT NULL,
+    display_name  VARCHAR(200) NOT NULL,
+    email         VARCHAR(200) NULL,
+    site          VARCHAR(50)  NULL,           -- NULL until user completes setup
+    app_group     VARCHAR(50)  NOT NULL DEFAULT 'receiving_site',
+    is_active     BIT          NOT NULL DEFAULT 1,
+    created_at    DATETIME     DEFAULT GETDATE(),
+    updated_at    DATETIME     DEFAULT GETDATE()
+);
+
+CREATE UNIQUE INDEX UQ_app_users_username ON app_users (ad_username);
+
+-- ── To promote the first admin (run after your first login) ───────────────────
+-- UPDATE app_users SET app_group = 'admin' WHERE ad_username = 'firstname.lastname@company.com';
