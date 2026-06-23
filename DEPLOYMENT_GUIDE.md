@@ -13,14 +13,15 @@ Step-by-step instructions for transferring and running the app on a new Windows 
 1. [Prerequisites — install these first](#1-prerequisites)
 2. [Get the code onto the machine](#2-get-the-code)
 3. [Create the database and run the schema](#3-database-setup)
-4. [Configure the environment file](#4-configure-env)
-5. [Install dependencies and build](#5-install-and-build)
-6. [Run the app and verify it works](#6-first-run-and-verify)
-7. [Set up PM2 as a Windows service](#7-pm2-windows-service)
-8. [Set up IIS as a reverse proxy with HTTPS](#8-iis-reverse-proxy)
-9. [Windows Firewall](#9-windows-firewall)
-10. [Go live — final checklist](#10-go-live-checklist)
-11. [Troubleshooting](#11-troubleshooting)
+4. [Set up Active Directory groups](#4-active-directory-groups)
+5. [Configure the environment file](#5-configure-env)
+6. [Install dependencies and build](#6-install-and-build)
+7. [Run the app and verify it works](#7-first-run-and-verify)
+8. [Set up PM2 as a Windows service](#8-pm2-windows-service)
+9. [Set up IIS as a reverse proxy with HTTPS](#9-iis-reverse-proxy)
+10. [Windows Firewall](#10-windows-firewall)
+11. [Go live — final checklist](#11-go-live-checklist)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -69,6 +70,8 @@ npm install -g pm2-windows-startup
 
 ## 2. Get the Code
 
+### Option A — From GitHub (machine has internet access)
+
 Open **Command Prompt** (or PowerShell) and run:
 
 ```cmd
@@ -79,7 +82,20 @@ cd sto-management
 
 This creates the folder `C:\sto-management` with all the source code.
 
-> If you don't have internet access on the target machine, copy the entire project folder via USB or network share instead. Make sure you copy the `.git` folder too if you want to pull updates later. After copying, `cd` into the folder.
+### Option B — Copy from another PC (no internet, USB / network share)
+
+1. On the source PC, open File Explorer and find the project folder (wherever you developed it, e.g. `C:\Users\YourName\Documents\sto-management`)
+2. Copy the **entire folder** to a USB drive or a shared network path
+   - Make sure to include the hidden `.git` folder (enable "Show hidden files" in Explorer options)
+3. On the target PC, paste the folder to `C:\sto-management`
+4. Open Command Prompt and confirm the code is there:
+   ```cmd
+   cd C:\sto-management
+   dir
+   ```
+   You should see `backend`, `frontend`, `package.json`, etc.
+
+> **After any code update on a running server**, see the [How to update the app](#how-to-update-the-app-after-a-code-change) section at the bottom.
 
 ---
 
@@ -103,21 +119,23 @@ CREATE DATABASE sto_management;
 
 This creates all tables, indexes, the sequence, and the `sites` table with the initial site codes.
 
-> **Check it worked**: In the Object Explorer on the left, expand `sto_management → Tables`. You should see `sto_requests`, `sto_audit_log`, `app_users`, `sites`, `demo_users`, `sto_config`.
+> **Check it worked**: In the Object Explorer on the left, expand `sto_management → Tables`. You should see `sto_requests`, `sto_audit_log`, `sites`, `demo_users`, `sto_config`.  
+> **Note**: `app_users` is no longer part of the schema — roles and sites come from AD groups now.
 
-### 3c. Run the migrations
+### 3c. Run all migrations
 
-Run each of these files in order (same way — open in SSMS, execute against `sto_management`):
+Run each of these files **in order** (open in SSMS, execute against `sto_management`):
 
 1. `C:\sto-management\backend\src\db\migrations\003_app_users.sql`
 2. `C:\sto-management\backend\src\db\migrations\004_admin_audit.sql`
 3. `C:\sto-management\backend\src\db\migrations\005_fk_constraints.sql`
+4. `C:\sto-management\backend\src\db\migrations\006_remove_app_users.sql`
 
-> **Note**: If you already ran `schema.sql` from the latest version of the repo, some of these migrations may say "object already exists" — that is fine, just ignore those messages and continue.
+> Migration 003–005 create tables that 006 then immediately cleans up. On a brand-new install it's fine to run all four — each is idempotent. On an existing database that was running the older app_users version, running 006 will drop the `app_users` table and update the FK columns. Make sure no one is logged in when you run 006 on a live database.
 
 ### 3d. Find your SQL Server name
 
-You need to know the exact server name for the `.env` file in the next step.
+You need the exact server name for the `.env` file in step 5.
 
 In SSMS, look at the top of the Object Explorer panel. You'll see something like:
 
@@ -127,26 +145,88 @@ SERVERNAME\SQLEXPRESS (SQL Server 15.0...)
 
 Copy exactly what's before the parentheses, e.g. `LAPTOP-ABC123\SQLEXPRESS` or just `MYSERVER` if it's the default instance.
 
-### 3e. Add your sites
+### 3e. Add your real sites
 
-The schema pre-loads three placeholder sites (ABC, ABL, XYZ). Replace these with your real sites:
+The schema pre-loads three placeholder sites (ABC, ABL, XYZ). Replace these with your actual sites:
 
 ```sql
 USE sto_management;
 
--- Remove placeholder sites
 DELETE FROM sites;
 
--- Add your real sites (one row per site)
 INSERT INTO sites (code, name) VALUES
   ('SITE1', 'Your First Site Name'),
   ('SITE2', 'Your Second Site Name'),
   ('SITE3', 'Your Third Site Name');
 ```
 
+Use the same short codes here as the site prefix in your AD groups (see next section).
+
 ---
 
-## 4. Configure `.env`
+## 4. Active Directory Groups
+
+> **This is the key step that replaces the old user management page.**  
+> Roles and site assignments now come entirely from AD group membership — there is no in-app user management.
+
+### 4a. Group naming convention
+
+Every group follows the pattern: **`{SITE}_{ROLE}`**
+
+- Everything before the first underscore is the **site code** (must match a code in your `sites` table)
+- Everything after the first underscore is the **role suffix**
+
+| AD Group Name | Site | Role |
+|---|---|---|
+| `ABC_ADMIN` | ABC | Admin — full access at site ABC |
+| `ABC_RECEIVING` | ABC | Receiving Site — creates STOs |
+| `ABC_PLANNING` | ABC | Shipping Planning — reviews and approves |
+| `ABC_LOGISTICS` | ABC | Shipping Logistics — handles shipping details |
+| `ABC_MANAGEMENT` | ABC | Management — oversight and approval |
+| `ABC_FINANCE` | ABC | Finance — final approval |
+| `ABC_RECV_LOGISTICS` | ABC | Receiving Logistics — closes out deliveries |
+
+Repeat for each site. For example, if you have sites `ABC` and `XYZ`, you'd create:
+`ABC_ADMIN`, `ABC_RECEIVING`, ..., `XYZ_ADMIN`, `XYZ_RECEIVING`, etc.
+
+### 4b. What each role can do
+
+| Role | Can do |
+|---|---|
+| `ADMIN` | Everything at their site (edit any STO, revert steps). Only sees STOs involving their site. |
+| `RECEIVING` | Creates new STOs, edits drafts, sees STOs at their receiving site |
+| `PLANNING` | Reviews STOs in Planning Review, approves/rejects, enters MPN/batch/expiry details |
+| `LOGISTICS` | Enters shipping details (freight cost, tracking, ship date) |
+| `MANAGEMENT` | Oversight approval for high-value STOs |
+| `FINANCE` | Final financial approval before receiving logistics closes |
+| `RECV_LOGISTICS` | Records receipt and closes out deliveries |
+
+### 4c. Site scoping rules
+
+Every user is **always scoped to their site** — there is no cross-site visibility:
+
+- `PLANNING` and `LOGISTICS` see STOs where **shipping_site = their site**
+- `RECEIVING` and `RECV_LOGISTICS` see STOs where **receiving_site = their site**
+- `ADMIN`, `MANAGEMENT`, `FINANCE` see STOs where **either site = their site**
+
+### 4d. Ask IT to create the groups
+
+Give IT this list of groups to create in Active Directory. For each site code in your `sites` table, IT needs to create the corresponding `_{ROLE}` groups and add the appropriate staff to each.
+
+**Important**: The group `CN` (common name) must follow the exact `{SITE}_{SUFFIX}` pattern. The `memberOf` attribute returned by LDAP is how the app determines the user's role and site.
+
+### 4e. What happens at login
+
+1. User enters their AD username and password
+2. App authenticates against AD (LDAP)
+3. App scans the user's `memberOf` groups for the first `{SITE}_{SUFFIX}` match
+4. Site and role are extracted from the group name
+5. A JWT is issued with `{ adUsername, group, name, site }` — no database lookup
+6. If the user is not in any `{SITE}_{SUFFIX}` group, login is denied with a clear error message
+
+---
+
+## 5. Configure `.env`
 
 The backend reads all its configuration from a `.env` file. This file is **never committed to Git** — you create it manually on each machine.
 
@@ -189,22 +269,22 @@ LDAP_BASE_DN=DC=yourcompany,DC=com
 # A read-only service account that can search AD (IT will create this)
 LDAP_BIND_DN=svc_sto_app@yourcompany.com
 LDAP_BIND_PASSWORD=the_service_account_password
-
-# The AD group that controls who can log in
-LDAP_APP_GROUP=STO_App_Users
 ```
 
 Save and close Notepad.
 
 > **What to ask IT for**:
 > - The LDAP URL (usually `ldap://domain-controller-hostname`)
+> - The domain name (e.g. `yourcompany.com`)
 > - The base DN (usually `DC=yourcompany,DC=com`)
-> - A service account (read-only is fine) for LDAP searches
-> - The name of the AD group to use as the app gate (`LDAP_APP_GROUP`)
+> - A service account (read-only is fine) for LDAP searches — needed so the app can look up users by username before binding with their password
+> - Confirmation that the `{SITE}_{ROLE}` groups have been created (step 4)
+
+> **No `LDAP_APP_GROUP` needed anymore** — the old single-group gate is gone. Access is controlled entirely by which `{SITE}_{ROLE}` group the user is in.
 
 ---
 
-## 5. Install and Build
+## 6. Install and Build
 
 Open **Command Prompt as Administrator** and run these commands one section at a time.
 
@@ -241,7 +321,7 @@ This creates `C:\sto-management\frontend\dist\` — a folder of static HTML/CSS/
 
 ---
 
-## 6. First Run and Verify
+## 7. First Run and Verify
 
 Before setting up IIS and PM2, confirm the backend works.
 
@@ -257,7 +337,7 @@ You should see a single log line like:
 {"level":30,"msg":"STO backend started","port":4000,...}
 ```
 
-If you see an error instead, jump to the [Troubleshooting](#11-troubleshooting) section.
+If you see an error instead, jump to the [Troubleshooting](#12-troubleshooting) section.
 
 **Test the health endpoint** — open a browser or PowerShell and visit:
 
@@ -273,7 +353,7 @@ Press `Ctrl+C` to stop the server.
 
 ---
 
-## 7. PM2 Windows Service
+## 8. PM2 Windows Service
 
 PM2 keeps the backend running and restarts it automatically if it crashes or the server reboots.
 
@@ -309,11 +389,11 @@ pm2 monit                     # live dashboard
 
 ---
 
-## 8. IIS Reverse Proxy
+## 9. IIS Reverse Proxy
 
 IIS sits in front of the Node.js backend, handles HTTPS, and serves the frontend static files.
 
-### 8a. Install IIS
+### 9a. Install IIS
 
 Open **Server Manager → Add Roles and Features** and add:
 
@@ -326,7 +406,7 @@ Or in PowerShell as Administrator:
 Install-WindowsFeature -Name Web-Server -IncludeManagementTools
 ```
 
-### 8b. Install IIS modules
+### 9b. Install IIS modules
 
 Download and install these two:
 
@@ -338,7 +418,7 @@ Download and install these two:
 
 After installing ARR, open **IIS Manager**, click the server name at the top level, open **Application Request Routing Cache**, then click **Server Proxy Settings** on the right, tick **Enable proxy**, click Apply.
 
-### 8c. Get an HTTPS certificate
+### 9c. Get an HTTPS certificate
 
 **Option A — Domain certificate from IT**: Ask IT to issue a certificate for your server's hostname and install it in IIS.
 
@@ -352,31 +432,14 @@ New-SelfSignedCertificate -DnsName "your-server-name.company.com" -CertStoreLoca
 
 In IIS Manager: expand the server → **Sites → Default Web Site → Bindings → Add → HTTPS → select your certificate**.
 
-### 8d. Configure the website
+### 9d. Configure the website
 
 Open **IIS Manager**. In the left panel, expand the server → **Sites → Default Web Site**.
 
 **Set physical path**: Click "Basic Settings" on the right → set Physical Path to:  
 `C:\sto-management\frontend\dist`
 
-**Add the URL Rewrite rules** — click **URL Rewrite** in the middle panel, then **Add Rule(s) → Blank rule**, and add these two rules:
-
-**Rule 1 — Proxy API calls to Node.js**
-- Name: `API Proxy`
-- Match URL — Pattern: `^api/(.*)`
-- Conditions: none
-- Action type: Rewrite
-- Rewrite URL: `http://localhost:4000/api/{R:1}`
-- Tick: Stop processing
-
-**Rule 2 — SPA fallback (serve index.html for all non-file routes)**
-- Name: `SPA Fallback`
-- Match URL — Pattern: `^(?!api/).*`
-- Conditions: Add condition — `{REQUEST_FILENAME}` — Does Not Match Pattern — `.*\.[a-zA-Z0-9]+$`
-- Action type: Rewrite
-- Rewrite URL: `/index.html`
-
-**Alternatively**, create the file `C:\sto-management\frontend\dist\web.config` with this content (IIS reads it automatically):
+**Create the file** `C:\sto-management\frontend\dist\web.config` with this content (IIS reads it automatically):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -420,7 +483,7 @@ iisreset
 
 ---
 
-## 9. Windows Firewall
+## 10. Windows Firewall
 
 Block direct access to the Node.js port (4000) from outside — all traffic should go through IIS on 80/443.
 
@@ -437,38 +500,35 @@ IIS on ports 80 and 443 should already have allow rules. If not, add them the sa
 
 ---
 
-## 10. Go Live Checklist
+## 11. Go Live Checklist
 
 Work through each item before telling users the system is live.
 
 ### Environment
 - [ ] `DEV_BYPASS=false` in `.env`
 - [ ] `JWT_SECRET` is a long random string — not the example value
-- [ ] `LDAP_APP_GROUP` matches the exact AD group name (case-insensitive but must be correct)
+- [ ] `LDAP_URL`, `LDAP_DOMAIN`, `LDAP_BASE_DN` all filled in correctly
+- [ ] `LDAP_BIND_DN` and `LDAP_BIND_PASSWORD` are set (service account)
 - [ ] `FRONTEND_ORIGIN` matches the URL users will open in their browser
 - [ ] `VITE_API_URL` was set correctly before the frontend `npm run build`
 
-### Database
-- [ ] All three migration files ran without errors
-- [ ] Your real site codes are in the `sites` table
-- [ ] `GET http://localhost:4000/api/health` returns `{"status":"ok"}`
+### Active Directory
+- [ ] IT has created the `{SITE}_{ROLE}` AD groups for every site (e.g. `ABC_ADMIN`, `ABC_RECEIVING`, etc.)
+- [ ] At least one user is in a `{SITE}_ADMIN` group so there is an admin from day one
+- [ ] You have tested login with at least one real AD account that is in one of the app groups
+- [ ] Login attempt with an account NOT in any app group is denied with the expected error message
 
-### First admin user
-After your first login through the app, run this in SSMS to promote yourself:
-```sql
-USE sto_management;
-UPDATE app_users
-SET app_group = 'admin'
-WHERE ad_username = 'firstname.lastname@yourcompany.com';
-```
-Then log out and log back in — your next JWT will have `group: admin`.
+### Database
+- [ ] All four migration files ran without errors (003, 004, 005, 006)
+- [ ] Your real site codes are in the `sites` table and match the prefixes in your AD group names
+- [ ] `GET http://localhost:4000/api/health` returns `{"status":"ok"}`
 
 ### Smoke test
 - [ ] Open `https://your-server-name.company.com` in a browser
 - [ ] Login page loads
-- [ ] Can log in with AD credentials
-- [ ] SitePicker appears on first login, completes successfully
-- [ ] Dashboard loads with no errors
+- [ ] Can log in with an AD account that is in one of the `{SITE}_{ROLE}` groups
+- [ ] App goes straight to Dashboard (no site-picker step — site comes from AD group)
+- [ ] Nav bar shows the correct name, role label, and site
 - [ ] Create a test STO, submit it, approve through one step
 - [ ] Analytics page loads
 
@@ -479,7 +539,7 @@ Then log out and log back in — your next JWT will have `group: admin`.
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### "Cannot find module" or compile errors on `npm install`
 
@@ -492,12 +552,26 @@ The native module `msnodesqlv8` must be compiled on the target machine. Make sur
 
 1. Check `DB_SERVER` in `.env` exactly matches what SSMS shows (including `\SQLEXPRESS` if applicable)
 2. The Node.js process runs as the logged-in Windows user. That user must have access to SQL Server.  
-   In SSMS: Security → Logins → check your user or `NT AUTHORITY\SYSTEM` has the `sto_management` database permissions.
+   In SSMS: Security → Logins → check your user or `NT AUTHORITY\SYSTEM` has `sto_management` database permissions.
 3. Try connecting in SSMS with the same server name to confirm it works
 
-### "Account is not authorised" on login
+### "not in any STO application group" on login
 
-The user is not a member of `LDAP_APP_GROUP` in AD. Ask IT to add them to the group, or temporarily change `LDAP_APP_GROUP` in `.env` to a group you are already in, restart the backend (`pm2 restart sto-backend`), log in, then promote yourself to admin and change it back.
+The user has successfully authenticated against AD but is not a member of any `{SITE}_{ROLE}` group.
+
+1. In Active Directory, add the user to the appropriate group (e.g. `ABC_RECEIVING`)
+2. The user needs to log out and back in — their group membership is read at login time
+3. Verify the group name exactly follows `{SITE}_{ROLE}` with no spaces and a single underscore separator
+
+### User is in the group but gets the wrong site or role
+
+The app reads the **first** matching group it finds in the user's `memberOf` list. If a user is in multiple `{SITE}_{ROLE}` groups, one will win based on LDAP return order. Best practice: put each user in **one** group only.
+
+### JWT tokens from the old app_users version stop working after migration
+
+This is expected. Old tokens contained `userId` (an integer), new tokens contain `adUsername`. After running migration 006 and restarting the backend, all existing tokens are rejected. Users just need to log in again.
+
+To force everyone to re-login immediately: change `JWT_SECRET` in `.env` to a new random value and restart the backend. All existing tokens become invalid instantly.
 
 ### 502 Bad Gateway from IIS
 
@@ -505,14 +579,14 @@ IIS can't reach the backend on port 4000.
 1. Check `pm2 list` — backend should be `online`
 2. Check `http://localhost:4000/api/health` works from the server itself
 3. Check the ARR proxy is enabled (IIS Manager → server → ARR Cache → Server Proxy Settings → Enable proxy)
-4. Check the URL Rewrite rules are saved
+4. Check the URL Rewrite rules are saved and the `web.config` file is in `frontend\dist\`
 
 ### Backend starts but LDAP login fails
 
 1. Confirm the LDAP server is reachable: `ping ad.yourcompany.com` from the server
 2. Check `LDAP_URL` — use `ldap://` (not `ldaps://`) unless IT has confirmed LDAPS is configured
-3. Check the service account credentials are correct by trying to log in to a computer with them
-4. Check the firewall isn't blocking port 389 between this server and the DC
+3. Check the service account credentials are correct
+4. Check the firewall isn't blocking port 389 between this server and the domain controller
 
 ### Frontend shows "Failed to load" or blank page
 
@@ -523,21 +597,35 @@ IIS can't reach the backend on port 4000.
 
 ### How to update the app after a code change
 
+**Option A — pull from GitHub** (if the server has internet):
+
 ```cmd
 cd C:\sto-management
 git pull
+```
 
-cd backend
+**Option B — copy from your dev PC** (no internet on server):
+
+1. On your dev PC, copy the updated `backend\` and `frontend\` folders to USB or a network share
+2. On the server, replace `C:\sto-management\backend\` and `C:\sto-management\frontend\` with the new copies
+   - **Do not overwrite** `backend\.env` — this is your local config and is not in Git
+
+**Then on the server, rebuild and restart:**
+
+```cmd
+cd C:\sto-management\backend
 npm install
 npm run build
 pm2 restart sto-backend
 
-cd ..\frontend
+cd C:\sto-management\frontend
 set VITE_API_URL=https://your-server-name.company.com/api
 npm run build
 ```
 
-No IIS restart needed for frontend updates — IIS serves the new files immediately.
+If there are new migration files (check `backend\src\db\migrations\` for any SQL files you haven't run yet), run them in SSMS before restarting the backend.
+
+No IIS restart needed for frontend updates — IIS serves the new files immediately.  
 Only restart IIS (`iisreset`) if you changed the `web.config`.
 
 ---
@@ -556,3 +644,5 @@ Only restart IIS (`iisreset`) if you changed the `web.config`.
 | Restart IIS | `iisreset` |
 | Rebuild frontend | `cd frontend && set VITE_API_URL=... && npm run build` |
 | Rebuild backend | `cd backend && npm run build && pm2 restart sto-backend` |
+| AD group format | `{SITE}_{ROLE}` e.g. `ABC_ADMIN`, `ABC_RECEIVING` |
+| Force all re-login | Change `JWT_SECRET` in `.env`, run `pm2 restart sto-backend` |
