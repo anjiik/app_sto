@@ -1,6 +1,9 @@
 {
   "name": "sto-backend",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "seed": "ts-node --transpile-only src/db/seed.ts",
