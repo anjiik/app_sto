@@ -6,7 +6,6 @@ import {
 } from 'recharts';
 import { Layout } from '../components/Layout';
 import api from '../api/client';
-import { useAuth } from '../context/AuthContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -29,7 +28,7 @@ interface RawRow {
 }
 
 interface Filters {
-  site: string; status: string; rush: string; dateFrom: string; dateTo: string;
+  status: string; rush: string; dateFrom: string; dateTo: string;
 }
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
@@ -140,15 +139,12 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
-const EMPTY_FILTERS: Filters = { site: '', status: '', rush: '', dateFrom: '', dateTo: '' };
+const EMPTY_FILTERS: Filters = { status: '', rush: '', dateFrom: '', dateTo: '' };
 
 export function Analytics() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const canFilterSite = user?.group === 'admin' || user?.group === 'management' || user?.group === 'finance';
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [availableSites, setAvailableSites] = useState<string[]>([]);
 
   const [summary,   setSummary]   = useState<Summary | null>(null);
   const [byStatus,  setByStatus]  = useState<ByStatus[]>([]);
@@ -186,7 +182,6 @@ export function Analytics() {
   // not on every render — this lets us list it honestly in dependency arrays.
   const buildParams = useCallback((extra: Record<string, string> = {}): string => {
     const p = new URLSearchParams();
-    if (filters.site)     p.set('site',     filters.site);
     if (filters.status)   p.set('status',   filters.status);
     if (filters.rush)     p.set('rush',     filters.rush);
     if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
@@ -194,16 +189,6 @@ export function Analytics() {
     Object.entries(extra).forEach(([k, v]) => p.set(k, v));
     return p.toString();
   }, [filters]);
-
-  // Fetch site list once for the dropdown (unfiltered)
-  useEffect(() => {
-    api.get('/analytics/by-site').then(r => {
-      const sites = new Set<string>();
-      [...(r.data.shipping as SiteCount[]), ...(r.data.receiving as SiteCount[])]
-        .forEach(s => sites.add(s.site));
-      setAvailableSites([...sites].sort());
-    });
-  }, []);
 
   // Fetch chart data whenever filters change (buildParams changes with filters)
   useEffect(() => {
@@ -288,20 +273,6 @@ export function Analytics() {
         {/* ── Filter bar ───────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex flex-wrap gap-3 items-end">
-            {/* Site — only management/finance/admin can cross-site filter */}
-            {canFilterSite && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Site</label>
-                <select
-                  value={filters.site}
-                  onChange={e => setFilter('site', e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
-                  <option value="">All Sites</option>
-                  {availableSites.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            )}
-
             {/* Status */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -354,7 +325,6 @@ export function Analytics() {
           {/* Active filter chips */}
           {hasFilters && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
-              {canFilterSite && filters.site && <FilterChip label={`Site: ${filters.site}`} onRemove={() => setFilter('site', '')} />}
               {filters.status   && <FilterChip label={`Status: ${STATUS_LABELS[filters.status] ?? filters.status}`} onRemove={() => setFilter('status', '')} />}
               {filters.rush     && <FilterChip label={filters.rush === '1' ? 'Rush only' : 'Normal only'} onRemove={() => setFilter('rush', '')} />}
               {filters.dateFrom && <FilterChip label={`From: ${filters.dateFrom}`} onRemove={() => setFilter('dateFrom', '')} />}
@@ -440,7 +410,7 @@ export function Analytics() {
         {bySite && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <Section title="Top Shipping Sites" sub="click to filter">
+            <Section title="Top Shipping Sites">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={bySite.shipping} layout="vertical"
                   margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
@@ -448,19 +418,16 @@ export function Analytics() {
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={60} />
                   <Tooltip content={<ValueTooltip />} />
-                  <Bar dataKey="count" name="STOs Shipped" radius={[0, 4, 4, 0]}
-                    cursor="pointer"
-                    onClick={(data: any) => toggleFilter('site', data.site)}>
-                    {bySite.shipping.map((d, i) => (
-                      <Cell key={i} fill={SITE_COLORS[i % SITE_COLORS.length]}
-                        opacity={filters.site && filters.site !== d.site ? 0.3 : 1} />
+                  <Bar dataKey="count" name="STOs Shipped" radius={[0, 4, 4, 0]}>
+                    {bySite.shipping.map((_, i) => (
+                      <Cell key={i} fill={SITE_COLORS[i % SITE_COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </Section>
 
-            <Section title="Top Receiving Sites" sub="click to filter">
+            <Section title="Top Receiving Sites">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={bySite.receiving} layout="vertical"
                   margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
@@ -468,12 +435,9 @@ export function Analytics() {
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={60} />
                   <Tooltip content={<ValueTooltip />} />
-                  <Bar dataKey="count" name="STOs Received" radius={[0, 4, 4, 0]}
-                    cursor="pointer"
-                    onClick={(data: any) => toggleFilter('site', data.site)}>
-                    {bySite.receiving.map((d, i) => (
-                      <Cell key={i} fill={SITE_COLORS[(i + 3) % SITE_COLORS.length]}
-                        opacity={filters.site && filters.site !== d.site ? 0.3 : 1} />
+                  <Bar dataKey="count" name="STOs Received" radius={[0, 4, 4, 0]}>
+                    {bySite.receiving.map((_, i) => (
+                      <Cell key={i} fill={SITE_COLORS[(i + 3) % SITE_COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -520,10 +484,7 @@ export function Analytics() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {siteFlow.map((r, i) => (
-                      <tr key={i}
-                        className={`cursor-pointer transition-colors
-                          ${(filters.site === r.from || filters.site === r.to) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => toggleFilter('site', r.from)}>
+                      <tr key={i} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-2.5 font-medium text-gray-800">{r.from}</td>
                         <td className="px-4 py-2.5 text-gray-600">
                           <span className="flex items-center gap-1"><span className="text-gray-300">→</span> {r.to}</span>

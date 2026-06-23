@@ -1,16 +1,29 @@
 import { Client } from 'ldapts';
+import { Group } from '../types';
 
 const LDAP_URL       = process.env.LDAP_URL          || '';
 const LDAP_DOMAIN    = process.env.LDAP_DOMAIN        || '';
 const LDAP_BASE_DN   = process.env.LDAP_BASE_DN       || '';
 const LDAP_BIND_DN   = process.env.LDAP_BIND_DN       || '';
 const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
-const LDAP_APP_GROUP = process.env.LDAP_APP_GROUP     || 'STO_App_Users';
+
+// Maps the suffix portion of {SITE}_{SUFFIX} AD groups to the app role.
+const SUFFIX_TO_GROUP: Record<string, Group> = {
+  ADMIN:          'admin',
+  RECEIVING:      'receiving_site',
+  PLANNING:       'shipping_planning',
+  LOGISTICS:      'shipping_logistics',
+  MANAGEMENT:     'management',
+  FINANCE:        'finance',
+  RECV_LOGISTICS: 'receiving_logistics',
+};
 
 export interface LdapAuthResult {
   displayName: string;
   adUsername:  string;
   email:       string;
+  group:       Group;
+  site:        string;
 }
 
 // Sanitise values before embedding them in LDAP filter strings.
@@ -46,28 +59,35 @@ const CLIENT_OPTS = () => ({
   // tlsOptions: { rejectUnauthorized: false },
 });
 
-function assertGroupMembership(entry: Record<string, unknown>): void {
-  const memberOf = entry.memberOf
-    ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
-    : [];
-  const groupCNs = memberOf.map(extractCN);
-  const isMember = groupCNs.some(
-    cn => cn.toLowerCase() === LDAP_APP_GROUP.toLowerCase(),
-  );
-  if (!isMember) {
-    throw new Error(
-      `Your account is not authorised for this application. ` +
-      `Contact your administrator to be added to the ${LDAP_APP_GROUP} AD group.`,
-    );
+// Scans the user's AD group memberships for a {SITE}_{SUFFIX} pattern and
+// derives both the app role and the site code from the first matching group.
+function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string } {
+  const cns = memberOf.map(extractCN);
+  for (const cn of cns) {
+    const idx = cn.indexOf('_');
+    if (idx <= 0) continue;
+    const site   = cn.substring(0, idx).toUpperCase();
+    const suffix = cn.substring(idx + 1).toUpperCase();
+    const group  = SUFFIX_TO_GROUP[suffix];
+    if (group) return { group, site };
   }
+  throw new Error(
+    'Your account is not in any STO application group. ' +
+    'Contact your administrator to be added to the appropriate {SITE}_{ROLE} AD group.',
+  );
 }
 
 function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
-  assertGroupMembership(entry);
+  const memberOf = entry.memberOf
+    ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
+    : [];
+  const { group, site } = resolveGroupAndSite(memberOf);
   return {
     displayName: (entry.displayName as string) || sam,
     adUsername:  (entry.sAMAccountName as string) || sam,
     email:       (entry.mail as string) || '',
+    group,
+    site,
   };
 }
 

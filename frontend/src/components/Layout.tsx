@@ -33,14 +33,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const canCreateNew = user?.group === 'receiving_site' || user?.group === 'admin';
-  const isAdmin = user?.group === 'admin';
 
   const navLinks = [
     { to: '/dashboard',  label: 'Dashboard' },
     { to: '/sto',        label: 'All STOs' },
     { to: '/analytics',  label: 'Analytics' },
     ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
-    ...(isAdmin ? [{ to: '/users', label: 'Users' }] : []),
   ];
 
   const groupColor = user ? GROUP_COLORS[user.group] : 'bg-blue-900';

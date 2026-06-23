@@ -96,7 +96,6 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
       status, priority, search,
-      site, shipping_site: shippingSite, receiving_site: receivingSite,
       rush_only, active_only, has_need_by, sort,
       page: pageStr, limit: limitStr,
     } = req.query as Record<string, string>;
@@ -113,20 +112,17 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     if (status)          { conditions.push('status = @status');   params.status   = status; }
     if (priority)        { conditions.push('priority = @priority'); params.priority = parseInt(priority, 10); }
 
-    // Server-enforced site scoping — client-supplied site params are ignored for
-    // restricted roles; oversight roles (management/finance/admin) get pass-through.
+    // Server-enforced site scoping — always locked to user.site derived from AD group.
     const user = req.user!;
-    if (can(user, 'management', 'finance')) {
-      if (site)          { conditions.push('(shipping_site = @site OR receiving_site = @site)'); params.site          = site; }
-      if (shippingSite)  { conditions.push('shipping_site = @shipping_site');                    params.shipping_site = shippingSite; }
-      if (receivingSite) { conditions.push('receiving_site = @receiving_site');                  params.receiving_site = receivingSite; }
-    } else if (can(user, 'shipping_planning', 'shipping_logistics')) {
+    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
       conditions.push('shipping_site = @enforced_site');
-      params.enforced_site = user.site;
-    } else {
+    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
       conditions.push('receiving_site = @enforced_site');
-      params.enforced_site = user.site;
+    } else {
+      // admin, management, finance: STOs involving their site on either end
+      conditions.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
     }
+    params.enforced_site = user.site;
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");
@@ -207,24 +203,20 @@ router.get('/audit-log', async (req: AuthRequest, res: Response): Promise<void> 
 
 router.get('/kpis', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { site, shipping_site: shippingSite, receiving_site: receivingSite } =
-      req.query as Record<string, string>;
+    // site scoping is handled below via enforced_site
 
     const baseConds: string[] = ["status NOT IN ('CLOSED', 'REJECTED')"];
     const params: Record<string, unknown> = {};
 
     const user = req.user!;
-    if (can(user, 'management', 'finance')) {
-      if (site)          { baseConds.push('(shipping_site = @site OR receiving_site = @site)'); params.site          = site; }
-      if (shippingSite)  { baseConds.push('shipping_site = @shipping_site');                    params.shipping_site = shippingSite; }
-      if (receivingSite) { baseConds.push('receiving_site = @receiving_site');                  params.receiving_site = receivingSite; }
-    } else if (can(user, 'shipping_planning', 'shipping_logistics')) {
+    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
       baseConds.push('shipping_site = @enforced_site');
-      params.enforced_site = user.site;
-    } else {
+    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
       baseConds.push('receiving_site = @enforced_site');
-      params.enforced_site = user.site;
+    } else {
+      baseConds.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
     }
+    params.enforced_site = user.site;
 
     const baseWhere = 'WHERE ' + baseConds.join(' AND ');
 
@@ -262,7 +254,6 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
   try {
     const {
       status, priority, search,
-      site, shipping_site: shippingSite, receiving_site: receivingSite,
       rush_only, active_only,
     } = req.query as Record<string, string>;
 
@@ -273,17 +264,14 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
     if (priority) { conditions.push('priority = @priority'); params.priority = parseInt(priority, 10); }
 
     const user = req.user!;
-    if (can(user, 'management', 'finance')) {
-      if (site)          { conditions.push('(shipping_site = @site OR receiving_site = @site)'); params.site           = site; }
-      if (shippingSite)  { conditions.push('shipping_site = @shipping_site');                    params.shipping_site  = shippingSite; }
-      if (receivingSite) { conditions.push('receiving_site = @receiving_site');                  params.receiving_site = receivingSite; }
-    } else if (can(user, 'shipping_planning', 'shipping_logistics')) {
+    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
       conditions.push('shipping_site = @enforced_site');
-      params.enforced_site = user.site;
-    } else {
+    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
       conditions.push('receiving_site = @enforced_site');
-      params.enforced_site = user.site;
+    } else {
+      conditions.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
     }
+    params.enforced_site = user.site;
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");
@@ -396,7 +384,7 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
       shipping_site:                     body.shipping_site,
       receiving_site:                    body.receiving_site,
       toll_mfg:                          body.toll_mfg ? 1 : 0,
-      requestor_user_id:                 user.userId,
+      requestor_user_id:                 null,
       requestor_name:                    body.requestor_name || user.name,
       requestor_email:                   body.requestor_email ?? '',
       material_sap:                      body.material_sap,
@@ -417,7 +405,7 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
       inco_terms:                        body.inco_terms ?? null,
     });
 
-    await logAudit(result.id, 'CREATED', null, 'DRAFT', user.userId, user.name);
+    await logAudit(result.id, 'CREATED', null, 'DRAFT', user.name);
 
     res.status(201).json({ id: result.id, sto_id: result.sto_id });
   } catch (err) {
@@ -444,16 +432,16 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
   }
 
   try {
-    const existing = await dbQueryOne<{ requestor_user_id: number; status: string }>(
-      'SELECT requestor_user_id, status FROM sto_requests WHERE id = @id',
+    const existing = await dbQueryOne<{ receiving_site: string; status: string }>(
+      'SELECT receiving_site, status FROM sto_requests WHERE id = @id',
       { id },
     );
     if (!existing) { res.status(404).json({ message: 'STO not found' }); return; }
     if (!can(user, 'admin') && existing.status !== 'DRAFT') {
       res.status(400).json({ message: 'Only DRAFT STOs can be edited' }); return;
     }
-    if (!can(user, 'admin') && existing.requestor_user_id !== user.userId) {
-      res.status(403).json({ message: 'You can only edit your own STOs' }); return;
+    if (!can(user, 'admin') && existing.receiving_site !== user.site) {
+      res.status(403).json({ message: 'You can only edit STOs at your site' }); return;
     }
 
     const body = parsed.data;
@@ -521,7 +509,7 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
       inco_terms:                        body.inco_terms ?? null,
     });
 
-    await logAudit(id, 'EDITED', 'DRAFT', 'DRAFT', user.userId, user.name);
+    await logAudit(id, 'EDITED', 'DRAFT', 'DRAFT', user.name);
 
     res.json({ message: 'Updated' });
   } catch (err) {

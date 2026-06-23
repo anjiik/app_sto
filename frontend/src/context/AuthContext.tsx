@@ -9,7 +9,6 @@ interface AuthContextType {
   ldapMode: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
-  updateSession: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, ldapMode, login, logout, updateSession: storeSession }}>
+    <AuthContext.Provider value={{ user, token, loading, ldapMode, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

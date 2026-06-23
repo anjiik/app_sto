@@ -12,7 +12,6 @@ import authRoutes from './routes/auth';
 import stoRoutes from './routes/sto';
 import approvalRoutes from './routes/approvals';
 import analyticsRoutes from './routes/analytics';
-import userRoutes from './routes/users';
 import siteRoutes from './routes/sites';
 
 // ── Startup env validation ────────────────────────────────────────────────────
@@ -30,7 +29,7 @@ function validateEnv(): void {
     process.exit(1);
   }
   if (process.env.DEV_BYPASS !== 'true') {
-    const ldapRequired = ['LDAP_URL', 'LDAP_BASE_DN', 'LDAP_APP_GROUP'];
+    const ldapRequired = ['LDAP_URL', 'LDAP_BASE_DN'];
     const missingLdap = ldapRequired.filter(k => !process.env[k]);
     if (missingLdap.length > 0) {
       console.error(`[startup] Missing required LDAP env vars: ${missingLdap.join(', ')}`);
@@ -57,7 +56,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/sto', stoRoutes);
 app.use('/api/sto', approvalRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/users', userRoutes);
+
 app.use('/api/sites', siteRoutes);
 
 app.get('/api/health', async (_req, res) => {

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JwtPayload, Group } from '../types';
-import { dbQueryOne } from '../db/connection';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -16,14 +15,6 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-    const appUser = await dbQueryOne<{ is_active: number }>(
-      'SELECT is_active FROM app_users WHERE id = @id',
-      { id: payload.userId },
-    );
-    if (!appUser || !appUser.is_active) {
-      res.status(401).json({ message: 'Account disabled or not found' });
-      return;
-    }
     req.user = payload;
     next();
   } catch {

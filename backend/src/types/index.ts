@@ -18,10 +18,10 @@ export type STOStatus =
   | 'REJECTED';
 
 export interface JwtPayload {
-  userId: number;
+  adUsername: string;
   group: Group;
   name: string;
-  site: string | null;
+  site: string;
 }
 
 export interface AuthRequest extends Express.Request {

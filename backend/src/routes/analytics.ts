@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { dbQuery, dbQueryOne } from '../db/connection';
-import { authenticate, AuthRequest, can } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { JwtPayload } from '../types';
 import logger from '../lib/logger';
 
@@ -11,7 +11,6 @@ router.use(authenticate);
 function buildFilters(q: Record<string, string>): { conds: string[]; params: Record<string, unknown> } {
   const conds: string[] = [];
   const params: Record<string, unknown> = {};
-  if (q.site)             { conds.push('(shipping_site = @site OR receiving_site = @site)'); params.site = q.site; }
   if (q.status)           { conds.push('status = @status'); params.status = q.status; }
   if (q.rush === '1')     conds.push('rush_request = 1');
   else if (q.rush === '0') conds.push('rush_request = 0');
@@ -20,14 +19,16 @@ function buildFilters(q: Record<string, string>): { conds: string[]; params: Rec
   return { conds, params };
 }
 
-// Inject mandatory site conditions based on the user's role.
-// management/finance/admin see everything; other roles are scoped to their site.
+// Always enforce site scoping derived from the user's AD group.
+// Site is never optional — it comes from the {SITE}_{ROLE} group membership.
 function applyRoleScope(user: JwtPayload, conds: string[], params: Record<string, unknown>): void {
-  if (can(user, 'management', 'finance')) return;
-  if (can(user, 'shipping_planning', 'shipping_logistics')) {
+  if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
     conds.push('shipping_site = @enforced_site');
-  } else {
+  } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
     conds.push('receiving_site = @enforced_site');
+  } else {
+    // admin, management, finance: STOs involving their site on either end
+    conds.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
   }
   params.enforced_site = user.site;
 }

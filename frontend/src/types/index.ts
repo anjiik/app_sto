@@ -18,10 +18,10 @@ export type STOStatus =
   | 'REJECTED';
 
 export interface User {
-  userId: number;
+  adUsername: string;
   group: Group;
   name: string;
-  site: string | null;
+  site: string;
 }
 
 export interface STORequest {
@@ -39,7 +39,6 @@ export interface STORequest {
   shipping_site?: string;
   receiving_site?: string;
   toll_mfg: boolean;
-  requestor_user_id: number;
   requestor_name: string;
   requestor_email: string;
   material_sap?: string;

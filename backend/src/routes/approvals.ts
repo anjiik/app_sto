@@ -33,7 +33,7 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void
         'UPDATE sto_requests SET status = @status, updated_at = GETDATE() WHERE id = @id',
         { id: sto.id, status: 'PLANNING_REVIEW' },
       );
-      await logAudit(sto.id as number, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', user.userId, user.name, undefined, execute);
+      await logAudit(sto.id as number, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', user.name, undefined, execute);
     });
     res.json({ message: 'Submitted to Shipping Planning queue' });
   } catch (err) {
@@ -83,7 +83,7 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
       `, {
         id: sto.id,
         planningApproved: approved ? 1 : 0,
-        approvedBy: user.userId,
+        approvedBy: null,
         notes: notes || null,
         mpn_number: mpn_number || null,
         batch_number: batch_number || null,
@@ -92,7 +92,7 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
         rejectionReason: approved ? null : (notes || 'Rejected by Shipping Planning'),
       });
       await logAudit(sto.id as number, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED',
-        'PLANNING_REVIEW', newStatus, user.userId, user.name, notes, execute);
+        'PLANNING_REVIEW', newStatus, user.name, notes, execute);
     });
     res.json({ message: approved ? 'Approved — sent to Shipping Logistics' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -151,7 +151,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         management_approval_required: mgmtRequired ? 1 : 0,
         status: newStatus,
       });
-      await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.userId, user.name,
+      await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.name,
         `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? 'required' : 'not required'}.`, execute);
     });
     res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Finance review', new_status: newStatus });
@@ -195,14 +195,14 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
       `, {
         id: sto.id,
         managementApproved: approved ? 1 : 0,
-        approvedBy: user.userId,
+        approvedBy: null,
         notes: notes || null,
         igb_complete: igb_complete ? 1 : 0,
         status: newStatus,
         rejectionReason: approved ? null : (notes || 'Rejected by Management'),
       });
       await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
-        'MANAGEMENT_REVIEW', newStatus, user.userId, user.name, notes, execute);
+        'MANAGEMENT_REVIEW', newStatus, user.name, notes, execute);
     });
     res.json({ message: approved ? 'Management approved — sent to Finance' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -245,14 +245,14 @@ router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<voi
       `, {
         id: sto.id,
         financeApproved: approved ? 1 : 0,
-        approvedBy: user.userId,
+        approvedBy: null,
         notes: notes || null,
         igb_complete: igb_complete ? 1 : 0,
         status: newStatus,
         rejectionReason: approved ? null : (notes || 'Rejected by Finance'),
       });
       await logAudit(sto.id as number, approved ? 'FINANCE_APPROVED' : 'FINANCE_REJECTED',
-        'FINANCE_REVIEW', newStatus, user.userId, user.name, notes, execute);
+        'FINANCE_REVIEW', newStatus, user.name, notes, execute);
     });
     res.json({ message: approved ? 'Finance approved — sent to Receiving Logistics' : 'Rejected', new_status: newStatus });
   } catch (err) {
@@ -295,7 +295,7 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
       });
       await logAudit(sto.id as number,
         newStatus === 'CLOSED' ? 'DELIVERY_CLOSED' : 'RECEIPT_UPDATED',
-        'RECEIVING_LOGISTICS', newStatus, user.userId, user.name,
+        'RECEIVING_LOGISTICS', newStatus, user.name,
         body.actual_receipt_date ? `Received: ${body.actual_receipt_date}` : undefined,
         execute);
     });
@@ -334,7 +334,7 @@ router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void
         'UPDATE sto_requests SET status = @status, rejection_reason = NULL, updated_at = GETDATE() WHERE id = @id',
         { id, status: toStatus },
       );
-      await logAudit(id, 'REVERTED', fromStatus, toStatus, user.userId, user.name,
+      await logAudit(id, 'REVERTED', fromStatus, toStatus, user.name,
         `Admin reverted from ${fromStatus} to ${toStatus}`, execute);
     });
     res.json({ message: `Reverted to ${toStatus}`, new_status: toStatus });
