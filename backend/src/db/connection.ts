@@ -4,35 +4,26 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function getPool(): Promise<sql.ConnectionPool> {
   if (!poolPromise) {
-    const fullServer = process.env.DB_SERVER || 'localhost';
+    const fullServer = process.env.DB_SERVER   || 'localhost';
     const database   = process.env.DB_DATABASE || 'sto_management';
+    const odbcDriver = process.env.DB_DRIVER   || 'ODBC Driver 17 for SQL Server';
 
-    // Split "SERVERNAME\INSTANCENAME" into separate fields
-    const [server, instanceName] = fullServer.includes('\\')
-      ? fullServer.split('\\')
-      : [fullServer, undefined];
-
-    const config: sql.config = {
-      server,
-      database,
+    // Build an explicit ODBC connection string so the driver is never ambiguous.
+    // mssql types omit connectionString even though msnodesqlv8 supports it.
+    const config = {
       driver: 'msnodesqlv8',
-      options: {
-        trustedConnection: true,
-        trustServerCertificate: true,
-        instanceName,
-      },
-      // Pool sizing: the Dashboard fires 6 parallel requests per page load.
-      // max=20 handles ~3 concurrent users loading the dashboard simultaneously
-      // without queueing; raise it if query times start climbing under load.
+      connectionString:
+        `Driver={${odbcDriver}};Server=${fullServer};Database=${database};` +
+        `Trusted_Connection=yes;TrustServerCertificate=yes;`,
       pool: {
         max: 20,
         min: 2,
         idleTimeoutMillis: 30_000,
         acquireTimeoutMillis: 15_000,
       },
-    };
+    } as unknown as sql.config;
 
-    console.log(`DB connecting → server: ${server}, instance: ${instanceName ?? 'default'}, database: ${database}`);
+    console.log(`DB connecting → server: ${fullServer}, database: ${database}, driver: ${odbcDriver}`);
 
     const pool = new sql.ConnectionPool(config);
     poolPromise = pool.connect().catch(err => {
