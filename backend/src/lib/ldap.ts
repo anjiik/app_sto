@@ -7,15 +7,26 @@ const LDAP_BASE_DN   = process.env.LDAP_BASE_DN       || '';
 const LDAP_BIND_DN   = process.env.LDAP_BIND_DN       || '';
 const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
 
-// Maps the suffix portion of {SITE}_{SUFFIX} AD groups to the app role.
-const SUFFIX_TO_GROUP: Record<string, Group> = {
-  ADMIN:          'admin',
-  RECEIVING:      'receiving_site',
-  PLANNING:       'shipping_planning',
-  LOGISTICS:      'shipping_logistics',
-  MANAGEMENT:     'management',
-  FINANCE:        'finance',
-  RECV_LOGISTICS: 'receiving_logistics',
+// Explicit map of AD group CN → { app role, site }.
+// Add one entry per group that should have access.
+// The key must match the CN of the group exactly (case-insensitive).
+const GROUP_MAP: Record<string, { group: Group; site: string }> = {
+  // ── Site: ABC ─────────────────────────────────────────────────────────────
+  'ABC_ADMIN':          { group: 'admin',               site: 'ABC' },
+  'ABC_RECEIVING':      { group: 'receiving_site',      site: 'ABC' },
+  'ABC_PLANNING':       { group: 'shipping_planning',   site: 'ABC' },
+  'ABC_LOGISTICS':      { group: 'shipping_logistics',  site: 'ABC' },
+  'ABC_MANAGEMENT':     { group: 'management',          site: 'ABC' },
+  'ABC_FINANCE':        { group: 'finance',             site: 'ABC' },
+  'ABC_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'ABC' },
+  // ── Site: XYZ ─────────────────────────────────────────────────────────────
+  'XYZ_ADMIN':          { group: 'admin',               site: 'XYZ' },
+  'XYZ_RECEIVING':      { group: 'receiving_site',      site: 'XYZ' },
+  'XYZ_PLANNING':       { group: 'shipping_planning',   site: 'XYZ' },
+  'XYZ_LOGISTICS':      { group: 'shipping_logistics',  site: 'XYZ' },
+  'XYZ_MANAGEMENT':     { group: 'management',          site: 'XYZ' },
+  'XYZ_FINANCE':        { group: 'finance',             site: 'XYZ' },
+  'XYZ_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'XYZ' },
 };
 
 export interface LdapAuthResult {
@@ -64,16 +75,12 @@ const CLIENT_OPTS = () => ({
 function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string } {
   const cns = memberOf.map(extractCN);
   for (const cn of cns) {
-    const idx = cn.indexOf('_');
-    if (idx <= 0) continue;
-    const site   = cn.substring(0, idx).toUpperCase();
-    const suffix = cn.substring(idx + 1).toUpperCase();
-    const group  = SUFFIX_TO_GROUP[suffix];
-    if (group) return { group, site };
+    const match = GROUP_MAP[cn.toUpperCase()];
+    if (match) return match;
   }
   throw new Error(
     'Your account is not in any STO application group. ' +
-    'Contact your administrator to be added to the appropriate {SITE}_{ROLE} AD group.',
+    'Contact your administrator to be added to one of the configured AD groups.',
   );
 }
 
