@@ -7,12 +7,6 @@ function getPool(): Promise<sql.ConnectionPool> {
     const fullServer = process.env.DB_SERVER   || 'localhost';
     const database   = process.env.DB_DATABASE || 'sto_management';
     const odbcDriver = process.env.DB_DRIVER   || 'ODBC Driver 17 for SQL Server';
-    const dbUser     = process.env.DB_USER;
-    const dbPassword = process.env.DB_PASSWORD;
-
-    const authPart = dbUser
-      ? `UID=${dbUser};PWD=${dbPassword};`
-      : `Trusted_Connection=yes;`;
 
     // Build an explicit ODBC connection string so the driver is never ambiguous.
     // mssql types omit connectionString even though msnodesqlv8 supports it.
@@ -20,7 +14,7 @@ function getPool(): Promise<sql.ConnectionPool> {
       driver: 'msnodesqlv8',
       connectionString:
         `Driver={${odbcDriver}};Server=${fullServer};Database=${database};` +
-        `${authPart}TrustServerCertificate=yes;`,
+        `Trusted_Connection=yes;TrustServerCertificate=yes;`,
       pool: {
         max: 20,
         min: 2,
