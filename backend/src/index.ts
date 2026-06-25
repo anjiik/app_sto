@@ -13,6 +13,7 @@ import stoRoutes from './routes/sto';
 import approvalRoutes from './routes/approvals';
 import analyticsRoutes from './routes/analytics';
 import siteRoutes from './routes/sites';
+import adminRoutes from './routes/admin';
 
 // ── Startup env validation ────────────────────────────────────────────────────
 // Fail fast rather than silently misbehaving at runtime.
@@ -58,6 +59,7 @@ app.use('/api/sto', approvalRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 app.use('/api/sites', siteRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', async (_req, res) => {
   try {

@@ -124,6 +124,16 @@ export function Dashboard() {
   const [needByItems,    setNeedByItems]    = useState<STORequest[]>([]);
   const [audit,          setAudit]          = useState<AuditEntry[]>([]);
   const [loading,        setLoading]        = useState(true);
+  const [archivePreview, setArchivePreview] = useState<{ eligible: number; retention_years: number } | null>(null);
+  const [archiving,      setArchiving]      = useState(false);
+  const [archiveMsg,     setArchiveMsg]     = useState<string | null>(null);
+
+  // Load archive preview count for admins
+  useEffect(() => {
+    if (user?.group === 'admin') {
+      api.get('/admin/archive/preview').then(r => setArchivePreview(r.data)).catch(() => {});
+    }
+  }, [user]);
   const [queueSearch,    setQueueSearch]    = useState('');
 
   useEffect(() => {
@@ -498,6 +508,43 @@ export function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* ── Admin: Archive panel ── */}
+        {user?.group === 'admin' && archivePreview !== null && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Data Archive</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  CLOSED / REJECTED records older than {archivePreview.retention_years} years —{' '}
+                  <span className={archivePreview.eligible > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
+                    {archivePreview.eligible} record{archivePreview.eligible !== 1 ? 's' : ''} eligible
+                  </span>
+                </p>
+                {archiveMsg && <p className="text-xs text-green-600 mt-1">{archiveMsg}</p>}
+              </div>
+              <button
+                disabled={archivePreview.eligible === 0 || archiving}
+                onClick={async () => {
+                  if (!window.confirm(`Archive ${archivePreview.eligible} record(s)? They will be hidden from all views but not deleted.`)) return;
+                  setArchiving(true);
+                  try {
+                    const r = await api.post('/admin/archive/run');
+                    setArchiveMsg(r.data.message);
+                    setArchivePreview(p => p ? { ...p, eligible: 0 } : p);
+                  } catch {
+                    setArchiveMsg('Archive failed — check backend logs.');
+                  } finally {
+                    setArchiving(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-800 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+              >
+                {archiving ? 'Archiving…' : 'Run Archive'}
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </Layout>

@@ -8,7 +8,7 @@ router.use(authenticate);
 
 // Build WHERE conditions from filter query params (client-supplied, non-scoped)
 function buildFilters(q: Record<string, string>): { conds: string[]; params: Record<string, unknown> } {
-  const conds: string[] = [];
+  const conds: string[] = ['archived = 0'];
   const params: Record<string, unknown> = {};
   if (q.status)           { conds.push('status = @status'); params.status = q.status; }
   if (q.rush === '1')     conds.push('rush_request = 1');

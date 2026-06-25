@@ -107,11 +107,11 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const limit  = Math.min(200, Math.max(1, parseInt(limitStr || '50', 10) || 50));
     const offset = (page - 1) * limit;
 
-    const conditions: string[] = [];
+    const conditions: string[] = ['archived = 0'];
     const params: Record<string, unknown> = {};
 
-    if (status)        { conditions.push('status = @status');           params.status        = status; }
-    if (priority)      { conditions.push('priority = @priority');       params.priority      = parseInt(priority, 10); }
+    if (status)        { conditions.push('status = @status');               params.status        = status; }
+    if (priority)      { conditions.push('priority = @priority');           params.priority      = parseInt(priority, 10); }
     if (shipping_site) { conditions.push('shipping_site = @shipping_site'); params.shipping_site = shipping_site; }
     if (receiving_site){ conditions.push('receiving_site = @receiving_site'); params.receiving_site = receiving_site; }
 
@@ -193,7 +193,7 @@ router.get('/kpis', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // site scoping is handled below via enforced_site
 
-    const baseConds: string[] = ["status NOT IN ('CLOSED', 'REJECTED')"];
+    const baseConds: string[] = ["archived = 0", "status NOT IN ('CLOSED', 'REJECTED')"];
     const params: Record<string, unknown> = {};
     const baseWhere = 'WHERE ' + baseConds.join(' AND ');
 
@@ -234,7 +234,7 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
       rush_only, active_only,
     } = req.query as Record<string, string>;
 
-    const conditions: string[] = [];
+    const conditions: string[] = ['archived = 0'];
     const params: Record<string, unknown> = {};
 
     if (status)   { conditions.push('status = @status');     params.status   = status; }
