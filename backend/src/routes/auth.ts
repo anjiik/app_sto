@@ -29,7 +29,6 @@ const GROUP_LABELS: Record<Group, string> = {
   shipping_planning:   'Shipping Planning',
   shipping_logistics:  'Shipping Logistics',
   management:          'Management',
-  finance:             'Finance',
   receiving_logistics: 'Receiving Logistics',
   admin:               'Admin',
 };

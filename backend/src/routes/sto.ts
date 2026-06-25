@@ -17,7 +17,7 @@ const BOOL_COLS = new Set([
   'rush_request', 'public_holiday', 'toll_mfg',
   'controlled_shipping_required', 'insurance_loss_required',
   'management_approval_required', 'ready_to_ship', 'delivery_closed_out',
-  'inventory_approved', 'management_approved', 'finance_approved',
+  'inventory_approved', 'management_approved', 'receiving_mgmt_approved',
   'planning_approved', 'igb_complete',
 ]);
 
@@ -96,6 +96,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
       status, priority, search,
+      shipping_site, receiving_site,
       rush_only, active_only, has_need_by, sort,
       page: pageStr, limit: limitStr,
     } = req.query as Record<string, string>;
@@ -109,20 +110,10 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const conditions: string[] = [];
     const params: Record<string, unknown> = {};
 
-    if (status)          { conditions.push('status = @status');   params.status   = status; }
-    if (priority)        { conditions.push('priority = @priority'); params.priority = parseInt(priority, 10); }
-
-    // Server-enforced site scoping — always locked to user.site derived from AD group.
-    const user = req.user!;
-    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      conditions.push('shipping_site = @enforced_site');
-    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
-      conditions.push('receiving_site = @enforced_site');
-    } else {
-      // admin, management, finance: STOs involving their site on either end
-      conditions.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
-    }
-    params.enforced_site = user.site;
+    if (status)        { conditions.push('status = @status');           params.status        = status; }
+    if (priority)      { conditions.push('priority = @priority');       params.priority      = parseInt(priority, 10); }
+    if (shipping_site) { conditions.push('shipping_site = @shipping_site'); params.shipping_site = shipping_site; }
+    if (receiving_site){ conditions.push('receiving_site = @receiving_site'); params.receiving_site = receiving_site; }
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");
@@ -153,7 +144,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
              rush_request, shipping_site, receiving_site, requesting_plant,
              receiving_site_need_by_date, estimated_ship_by_date,
              management_approval_required, planning_approved, management_approved,
-             finance_approved, ready_to_ship, tracking_id, corporate_sto_tracker_status,
+             receiving_mgmt_approved, ready_to_ship, tracking_id, corporate_sto_tracker_status,
              created_at, updated_at
       FROM sto_requests${where}
       ${orderBy}
@@ -180,23 +171,13 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.get('/audit-log', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const user = req.user!;
-    let siteCondition: string;
-    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      siteCondition = 'r.shipping_site = @site';
-    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
-      siteCondition = 'r.receiving_site = @site';
-    } else {
-      siteCondition = '(r.shipping_site = @site OR r.receiving_site = @site)';
-    }
     const rows = await dbQuery<Record<string, unknown>>(`
       SELECT TOP 20 l.id, l.sto_request_id, r.sto_id, l.action, l.old_status, l.new_status,
              l.performed_by_name, l.notes, l.performed_at
       FROM sto_audit_log l
       JOIN sto_requests r ON r.id = l.sto_request_id
-      WHERE ${siteCondition}
       ORDER BY l.performed_at DESC
-    `, { site: user.site });
+    `);
     res.json(rows);
   } catch (err) {
     logger.error({ err }, 'audit-log GET error');
@@ -214,17 +195,6 @@ router.get('/kpis', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const baseConds: string[] = ["status NOT IN ('CLOSED', 'REJECTED')"];
     const params: Record<string, unknown> = {};
-
-    const user = req.user!;
-    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      baseConds.push('shipping_site = @enforced_site');
-    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
-      baseConds.push('receiving_site = @enforced_site');
-    } else {
-      baseConds.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
-    }
-    params.enforced_site = user.site;
-
     const baseWhere = 'WHERE ' + baseConds.join(' AND ');
 
     // Single scan — three SUM(CASE WHEN …) columns instead of three separate COUNT(*) queries.
@@ -269,16 +239,6 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
 
     if (status)   { conditions.push('status = @status');     params.status   = status; }
     if (priority) { conditions.push('priority = @priority'); params.priority = parseInt(priority, 10); }
-
-    const user = req.user!;
-    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      conditions.push('shipping_site = @enforced_site');
-    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
-      conditions.push('receiving_site = @enforced_site');
-    } else {
-      conditions.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
-    }
-    params.enforced_site = user.site;
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");

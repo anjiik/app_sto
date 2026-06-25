@@ -28,22 +28,21 @@ interface Kpis {
 // ─── config ──────────────────────────────────────────────────────────────────
 
 const GROUP_QUEUE: Partial<Record<Group, { label: string; statuses: STOStatus[] }>> = {
-  shipping_planning:   { label: 'Awaiting your Planning Review',      statuses: ['PLANNING_REVIEW'] },
-  shipping_logistics:  { label: 'Awaiting your Logistics Submission', statuses: ['SHIPPING_LOGISTICS'] },
-  management:          { label: 'Awaiting your Management Approval',  statuses: ['MANAGEMENT_REVIEW'] },
-  finance:             { label: 'Awaiting your Finance Approval',      statuses: ['FINANCE_REVIEW'] },
-  receiving_logistics: { label: 'Awaiting your Receipt Confirmation', statuses: ['RECEIVING_LOGISTICS'] },
-  receiving_site:      { label: 'Your Unsubmitted Drafts',            statuses: ['DRAFT'] },
+  shipping_planning:   { label: 'Awaiting your Planning Review',           statuses: ['PLANNING_REVIEW'] },
+  shipping_logistics:  { label: 'Awaiting your Logistics Submission',      statuses: ['SHIPPING_LOGISTICS'] },
+  management:          { label: 'Awaiting your Management Approval',       statuses: ['MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW'] },
+  receiving_logistics: { label: 'Awaiting your Receipt Confirmation',      statuses: ['RECEIVING_LOGISTICS'] },
+  receiving_site:      { label: 'Your Unsubmitted Drafts',                 statuses: ['DRAFT'] },
 };
 
 const PIPELINE_STAGES: { label: string; status: STOStatus; color: string }[] = [
-  { label: 'Draft',              status: 'DRAFT',               color: 'gray' },
-  { label: 'Planning Review',    status: 'PLANNING_REVIEW',     color: 'yellow' },
-  { label: 'Ship Logistics',     status: 'SHIPPING_LOGISTICS',  color: 'teal' },
-  { label: 'Mgmt Review',        status: 'MANAGEMENT_REVIEW',   color: 'orange' },
-  { label: 'Finance Review',     status: 'FINANCE_REVIEW',      color: 'purple' },
-  { label: 'Recv Logistics',     status: 'RECEIVING_LOGISTICS', color: 'cyan' },
-  { label: 'Closed',             status: 'CLOSED',              color: 'green' },
+  { label: 'Draft',              status: 'DRAFT',                color: 'gray' },
+  { label: 'Planning Review',    status: 'PLANNING_REVIEW',      color: 'yellow' },
+  { label: 'Ship Logistics',     status: 'SHIPPING_LOGISTICS',   color: 'teal' },
+  { label: 'Ship Mgmt Review',   status: 'MANAGEMENT_REVIEW',    color: 'orange' },
+  { label: 'Recv Mgmt Review',   status: 'RECEIVING_MGMT_REVIEW', color: 'purple' },
+  { label: 'Recv Logistics',     status: 'RECEIVING_LOGISTICS',  color: 'cyan' },
+  { label: 'Closed',             status: 'CLOSED',               color: 'green' },
 ];
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -71,11 +70,11 @@ function actionLabel(action: string): string {
     PLANNING_APPROVED:   'Planning approved',
     PLANNING_REJECTED:   'Planning rejected',
     LOGISTICS_SUBMITTED: 'Logistics submitted',
-    MANAGEMENT_APPROVED: 'Management approved',
-    MANAGEMENT_REJECTED: 'Management rejected',
-    FINANCE_APPROVED:    'Finance approved',
-    FINANCE_REJECTED:    'Finance rejected',
-    RECEIPT_CONFIRMED:   'Receipt confirmed',
+    MANAGEMENT_APPROVED:      'Shipping mgmt approved',
+    MANAGEMENT_REJECTED:      'Shipping mgmt rejected',
+    RECEIVING_MGMT_APPROVED:  'Receiving mgmt approved',
+    RECEIVING_MGMT_REJECTED:  'Receiving mgmt rejected',
+    RECEIPT_CONFIRMED:        'Receipt confirmed',
   };
   return map[action] ?? action;
 }
@@ -133,36 +132,37 @@ export function Dashboard() {
     const queueConfig = GROUP_QUEUE[user.group];
     if (!queueConfig) { setLoading(false); return; }
 
-    // Build site-scoping params based on the user's role.
-    // Shipping roles scope by shipping_site; receiving roles by receiving_site;
-    // management and finance see all sites (no site param).
-    const siteParams: Record<string, string> = {};
-    if (['shipping_planning', 'shipping_logistics'].includes(user.group) && user.site) {
-      siteParams.shipping_site = user.site;
-    } else if (['receiving_site', 'receiving_logistics'].includes(user.group) && user.site) {
-      siteParams.receiving_site = user.site;
-    }
-
     function qs(extra: Record<string, string> = {}): string {
-      const p = new URLSearchParams({ ...siteParams, ...extra });
+      const p = new URLSearchParams(extra);
       const s = p.toString();
       return s ? `?${s}` : '';
     }
 
-    const queueStatus = queueConfig.statuses[0];
+    // Management users have two pending-action buckets: shipping-site MANAGEMENT_REVIEW
+    // and receiving-site RECEIVING_MGMT_REVIEW. Fetch both and combine.
+    const queueFetch = user.group === 'management'
+      ? Promise.all([
+          api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${user.site}&limit=20`),
+          api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${user.site}&limit=20`),
+        ]).then(([mgmt, recvMgmt]) => {
+          const combined = [...mgmt.data.data, ...recvMgmt.data.data];
+          const total = mgmt.data.pagination.total + recvMgmt.data.pagination.total;
+          return { data: { data: combined, pagination: { total } } };
+        })
+      : api.get(`/sto${qs({ status: queueConfig.statuses[0], limit: '20' })}`);
 
     Promise.all([
       // 1. Pipeline stage counts — GROUP BY in SQL, zero rows transferred
       api.get('/analytics/by-status'),
-      // 2. My Action Queue — scoped by role status + site, 20 items
-      api.get(`/sto${qs({ status: queueStatus, limit: '20' })}`),
+      // 2. My Action Queue
+      queueFetch,
       // 3. KPI counts — three COUNT(*) queries, no rows transferred
-      api.get(`/sto/kpis${qs()}`),
-      // 4. Rush alert items — active rush STOs for this site, top 4
-      api.get(`/sto${qs({ rush_only: '1', active_only: '1', limit: '4' })}`),
-      // 5. Need-by items — active STOs with a date, sorted most-urgent first, top 12
-      api.get(`/sto${qs({ has_need_by: '1', active_only: '1', sort: 'need_by_asc', limit: '12' })}`),
-      // 6. Recent audit activity — scoped to user's site
+      api.get('/sto/kpis'),
+      // 4. Rush alert items — top 4
+      api.get('/sto?rush_only=1&active_only=1&limit=4'),
+      // 5. Need-by items — sorted most-urgent first, top 12
+      api.get('/sto?has_need_by=1&active_only=1&sort=need_by_asc&limit=12'),
+      // 6. Recent audit activity
       api.get('/sto/audit-log'),
     ]).then(([byStatusRes, queueRes, kpisRes, rushRes, needByRes, auditRes]) => {
       const counts: Partial<Record<STOStatus, number>> = {};
@@ -200,7 +200,7 @@ export function Dashboard() {
   const upcomingItems     = needByItems.filter(s => daysUntil(s.receiving_site_need_by_date!) >= 0).slice(0, 8);
 
   const inProgress = (
-    ['PLANNING_REVIEW', 'SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS'] as STOStatus[]
+    ['PLANNING_REVIEW', 'SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS'] as STOStatus[]
   ).reduce((n, s) => n + (stageCounts[s] || 0), 0);
 
   const greeting = () => {
@@ -215,7 +215,6 @@ export function Dashboard() {
     shipping_planning:  'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
     management:         'Management',
-    finance:            'Finance',
     receiving_logistics:'Receiving Logistics',
   };
 

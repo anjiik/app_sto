@@ -26,13 +26,13 @@ function Row({ label, value }: { label: string; value?: string | number | boolea
 
 // ── Process timeline ────────────────────────────────────────────────────────
 const STEPS: { key: STOStatus; label: string }[] = [
-  { key: 'DRAFT',               label: 'Draft' },
-  { key: 'PLANNING_REVIEW',     label: 'Planning' },
-  { key: 'SHIPPING_LOGISTICS',  label: 'Logistics' },
-  { key: 'MANAGEMENT_REVIEW',   label: 'Management' },
-  { key: 'FINANCE_REVIEW',      label: 'Finance' },
-  { key: 'RECEIVING_LOGISTICS', label: 'Recv. Logistics' },
-  { key: 'CLOSED',              label: 'Closed' },
+  { key: 'DRAFT',                label: 'Draft' },
+  { key: 'PLANNING_REVIEW',      label: 'Planning' },
+  { key: 'SHIPPING_LOGISTICS',   label: 'Logistics' },
+  { key: 'MANAGEMENT_REVIEW',    label: 'Ship. Mgmt' },
+  { key: 'RECEIVING_MGMT_REVIEW', label: 'Recv. Mgmt' },
+  { key: 'RECEIVING_LOGISTICS',  label: 'Recv. Logistics' },
+  { key: 'CLOSED',               label: 'Closed' },
 ];
 
 const STEP_ORDER = STEPS.map(s => s.key);
@@ -198,8 +198,8 @@ export function STODetail() {
     (g === 'receiving_site'     && sto.status === 'DRAFT') ||
     (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW') ||
     (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS') ||
-    (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW') ||
-    (g === 'finance'            && sto.status === 'FINANCE_REVIEW') ||
+    (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW'     && user?.site === sto.shipping_site) ||
+    (g === 'management'         && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site) ||
     (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS')
   );
 
@@ -370,7 +370,7 @@ export function STODetail() {
         <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'}>
           {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Fill in the shipment details, then submit to send to Management/Finance review.</p>
+              <p className="text-sm text-gray-500">Fill in the shipment details, then submit to send to Management review (if thresholds exceeded) or Receiving Logistics.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton' },
@@ -416,7 +416,7 @@ export function STODetail() {
                 disabled={actionLoading}
                 className="bg-teal-700 text-white px-5 py-2 rounded-lg hover:bg-teal-800 font-medium text-sm disabled:opacity-50"
               >
-                Submit to Management/Finance Review →
+                Submit to Management Review →
               </button>
             </div>
           ) : (
@@ -433,10 +433,10 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 4: Management Review ── */}
-        <Section title="Management Approval" icon="✅" active={g === 'management' && sto.status === 'MANAGEMENT_REVIEW'}>
+        <Section title="Shipping Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && user?.site === sto.shipping_site}>
           {sto.management_approval_required === false && sto.status !== 'MANAGEMENT_REVIEW' ? (
             <div className="text-sm text-gray-400 italic">Not required for this order</div>
-          ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' ? (
+          ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && user?.site === sto.shipping_site ? (
             <ApprovalPanel
               title="Management Approval"
               showIgb
@@ -451,20 +451,16 @@ export function STODetail() {
           )}
         </Section>
 
-        {/* ── SECTION 5: Finance Review ── */}
-        <Section title="Finance Approval" icon="💰" active={g === 'finance' && sto.status === 'FINANCE_REVIEW'}>
-          {g === 'finance' && sto.status === 'FINANCE_REVIEW' ? (
+        {/* ── SECTION 5: Receiving Site Management Review ── */}
+        <Section title="Receiving Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site}>
+          {g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site ? (
             <ApprovalPanel
-              title="Finance Approval"
-              showIgb
+              title="Receiving Site Management Approval"
               loading={actionLoading}
-              onApprove={(approved, notes, igb_complete) => doAction('finance', { approved, notes, igb_complete })}
+              onApprove={(approved, notes) => doAction('receiving-management', { approved, notes })}
             />
           ) : (
-            <div className="space-y-2">
-              <ApprovalResult approved={sto.finance_approved} notes={sto.finance_notes} />
-              {sto.igb_complete && <div className="text-xs text-gray-500">IGB Complete: Yes</div>}
-            </div>
+            <ApprovalResult approved={sto.receiving_mgmt_approved} notes={sto.receiving_mgmt_notes} />
           )}
         </Section>
 

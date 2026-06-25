@@ -1,7 +1,6 @@
 import { Router, Response } from 'express';
 import { dbQuery, dbQueryOne } from '../db/connection';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { JwtPayload } from '../types';
 import logger from '../lib/logger';
 
 const router = Router();
@@ -19,19 +18,6 @@ function buildFilters(q: Record<string, string>): { conds: string[]; params: Rec
   return { conds, params };
 }
 
-// Always enforce site scoping derived from the user's AD group.
-// Site is never optional — it comes from the {SITE}_{ROLE} group membership.
-function applyRoleScope(user: JwtPayload, conds: string[], params: Record<string, unknown>): void {
-  if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-    conds.push('shipping_site = @enforced_site');
-  } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
-    conds.push('receiving_site = @enforced_site');
-  } else {
-    // admin, management, finance: STOs involving their site on either end
-    conds.push('(shipping_site = @enforced_site OR receiving_site = @enforced_site)');
-  }
-  params.enforced_site = user.site;
-}
 
 function toWhere(conds: string[]): string {
   return conds.length ? 'WHERE ' + conds.join(' AND ') : '';
@@ -41,7 +27,6 @@ function toWhere(conds: string[]): string {
 router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { conds, params } = buildFilters(req.query as Record<string, string>);
-    applyRoleScope(req.user!, conds, params);
     const where       = toWhere(conds);
     const closedWhere = toWhere([...conds, "status = 'CLOSED'"]);
 
@@ -87,7 +72,6 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
 router.get('/by-status', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { conds, params } = buildFilters(req.query as Record<string, string>);
-    applyRoleScope(req.user!, conds, params);
     const rows = await dbQuery<{ status: string; cnt: number; total_value: number }>(`
       SELECT status, COUNT(*) AS cnt, COALESCE(SUM(material_value), 0) AS total_value
       FROM sto_requests ${toWhere(conds)} GROUP BY status
@@ -104,7 +88,6 @@ router.get('/by-month', async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const q = req.query as Record<string, string>;
     const { conds, params } = buildFilters(q);
-    applyRoleScope(req.user!, conds, params);
     const allConds = (q.dateFrom || q.dateTo) ? conds : [
       ...conds,
       'request_date >= DATEADD(month, -11, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))',
@@ -127,7 +110,6 @@ router.get('/by-month', async (req: AuthRequest, res: Response): Promise<void> =
 router.get('/by-site', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { conds, params } = buildFilters(req.query as Record<string, string>);
-    applyRoleScope(req.user!, conds, params);
     const [shipping, receiving] = await Promise.all([
       dbQuery<{ site: string; cnt: number; total_value: number }>(`
         SELECT TOP 10 shipping_site AS site, COUNT(*) AS cnt,
@@ -155,7 +137,6 @@ router.get('/by-site', async (req: AuthRequest, res: Response): Promise<void> =>
 router.get('/site-flow', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { conds, params } = buildFilters(req.query as Record<string, string>);
-    applyRoleScope(req.user!, conds, params);
     const rows = await dbQuery<{ from_site: string; to_site: string; cnt: number; total_value: number }>(`
       SELECT TOP 15 shipping_site AS from_site, receiving_site AS to_site,
              COUNT(*) AS cnt, COALESCE(SUM(material_value), 0) AS total_value
@@ -174,7 +155,6 @@ router.get('/rush-split', async (req: AuthRequest, res: Response): Promise<void>
   try {
     const q = req.query as Record<string, string>;
     const { conds, params } = buildFilters({ ...q, rush: '' });
-    applyRoleScope(req.user!, conds, params);
     const allConds = (q.dateFrom || q.dateTo) ? conds : [
       ...conds,
       'request_date >= DATEADD(month, -11, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))',
@@ -199,7 +179,6 @@ router.get('/raw-data', async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const q = req.query as Record<string, string>;
     const { conds, params } = buildFilters(q);
-    applyRoleScope(req.user!, conds, params);
     const where    = toWhere(conds);
     const page     = Math.max(1, parseInt(q.page || '1'));
     const pageSize = 50;

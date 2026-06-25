@@ -17,7 +17,6 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   'ABC_PLANNING':       { group: 'shipping_planning',   site: 'ABC' },
   'ABC_LOGISTICS':      { group: 'shipping_logistics',  site: 'ABC' },
   'ABC_MANAGEMENT':     { group: 'management',          site: 'ABC' },
-  'ABC_FINANCE':        { group: 'finance',             site: 'ABC' },
   'ABC_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'ABC' },
   // ── Site: XYZ ─────────────────────────────────────────────────────────────
   'XYZ_ADMIN':          { group: 'admin',               site: 'XYZ' },
@@ -25,7 +24,6 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   'XYZ_PLANNING':       { group: 'shipping_planning',   site: 'XYZ' },
   'XYZ_LOGISTICS':      { group: 'shipping_logistics',  site: 'XYZ' },
   'XYZ_MANAGEMENT':     { group: 'management',          site: 'XYZ' },
-  'XYZ_FINANCE':        { group: 'finance',             site: 'XYZ' },
   'XYZ_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'XYZ' },
 };
 

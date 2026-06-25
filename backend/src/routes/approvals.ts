@@ -120,10 +120,10 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const rawFreightCost = body.freight_cost;
     const freightCost = parseFloat(rawFreightCost || '0');
     const materialValue = parseFloat(String(sto.material_value || '0'));
-    const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '10000');
-    const freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '5000');
+    const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000');
+    const freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000');
     const mgmtRequired = materialValue > matThreshold || freightCost > freightThreshold;
-    const newStatus: STOStatus = mgmtRequired ? 'MANAGEMENT_REVIEW' : 'FINANCE_REVIEW';
+    const newStatus: STOStatus = mgmtRequired ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS';
 
     await withTransaction(async (execute) => {
       await execute(`
@@ -152,16 +152,16 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         status: newStatus,
       });
       await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.name,
-        `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? 'required' : 'not required'}.`, execute);
+        `Freight: $${freightCost}. Dual mgmt approval ${mgmtRequired ? 'required' : 'not required'}.`, execute);
     });
-    res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Finance review', new_status: newStatus });
+    res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Receiving Logistics', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'logistics error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// POST /api/sto/:id/management
+// POST /api/sto/:id/management  — shipping-site management approval
 router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!can(user, 'management')) {
@@ -179,7 +179,10 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (sto.status !== 'MANAGEMENT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Management Review' }); return;
     }
-    const newStatus: STOStatus = approved ? 'FINANCE_REVIEW' : 'REJECTED';
+    if (user.site !== sto.shipping_site) {
+      res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
+    }
+    const newStatus: STOStatus = approved ? 'RECEIVING_MGMT_REVIEW' : 'REJECTED';
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -199,64 +202,65 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
         notes: notes || null,
         igb_complete: igb_complete ? 1 : 0,
         status: newStatus,
-        rejectionReason: approved ? null : (notes || 'Rejected by Management'),
+        rejectionReason: approved ? null : (notes || 'Rejected by Shipping Site Management'),
       });
       await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
         'MANAGEMENT_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Management approved — sent to Finance' : 'Rejected', new_status: newStatus });
+    res.json({ message: approved ? 'Shipping management approved — sent to Receiving Management' : 'Rejected', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'management error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// POST /api/sto/:id/finance
-router.post('/:id/finance', async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/sto/:id/receiving-management  — receiving-site management approval
+router.post('/:id/receiving-management', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (!can(user, 'finance')) {
-    res.status(403).json({ message: 'Finance group required' }); return;
+  if (!can(user, 'management')) {
+    res.status(403).json({ message: 'Management group required' }); return;
   }
   const id = parseInt(req.params.id, 10);
   if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
-  const { approved, notes, igb_complete } = req.body as { approved: boolean; notes?: string; igb_complete?: boolean };
+  const { approved, notes } = req.body as { approved: boolean; notes?: string };
   if (typeof approved !== 'boolean') {
     res.status(400).json({ message: '`approved` must be a boolean' }); return;
   }
   try {
     const sto = await getSto(id);
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
-    if (sto.status !== 'FINANCE_REVIEW') {
-      res.status(400).json({ message: 'STO is not in Finance Review' }); return;
+    if (sto.status !== 'RECEIVING_MGMT_REVIEW') {
+      res.status(400).json({ message: 'STO is not in Receiving Management Review' }); return;
+    }
+    if (user.site !== sto.receiving_site) {
+      res.status(403).json({ message: 'Only the receiving site management can approve this step' }); return;
     }
     const newStatus: STOStatus = approved ? 'RECEIVING_LOGISTICS' : 'REJECTED';
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
-          finance_approved = @financeApproved,
-          finance_approved_by_user_id = @approvedBy,
-          finance_approved_at = GETDATE(),
-          finance_notes = @notes,
-          igb_complete = @igb_complete,
+          receiving_mgmt_approved = @receivingMgmtApproved,
+          receiving_mgmt_approved_by_user_id = @approvedBy,
+          receiving_mgmt_approved_at = GETDATE(),
+          receiving_mgmt_notes = @notes,
           status = @status,
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
         WHERE id = @id
       `, {
         id: sto.id,
-        financeApproved: approved ? 1 : 0,
+        receivingMgmtApproved: approved ? 1 : 0,
         approvedBy: null,
         notes: notes || null,
-        igb_complete: igb_complete ? 1 : 0,
         status: newStatus,
-        rejectionReason: approved ? null : (notes || 'Rejected by Finance'),
+        rejectionReason: approved ? null : (notes || 'Rejected by Receiving Site Management'),
       });
-      await logAudit(sto.id as number, approved ? 'FINANCE_APPROVED' : 'FINANCE_REJECTED',
-        'FINANCE_REVIEW', newStatus, user.name, notes, execute);
+      await logAudit(sto.id as number, approved ? 'RECEIVING_MGMT_APPROVED' : 'RECEIVING_MGMT_REJECTED',
+        'RECEIVING_MGMT_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Finance approved — sent to Receiving Logistics' : 'Rejected', new_status: newStatus });
+    res.json({ message: approved ? 'Receiving management approved — sent to Receiving Logistics' : 'Rejected', new_status: newStatus });
   } catch (err) {
-    logger.error({ err }, 'finance error');
+    logger.error({ err }, 'receiving-management error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });

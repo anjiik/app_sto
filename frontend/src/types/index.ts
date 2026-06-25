@@ -3,7 +3,6 @@ export type Group =
   | 'shipping_planning'
   | 'shipping_logistics'
   | 'management'
-  | 'finance'
   | 'receiving_logistics'
   | 'admin';
 
@@ -12,7 +11,7 @@ export type STOStatus =
   | 'PLANNING_REVIEW'
   | 'SHIPPING_LOGISTICS'
   | 'MANAGEMENT_REVIEW'
-  | 'FINANCE_REVIEW'
+  | 'RECEIVING_MGMT_REVIEW'
   | 'RECEIVING_LOGISTICS'
   | 'CLOSED'
   | 'REJECTED';
@@ -63,8 +62,8 @@ export interface STORequest {
   planning_notes?: string;
   management_approved?: boolean;
   management_notes?: string;
-  finance_approved?: boolean;
-  finance_notes?: string;
+  receiving_mgmt_approved?: boolean;
+  receiving_mgmt_notes?: string;
   sto_number?: string;
   shipment_id?: string;
   ready_to_ship?: boolean;

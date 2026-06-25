@@ -7,7 +7,6 @@ const GROUP_LABELS: Record<Group, string> = {
   shipping_planning:   'Shipping Planning',
   shipping_logistics:  'Shipping Logistics',
   management:          'Management',
-  finance:             'Finance',
   receiving_logistics: 'Receiving Logistics',
   admin:               'Admin',
 };
@@ -17,7 +16,6 @@ const GROUP_COLORS: Record<Group, string> = {
   shipping_planning:   'bg-amber-600',
   shipping_logistics:  'bg-teal-600',
   management:          'bg-purple-700',
-  finance:             'bg-green-700',
   receiving_logistics: 'bg-orange-600',
   admin:               'bg-red-700',
 };

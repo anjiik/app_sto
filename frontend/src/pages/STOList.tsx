@@ -41,16 +41,16 @@ function downloadCSV(rows: Record<string, unknown>[]): void {
 
 const ALL_STATUSES: STOStatus[] = [
   'DRAFT', 'PLANNING_REVIEW', 'SHIPPING_LOGISTICS',
-  'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED',
+  'MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED',
 ];
 
 const STATUS_LABELS: Record<STOStatus, string> = {
   DRAFT:               'Draft',
   PLANNING_REVIEW:     'Planning Review',
   SHIPPING_LOGISTICS:  'Shipping Logistics',
-  MANAGEMENT_REVIEW:   'Mgmt Review',
-  FINANCE_REVIEW:      'Finance Review',
-  RECEIVING_LOGISTICS: 'Receiving Logistics',
+  MANAGEMENT_REVIEW:    'Ship. Mgmt Review',
+  RECEIVING_MGMT_REVIEW:'Recv. Mgmt Review',
+  RECEIVING_LOGISTICS:  'Receiving Logistics',
   CLOSED:              'Closed',
   REJECTED:            'Rejected',
 };
