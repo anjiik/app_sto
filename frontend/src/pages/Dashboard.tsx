@@ -151,6 +151,8 @@ export function Dashboard() {
 
     const queueStatus = queueConfig.statuses[0];
 
+    const canSeeAudit = user.group === 'management' || user.group === 'admin';
+
     Promise.all([
       // 1. Pipeline stage counts — GROUP BY in SQL, zero rows transferred
       api.get('/analytics/by-status'),
@@ -161,10 +163,9 @@ export function Dashboard() {
       // 4. Rush alert items — active rush STOs for this site, top 4
       api.get(`/sto${qs({ rush_only: '1', active_only: '1', limit: '4' })}`),
       // 5. Need-by items — active STOs with a date, sorted most-urgent first, top 12
-      //    (used for both the overdue alert list and the upcoming need-by section)
       api.get(`/sto${qs({ has_need_by: '1', active_only: '1', sort: 'need_by_asc', limit: '12' })}`),
-      // 6. Recent audit activity
-      api.get('/sto/audit-log'),
+      // 6. Recent audit activity — management/admin only
+      canSeeAudit ? api.get('/sto/audit-log') : Promise.resolve({ data: [] }),
     ]).then(([byStatusRes, queueRes, kpisRes, rushRes, needByRes, auditRes]) => {
       const counts: Partial<Record<STOStatus, number>> = {};
       (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
