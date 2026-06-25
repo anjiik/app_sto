@@ -5,6 +5,7 @@ import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
+import { sendStoCompletedEmail } from '../lib/notify';
 
 const router = Router();
 router.use(authenticate);
@@ -303,6 +304,17 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
         body.actual_receipt_date ? `Received: ${body.actual_receipt_date}` : undefined,
         execute);
     });
+    if (newStatus === 'CLOSED') {
+      sendStoCompletedEmail({
+        sto_id:               sto.sto_id as string,
+        requestor_name:       sto.requestor_name as string,
+        requestor_email:      sto.requestor_email as string,
+        shipping_site:        sto.shipping_site as string | undefined,
+        receiving_site:       sto.receiving_site as string | undefined,
+        material_description: sto.material_description as string | undefined,
+        material_sap:         sto.material_sap as string | undefined,
+      });
+    }
     res.json({ message: newStatus === 'CLOSED' ? 'Delivery closed out' : 'Receipt updated', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'receiving-logistics error');
