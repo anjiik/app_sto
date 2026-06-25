@@ -179,17 +179,24 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // ── GET /api/sto/audit-log ────────────────────────────────────────────────────
 
 router.get('/audit-log', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (!can(req.user!, 'management')) {
-    res.status(403).json({ message: 'Management access required' }); return;
-  }
   try {
+    const user = req.user!;
+    let siteCondition: string;
+    if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
+      siteCondition = 'r.shipping_site = @site';
+    } else if (user.group === 'receiving_site' || user.group === 'receiving_logistics') {
+      siteCondition = 'r.receiving_site = @site';
+    } else {
+      siteCondition = '(r.shipping_site = @site OR r.receiving_site = @site)';
+    }
     const rows = await dbQuery<Record<string, unknown>>(`
       SELECT TOP 20 l.id, l.sto_request_id, r.sto_id, l.action, l.old_status, l.new_status,
              l.performed_by_name, l.notes, l.performed_at
       FROM sto_audit_log l
       JOIN sto_requests r ON r.id = l.sto_request_id
+      WHERE ${siteCondition}
       ORDER BY l.performed_at DESC
-    `);
+    `, { site: user.site });
     res.json(rows);
   } catch (err) {
     logger.error({ err }, 'audit-log GET error');
