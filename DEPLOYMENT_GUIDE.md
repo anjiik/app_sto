@@ -20,8 +20,9 @@ Step-by-step instructions for transferring and running the app on a new Windows 
 8. [Set up PM2 as a Windows service](#8-pm2-windows-service)
 9. [Set up IIS as a reverse proxy with HTTPS](#9-iis-reverse-proxy)
 10. [Windows Firewall](#10-windows-firewall)
-11. [Go live — final checklist](#11-go-live-checklist)
-12. [Troubleshooting](#12-troubleshooting)
+11. [Set up notification_relay (email notifications)](#11-notification-relay-setup)
+12. [Go live — final checklist](#12-go-live-checklist)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -130,8 +131,24 @@ Run each of these files **in order** (open in SSMS, execute against `sto_managem
 2. `C:\sto-management\backend\src\db\migrations\004_admin_audit.sql`
 3. `C:\sto-management\backend\src\db\migrations\005_fk_constraints.sql`
 4. `C:\sto-management\backend\src\db\migrations\006_remove_app_users.sql`
+5. `C:\sto-management\backend\src\db\migrations\007_receiving_mgmt_approval.sql`
+6. `C:\sto-management\backend\src\db\migrations\008_archive.sql`
 
-> Migration 003–005 create tables that 006 then immediately cleans up. On a brand-new install it's fine to run all four — each is idempotent. On an existing database that was running the older app_users version, running 006 will drop the `app_users` table and update the FK columns. Make sure no one is logged in when you run 006 on a live database.
+> Migration 003–005 create tables that 006 then immediately cleans up. On a brand-new install it's fine to run all six in order — each is safe to run on a fresh database. On an existing database, check which columns already exist before running 007 and 008 (see below).
+
+**Checking before running 007** (skip if column already exists):
+```sql
+SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'sto_requests' AND COLUMN_NAME = 'receiving_mgmt_approved';
+```
+If a row is returned, 007 is already applied — skip it.
+
+**Checking before running 008** (skip if column already exists):
+```sql
+SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'sto_requests' AND COLUMN_NAME = 'archived';
+```
+If a row is returned, 008 is already applied — skip it.
 
 ### 3d. Find your SQL Server name
 
@@ -178,44 +195,53 @@ Every group follows the pattern: **`{SITE}_{ROLE}`**
 
 | AD Group Name | Site | Role |
 |---|---|---|
-| `ABC_ADMIN` | ABC | Admin — full access at site ABC |
+| `ABC_ADMIN` | ABC | Admin — full access, all STOs visible |
 | `ABC_RECEIVING` | ABC | Receiving Site — creates STOs |
 | `ABC_PLANNING` | ABC | Shipping Planning — reviews and approves |
 | `ABC_LOGISTICS` | ABC | Shipping Logistics — handles shipping details |
-| `ABC_MANAGEMENT` | ABC | Management — oversight and approval |
-| `ABC_FINANCE` | ABC | Finance — final approval |
+| `ABC_MANAGEMENT` | ABC | Management — high-value approval (shipping and receiving side) |
 | `ABC_RECV_LOGISTICS` | ABC | Receiving Logistics — closes out deliveries |
 
 Repeat for each site. For example, if you have sites `ABC` and `XYZ`, you'd create:
 `ABC_ADMIN`, `ABC_RECEIVING`, ..., `XYZ_ADMIN`, `XYZ_RECEIVING`, etc.
 
+> **Note**: There is no Finance group. High-value approvals (material > $100,000 or freight > $20,000) go to Management at the shipping site first, then Management at the receiving site.
+
 ### 4b. What each role can do
 
 | Role | Can do |
 |---|---|
-| `ADMIN` | Everything at their site (edit any STO, revert steps). Only sees STOs involving their site. |
-| `RECEIVING` | Creates new STOs, edits drafts, sees STOs at their receiving site |
+| `ADMIN` | Everything — edit any STO, revert steps, run the data archive. Sees all STOs across all sites. |
+| `RECEIVING` | Creates new STOs, edits drafts |
 | `PLANNING` | Reviews STOs in Planning Review, approves/rejects, enters MPN/batch/expiry details |
 | `LOGISTICS` | Enters shipping details (freight cost, tracking, ship date) |
-| `MANAGEMENT` | Oversight approval for high-value STOs |
-| `FINANCE` | Final financial approval before receiving logistics closes |
+| `MANAGEMENT` | Approves high-value STOs — shipping site management approves first, then receiving site management |
 | `RECV_LOGISTICS` | Records receipt and closes out deliveries |
 
-### 4c. Site scoping rules
+### 4c. Approval thresholds for Management
 
-Every user is **always scoped to their site** — there is no cross-site visibility:
+Two management approvals are required (shipping site first, then receiving site) when **either**:
+- Material value > **$100,000**, OR
+- Freight cost > **$20,000**
 
-- `PLANNING` and `LOGISTICS` see STOs where **shipping_site = their site**
-- `RECEIVING` and `RECV_LOGISTICS` see STOs where **receiving_site = their site**
-- `ADMIN`, `MANAGEMENT`, `FINANCE` see STOs where **either site = their site**
+If neither threshold is met, the STO goes straight from Shipping Logistics → Receiving Logistics, skipping both Management steps.
 
-### 4d. Ask IT to create the groups
+### 4d. Site scoping rules
+
+All STOs are visible to all users — this is a centralized system. However, **action rights are site-specific**:
+
+- `PLANNING` and `LOGISTICS` can act on STOs where **shipping_site = their site**
+- `RECEIVING` and `RECV_LOGISTICS` can act on STOs where **receiving_site = their site**
+- `MANAGEMENT` can act on MANAGEMENT_REVIEW STOs where **shipping_site = their site**, and on RECEIVING_MGMT_REVIEW STOs where **receiving_site = their site**
+- `ADMIN` can act on any STO
+
+### 4e. Ask IT to create the groups
 
 Give IT this list of groups to create in Active Directory. For each site code in your `sites` table, IT needs to create the corresponding `_{ROLE}` groups and add the appropriate staff to each.
 
 **Important**: The group `CN` (common name) must follow the exact `{SITE}_{SUFFIX}` pattern. The `memberOf` attribute returned by LDAP is how the app determines the user's role and site.
 
-### 4e. What happens at login
+### 4f. What happens at login
 
 1. User enters their AD username and password
 2. App authenticates against AD (LDAP)
@@ -254,9 +280,18 @@ FRONTEND_ORIGIN=https://your-server-name.company.com
 DB_SERVER=MYSERVER\SQLEXPRESS
 DB_DATABASE=sto_management
 
-# Approval thresholds (USD) — change to match your business rules
-MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD=10000
-MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD=5000
+# Approval thresholds (USD) — dual management approval triggered when either is exceeded
+MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD=100000
+MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD=20000
+
+# ── Notification Relay (optional) ────────────────────────────────────────────
+# If set, emails the STO requestor when their request is closed/delivered.
+# Leave all blank to disable email notifications entirely.
+# See Section 11 for setup steps.
+NOTIFICATION_RELAY_URL=http://localhost:8080
+NOTIFICATION_RELAY_USER=your-ad-username
+NOTIFICATION_RELAY_PASSWORD=your-ad-password
+NOTIFICATION_RELAY_TEMPLATE=sto-completion
 
 # SET THIS TO false FOR PRODUCTION
 DEV_BYPASS=false
@@ -500,7 +535,164 @@ IIS on ports 80 and 443 should already have allow rules. If not, add them the sa
 
 ---
 
-## 11. Go Live Checklist
+## 11. Notification Relay Setup
+
+The notification relay is a separate Go service that sends email to the STO requestor when their request is delivered and closed. It is **optional** — the STO app works fully without it. Set it up when you're ready to enable email notifications.
+
+### 11a. Prerequisites
+
+Install **Go 1.25 or newer**:
+
+1. Go to [https://go.dev/dl](https://go.dev/dl) and download the Windows MSI
+2. Run the installer — accept defaults
+3. Verify in a new PowerShell window:
+   ```powershell
+   go version
+   ```
+
+### 11b. Build the relay
+
+```powershell
+cd C:\sto-management\notification_relay-main
+go build -o notification_relay.exe ./cmd/notification_relay
+```
+
+This produces `notification_relay.exe` in that folder. It takes 30–60 seconds the first time while Go downloads dependencies.
+
+### 11c. Create the config file
+
+Create a file called `config.yaml` inside `C:\sto-management\notification_relay-main\`:
+
+```yaml
+database:
+  path: C:\sto-management\notification_relay-main\relay.sqlite
+
+http:
+  listen_addr: ":8080"
+
+ldap:
+  primary_url: "ldap://ad.yourcompany.com"        # same LDAP server as backend
+  bind_dn: "svc_sto_app@yourcompany.com"           # same service account as backend LDAP_BIND_DN
+  bind_password: "${LDAP_PASS}"                    # set LDAP_PASS env var before running
+  user_base_dn: "OU=Users,DC=yourcompany,DC=com"
+  group_base_dn: "OU=Groups,DC=yourcompany,DC=com"
+  tls_skip_verify: false
+  roles:
+    admin:
+      - ABC_ADMIN          # AD group(s) whose members get relay admin access
+    publisher:
+      - ABC_MANAGEMENT     # AD group(s) allowed to send notifications (the STO app uses this)
+
+smtp:
+  host: smtp.yourcompany.com   # your outbound mail server — ask IT
+  port: 587
+  username: noreply@yourcompany.com
+  password: "${SMTP_PASS}"     # set SMTP_PASS env var before running
+  from_address: noreply@yourcompany.com
+  tls_mode: starttls           # use "none" if IT says your SMTP doesn't need TLS
+
+logging:
+  level: info
+  format: text
+```
+
+> **About `${LDAP_PASS}` and `${SMTP_PASS}`**: the config reads these from environment variables so passwords aren't stored in plain text. Set them in PowerShell before running the relay each time (or put them in the PM2 startup — see step 11e):
+> ```powershell
+> $env:LDAP_PASS = "your-service-account-password"
+> $env:SMTP_PASS = "your-smtp-password"
+> ```
+
+> **LDAP roles — what they mean for the relay**: The STO backend authenticates to the relay using the `NOTIFICATION_RELAY_USER` / `NOTIFICATION_RELAY_PASSWORD` from its `.env`. That AD user needs to be in one of the `publisher` groups listed above. The easiest option is to use your own AD admin account as `NOTIFICATION_RELAY_USER` during setup, or have IT add the service account to the publisher group.
+
+### 11d. First run — verify it starts
+
+```powershell
+cd C:\sto-management\notification_relay-main
+$env:LDAP_PASS = "your-service-account-password"
+$env:SMTP_PASS = "your-smtp-password"
+.\notification_relay.exe -config config.yaml
+```
+
+You should see:
+```
+INFO  database migrations applied
+INFO  HTTP server listening on :8080
+INFO  LDAP sync started
+```
+
+Open `http://localhost:8080/ui` in your browser — you'll get a login page. Sign in with any AD account that is in one of the relay `admin` groups.
+
+Press `Ctrl+C` to stop it once you've confirmed it starts.
+
+### 11e. Register the email template
+
+The relay needs the `sto-completion` email template created before it can send STO emails. Run this once with the relay running:
+
+**Make sure `backend\.env` has these filled in:**
+```env
+NOTIFICATION_RELAY_URL=http://localhost:8080
+NOTIFICATION_RELAY_USER=your-ad-username
+NOTIFICATION_RELAY_PASSWORD=your-ad-password
+NOTIFICATION_RELAY_TEMPLATE=sto-completion
+```
+
+**Then in a second PowerShell window:**
+```powershell
+cd C:\sto-management\backend
+npx ts-node --transpile-only scripts/register-notify-template.ts
+```
+
+Expected output:
+```
+Template registered successfully: ...
+```
+
+You can confirm the template exists at `http://localhost:8080/ui/templates`.
+
+If you get `401 Unauthorized`, the user in `NOTIFICATION_RELAY_USER` is not in a `publisher` or `admin` group on the relay — update the `roles` section in `config.yaml`.
+
+### 11f. Run the relay as a PM2 service
+
+So the relay starts automatically with the server, add it to PM2. Open **PowerShell as Administrator**:
+
+```powershell
+cd C:\sto-management\notification_relay-main
+
+pm2 start notification_relay.exe `
+  --name sto-relay `
+  --interpreter none `
+  -- -config config.yaml
+
+pm2 save
+```
+
+> **Passing the LDAP/SMTP passwords to PM2**: PM2 inherits the environment at the time you run `pm2 start`. The cleanest approach is to set the env vars before running that command:
+> ```powershell
+> $env:LDAP_PASS = "your-service-account-password"
+> $env:SMTP_PASS = "your-smtp-password"
+> pm2 start notification_relay.exe --name sto-relay --interpreter none -- -config config.yaml
+> pm2 save
+> ```
+
+Verify both services are running:
+```powershell
+pm2 list
+```
+You should see both `sto-backend` and `sto-relay` with status `online`.
+
+### 11g. Test end-to-end
+
+Take a test STO all the way through to **CLOSED** status. Within a few seconds, check:
+
+1. **Relay UI** at `http://localhost:8080/ui/events` — a new event should appear with a delivery record for the requestor's email address
+2. **Backend logs** (`pm2 logs sto-backend`) — no lines containing `notification relay error`
+3. **Relay logs** (`pm2 logs sto-relay`) — no SMTP errors
+
+If the event shows in the relay UI but no email arrives, the issue is the SMTP config — check `smtp.host`, `smtp.port`, and credentials in `config.yaml`.
+
+---
+
+## 12. Go Live Checklist
 
 Work through each item before telling users the system is live.
 
@@ -519,7 +711,7 @@ Work through each item before telling users the system is live.
 - [ ] Login attempt with an account NOT in any app group is denied with the expected error message
 
 ### Database
-- [ ] All four migration files ran without errors (003, 004, 005, 006)
+- [ ] All six migration files ran without errors (003, 004, 005, 006, 007, 008)
 - [ ] Your real site codes are in the `sites` table and match the prefixes in your AD group names
 - [ ] `GET http://localhost:4000/api/health` returns `{"status":"ok"}`
 
@@ -529,17 +721,25 @@ Work through each item before telling users the system is live.
 - [ ] Can log in with an AD account that is in one of the `{SITE}_{ROLE}` groups
 - [ ] App goes straight to Dashboard (no site-picker step — site comes from AD group)
 - [ ] Nav bar shows the correct name, role label, and site
-- [ ] Create a test STO, submit it, approve through one step
+- [ ] All STOs from all sites are visible in the STO list (centralized view)
+- [ ] Create a test STO with material value > $100,000 — confirm it routes to Management Review after Shipping Logistics
 - [ ] Analytics page loads
 
 ### PM2
-- [ ] `pm2 list` shows `sto-backend` as `online`
-- [ ] Reboot the server and confirm PM2 and Node restart automatically
+- [ ] `pm2 list` shows `sto-backend` as `online` (and `sto-relay` if notification relay is set up)
+- [ ] Reboot the server and confirm PM2 and both services restart automatically
 - [ ] After reboot, `http://localhost:4000/api/health` still returns ok
+
+### Notification relay (if set up)
+- [ ] `http://localhost:8080/ui` loads and login works
+- [ ] `sto-completion` template exists at `http://localhost:8080/ui/templates`
+- [ ] `NOTIFICATION_RELAY_URL/USER/PASSWORD` are set in `backend\.env`
+- [ ] Closing a test STO produces an event in the relay UI at `http://localhost:8080/ui/events`
+- [ ] The requestor receives the email
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### "Cannot find module" or compile errors on `npm install`
 
@@ -595,6 +795,15 @@ IIS can't reach the backend on port 4000.
 3. If 404, the URL Rewrite rules aren't working — double check the `web.config` is in `frontend\dist\`
 4. If the page is blank, check if `index.html` is being served — visit `https://your-server/index.html` directly
 
+### Notification relay — email not arriving
+
+1. Check the relay UI at `http://localhost:8080/ui/events` — does the event appear? If yes, the STO app side is working and the problem is SMTP delivery.
+2. Check relay logs: `pm2 logs sto-relay` — look for SMTP errors.
+3. Verify SMTP settings in `config.yaml` — host, port, username, password, tls_mode. Try port 25 with `tls_mode: none` if 587/starttls doesn't work on your network.
+4. Check the backend logs: `pm2 logs sto-backend` — look for lines with `notification relay error`. This means the relay rejected the request.
+5. If `pm2 logs sto-backend` shows `401`, the `NOTIFICATION_RELAY_USER/PASSWORD` in `backend\.env` isn't in a `publisher` or `admin` group in `config.yaml` → add that AD group to `roles.publisher` in the relay config and restart: `pm2 restart sto-relay`.
+6. If the event doesn't appear in the relay UI at all, the backend couldn't reach the relay — check `NOTIFICATION_RELAY_URL` in `backend\.env` and confirm `pm2 list` shows `sto-relay` as `online`.
+
 ### How to update the app after a code change
 
 **Option A — pull from GitHub** (if the server has internet):
@@ -644,5 +853,11 @@ Only restart IIS (`iisreset`) if you changed the `web.config`.
 | Restart IIS | `iisreset` |
 | Rebuild frontend | `cd frontend && set VITE_API_URL=... && npm run build` |
 | Rebuild backend | `cd backend && npm run build && pm2 restart sto-backend` |
-| AD group format | `{SITE}_{ROLE}` e.g. `ABC_ADMIN`, `ABC_RECEIVING` |
+| AD group format | `{SITE}_{ROLE}` e.g. `ABC_ADMIN`, `ABC_RECEIVING` (no Finance group) |
+| Management threshold | Material > $100,000 OR freight > $20,000 triggers dual management approval |
 | Force all re-login | Change `JWT_SECRET` in `.env`, run `pm2 restart sto-backend` |
+| Relay UI | `http://localhost:8080/ui` |
+| Relay logs | `pm2 logs sto-relay` |
+| Relay config | `C:\sto-management\notification_relay-main\config.yaml` |
+| Restart relay | `pm2 restart sto-relay` |
+| Register email template | `cd backend && npx ts-node --transpile-only scripts/register-notify-template.ts` |
