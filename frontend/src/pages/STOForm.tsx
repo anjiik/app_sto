@@ -27,17 +27,40 @@ function toDate(v: string | null | undefined): string {
   return v ? v.slice(0, 10) : '';
 }
 
+function addDays(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const SHIPPING_CONDITIONS = ['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen'] as const;
+const COLD_MGMT_CONDITIONS = new Set(['Cold below 0', 'Frozen']);
+
 export function STOForm() {
   const { id } = useParams<{ id?: string }>();
   const isEdit = !!id;
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<FormData>();
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
 
-  const rushRequest = watch('rush_request');
+  const rushRequest        = watch('rush_request');
+  const priority           = watch('priority');
+  const shippingConditions = watch('shipping_conditions') as string | undefined;
+  const materialValue      = watch('material_value');
+
+  // Auto-populate standard estimated ship date from priority (new forms only)
+  useEffect(() => {
+    if (isEdit) return;
+    const p = String(priority || '3');
+    const days = p === '1' ? 15 : p === '2' ? 30 : 45;
+    setValue('standard_estimated_ship_date', addDays(days));
+  }, [priority, setValue, isEdit]);
+
+  const coldShipping  = COLD_MGMT_CONDITIONS.has(shippingConditions ?? '');
+  const mgmtByValue   = parseFloat(String(materialValue || 0)) > 100000;
 
   useEffect(() => {
     if (!isEdit) return;
@@ -69,7 +92,6 @@ export function STOForm() {
           shipping_conditions:           s.shipping_conditions ?? '',
           material_value:                s.material_value ?? '',
           controlled_shipping_required:  Boolean(s.controlled_shipping_required),
-          insurance_loss_required:       Boolean(s.insurance_loss_required),
           sto_number:                    s.sto_number ?? '',
           shipment_id:                   s.shipment_id ?? '',
           corporate_sto_tracker_status:  s.corporate_sto_tracker_status ?? '',
@@ -95,16 +117,16 @@ export function STOForm() {
         navigate(`/sto/${res.data.id}`);
       }
     } catch (err: unknown) {
-      const data = err && typeof err === 'object' && 'response' in err
+      const resData = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response?.data
         : undefined;
-      if (data?.errors) {
-        const fieldErrors = Object.entries(data.errors)
+      if (resData?.errors) {
+        const fieldErrors = Object.entries(resData.errors)
           .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(', ')}`)
           .join('\n');
         setError(`Validation failed:\n${fieldErrors}`);
       } else {
-        setError(data?.message || (isEdit ? 'Failed to update STO' : 'Failed to create STO'));
+        setError(resData?.message || (isEdit ? 'Failed to update STO' : 'Failed to create STO'));
       }
     } finally {
       setSaving(false);
@@ -138,6 +160,7 @@ export function STOForm() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+
           {/* Requestor Info */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="font-semibold text-gray-800 border-b pb-2">Requestor Information</h2>
@@ -158,7 +181,7 @@ export function STOForm() {
               <Field label="Priority" required>
                 <select {...register('priority', { required: true })} className={INPUT}>
                   <option value="3">3 – Standard (45 days)</option>
-                  <option value="2">2 – Expedited</option>
+                  <option value="2">2 – Expedited (30 days)</option>
                   <option value="1">1 – Urgent (15 days)</option>
                 </select>
               </Field>
@@ -174,8 +197,13 @@ export function STOForm() {
               <Field label="Receiving Site" required hint="Site shipping TO">
                 <input {...register('receiving_site', { required: true })} className={INPUT} placeholder="Plant B" />
               </Field>
-              <Field label="Standard Estimated Ship Date">
-                <input type="date" {...register('standard_estimated_ship_date')} className={INPUT} />
+              <Field label="Standard Estimated Ship Date" hint={`Auto-calculated from priority (P1=15d, P2=30d, P3=45d)`}>
+                <input
+                  type="date"
+                  {...register('standard_estimated_ship_date')}
+                  readOnly
+                  className={`${INPUT} bg-gray-50 cursor-not-allowed`}
+                />
               </Field>
               <Field label="Receiving Site Need By Date" required>
                 <input type="date" {...register('receiving_site_need_by_date', { required: true })} className={INPUT} />
@@ -215,14 +243,28 @@ export function STOForm() {
           <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="font-semibold text-gray-800 border-b pb-2">Material Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Material SAP #" required>
-                <input {...register('material_sap', { required: true })} className={INPUT} placeholder="SAP Material Number" />
+              <Field label="Material SAP #" required hint="Must be exactly 8 digits">
+                <input
+                  {...register('material_sap', {
+                    required: 'SAP material number is required',
+                    pattern: { value: /^\d{8}$/, message: 'Must be exactly 8 digits' },
+                  })}
+                  className={INPUT}
+                  placeholder="12345678"
+                  maxLength={8}
+                />
+                {errors.material_sap && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.material_sap.message)}</p>
+                )}
               </Field>
               <Field label="Material Description" required>
                 <input {...register('material_description', { required: true })} className={INPUT} placeholder="Full material description" />
               </Field>
-              <Field label="Brand at Receiving Site">
-                <input {...register('brand_at_receiving_site')} className={INPUT} />
+              <Field label="Brand at Receiving Site" required>
+                <input {...register('brand_at_receiving_site', { required: 'Brand at receiving site is required' })} className={INPUT} />
+                {errors.brand_at_receiving_site && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.brand_at_receiving_site.message)}</p>
+                )}
               </Field>
               <Field label="INCO Terms" hint="e.g. EXW, FOB, CIF, DAP">
                 <input {...register('inco_terms')} className={INPUT} placeholder="e.g. EXW, FOB" />
@@ -233,11 +275,42 @@ export function STOForm() {
               <Field label="UOM" required hint="Unit of Measure">
                 <input {...register('uom', { required: true })} className={INPUT} placeholder="e.g. EA, KG, LT" />
               </Field>
-              <Field label="Shipping Conditions" hint="Temp/restrictions">
-                <input {...register('shipping_conditions')} className={INPUT} placeholder="e.g. 2–8°C, Fragile" />
+              <Field label="Shipping Conditions" required>
+                <select {...register('shipping_conditions', { required: 'Shipping condition is required' })} className={INPUT}>
+                  <option value="">— Select —</option>
+                  {SHIPPING_CONDITIONS.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                {errors.shipping_conditions && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.shipping_conditions.message)}</p>
+                )}
+                {coldShipping && (
+                  <p className="text-orange-600 text-xs mt-1 font-medium">
+                    ⚠ Cold-chain shipments require management approval from both shipping and receiving sites.
+                  </p>
+                )}
               </Field>
-              <Field label="Material Value (USD)" hint="Used for management approval threshold">
-                <input type="number" step="0.01" {...register('material_value')} className={INPUT} placeholder="0.00" />
+              <Field
+                label="Material Value (USD)"
+                required
+                hint="Material value > $100,000 OR freight cost > $20,000 OR freight cost > 30% of material value will require management approval."
+              >
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register('material_value', { required: 'Material value is required', min: { value: 0, message: 'Must be 0 or greater' } })}
+                  className={INPUT}
+                  placeholder="0.00"
+                />
+                {errors.material_value && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.material_value.message)}</p>
+                )}
+                {mgmtByValue && (
+                  <p className="text-orange-600 text-xs mt-1 font-medium">
+                    ⚠ Material value exceeds $100,000 — management approval will be required.
+                  </p>
+                )}
               </Field>
             </div>
             <div className="flex flex-wrap gap-6">
@@ -245,16 +318,13 @@ export function STOForm() {
                 <input type="checkbox" {...register('controlled_shipping_required')} className="w-4 h-4 text-blue-600 rounded" />
                 <span className="text-sm text-gray-700">Controlled Shipping Required</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" {...register('insurance_loss_required')} className="w-4 h-4 text-blue-600 rounded" />
-                <span className="text-sm text-gray-700">Insurance Loss Required</span>
-              </label>
             </div>
           </div>
 
           {/* Tracking Reference */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="font-semibold text-gray-800 border-b pb-2">Tracking Reference</h2>
+            <p className="text-xs text-gray-400">These can be filled in now or updated later by you or an admin.</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field label="STO Number" hint="SAP STO reference number">
                 <input {...register('sto_number')} className={INPUT} placeholder="e.g. STO-PA-2026-0001" />

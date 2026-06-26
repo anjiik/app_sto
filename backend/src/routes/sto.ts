@@ -38,7 +38,7 @@ const stoBaseObject = z.object({
   // Required on create, optional on update (schema is .partial()-ed for PUT)
   shipping_site:        z.string().min(1, 'Shipping site is required'),
   receiving_site:       z.string().min(1, 'Receiving site is required'),
-  material_sap:         z.string().min(1, 'SAP material number is required'),
+  material_sap:         z.string().regex(/^\d{8}$/, 'SAP material number must be exactly 8 digits'),
   material_description: z.string().min(1, 'Material description is required'),
   quantity:             z.coerce.number().positive('Quantity must be a positive number'),
   uom:                  z.string().min(1, 'Unit of measure is required'),
@@ -55,10 +55,10 @@ const stoBaseObject = z.object({
   toll_mfg:                          z.boolean().optional().default(false),
   requestor_name:                    z.string().optional(),
   requestor_email:                   z.string().optional(),
-  shipping_conditions:               z.string().nullish(),
+  shipping_conditions:               z.enum(['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen'], { message: 'Select a valid shipping condition' }),
   controlled_shipping_required:      z.boolean().optional().default(false),
-  brand_at_receiving_site:           z.string().nullish(),
-  material_value:                    z.coerce.number().min(0).optional(),
+  brand_at_receiving_site:           z.string().min(1, 'Brand at receiving site is required'),
+  material_value:                    z.coerce.number().min(0, 'Material value is required'),
   insurance_loss_required:           z.boolean().optional().default(false),
   rush_reason:                       z.string().nullish(),
   receiving_site_need_by_date:       z.string().nullish(),
@@ -475,6 +475,52 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
     res.json({ message: 'Updated' });
   } catch (err) {
     logger.error({ err }, 'sto PUT error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ── PATCH /api/sto/:id/tracking ───────────────────────────────────────────────
+// Allows the original requestor or admin to update tracking reference fields
+// at any point in the workflow (not restricted to DRAFT status).
+
+router.patch('/:id/tracking', writeLimit, async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  const user = req.user!;
+
+  try {
+    const existing = await dbQueryOne<{ requestor_name: string }>(
+      'SELECT requestor_name FROM sto_requests WHERE id = @id AND archived = 0',
+      { id },
+    );
+    if (!existing) { res.status(404).json({ message: 'STO not found' }); return; }
+
+    if (!can(user, 'admin') && user.name !== existing.requestor_name) {
+      res.status(403).json({ message: 'Only the requestor or an admin can update tracking references' }); return;
+    }
+
+    const { sto_number, shipment_id, corporate_sto_tracker_status } = req.body as {
+      sto_number?: string; shipment_id?: string; corporate_sto_tracker_status?: string;
+    };
+
+    await dbExecute(
+      `UPDATE sto_requests SET
+        sto_number = @sto_number,
+        shipment_id = @shipment_id,
+        corporate_sto_tracker_status = @corporate_sto_tracker_status,
+        updated_at = GETDATE()
+      WHERE id = @id`,
+      {
+        id,
+        sto_number: sto_number || null,
+        shipment_id: shipment_id || null,
+        corporate_sto_tracker_status: corporate_sto_tracker_status || null,
+      },
+    );
+
+    res.json({ message: 'Tracking reference updated' });
+  } catch (err) {
+    logger.error({ err }, 'tracking patch error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });

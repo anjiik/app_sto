@@ -161,9 +161,11 @@ export function STODetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const [planningForm, setPlanningForm] = useState<Record<string, string>>({});
+  const [planningForm,  setPlanningForm]  = useState<Record<string, string>>({});
   const [logisticsForm, setLogisticsForm] = useState<Record<string, string | boolean>>({});
-  const [recvForm, setRecvForm] = useState<Record<string, string | boolean>>({});
+  const [recvForm,      setRecvForm]      = useState<Record<string, string | boolean>>({});
+  const [trackingForm,  setTrackingForm]  = useState<Record<string, string>>({});
+  const [editTracking,  setEditTracking]  = useState(false);
 
   function load() {
     setLoading(true);
@@ -192,15 +194,16 @@ export function STODetail() {
   if (!sto) return <Layout><div className="p-12 text-center text-red-500">STO not found</div></Layout>;
 
   const g = user?.group;
+  const isRequestor = user?.name === sto.requestor_name;
 
   // Who is active right now?
   const myTurn = (
-    (g === 'receiving_site'     && sto.status === 'DRAFT') ||
-    (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW') ||
-    (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS') ||
+    ((isRequestor || g === 'admin') && sto.status === 'DRAFT') ||
+    (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW'      && user?.site === sto.shipping_site) ||
+    (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'   && user?.site === sto.shipping_site) ||
     (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW'     && user?.site === sto.shipping_site) ||
     (g === 'management'         && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site) ||
-    (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS')
+    (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS'  && user?.site === sto.receiving_site)
   );
 
   return (
@@ -221,7 +224,7 @@ export function STODetail() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {(g === 'receiving_site' || g === 'admin') && sto.status === 'DRAFT' && (
+            {sto.status === 'DRAFT' && (
               <button
                 onClick={() => doAction('submit', {})}
                 disabled={actionLoading}
@@ -311,8 +314,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 2: Shipping Planning Review ── */}
-        <Section title="Shipping Site Planning Review" icon="🗂️" active={g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW'}>
-          {g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' ? (
+        <Section title="Shipping Site Planning Review" icon="🗂️" active={g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && user?.site === sto.shipping_site}>
+          {g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && user?.site === sto.shipping_site ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Complete the inventory review fields below, then approve or reject.</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -342,9 +345,9 @@ export function STODetail() {
                 </div>
               </div>
               {sto.material_value != null && (
-                <div className={`px-4 py-2 rounded-lg text-sm ${sto.material_value > 10000 ? 'bg-orange-50 border border-orange-200 text-orange-800' : 'bg-gray-50 border border-gray-200 text-gray-600'}`}>
+                <div className={`px-4 py-2 rounded-lg text-sm ${sto.material_value > 100000 ? 'bg-orange-50 border border-orange-200 text-orange-800' : 'bg-gray-50 border border-gray-200 text-gray-600'}`}>
                   Material Value: <strong>${Number(sto.material_value).toLocaleString()}</strong>
-                  {sto.material_value > 10000 && ' — Management approval will be required'}
+                  {sto.material_value > 100000 && ' — Management approval will be required (value > $100,000)'}
                 </div>
               )}
               <ApprovalPanel
@@ -367,10 +370,10 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 3: Shipping Logistics ── */}
-        <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'}>
-          {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' ? (
+        <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site}>
+          {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Fill in the shipment details, then submit to send to Management review (if thresholds exceeded) or Receiving Logistics.</p>
+              <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold/frozen shipping, or freight cost &gt; 30% of material value.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton' },
@@ -392,7 +395,7 @@ export function STODetail() {
                     onChange={e => setLogisticsForm(p => ({ ...p, freight_cost: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Management approval required if &gt;$5,000</p>
+                  <p className="text-xs text-gray-400 mt-1">Management approval required if &gt;$20,000 or &gt;30% of material value</p>
                 </div>
                 {[
                   { key: 'pgi_date',               label: 'PGI Date (Goods Issued from SAP)' },
@@ -416,7 +419,7 @@ export function STODetail() {
                 disabled={actionLoading}
                 className="bg-teal-700 text-white px-5 py-2 rounded-lg hover:bg-teal-800 font-medium text-sm disabled:opacity-50"
               >
-                Submit to Management Review →
+                Submit Logistics →
               </button>
             </div>
           ) : (
@@ -465,8 +468,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 6: Receiving Logistics ── */}
-        <Section title="Receiving Site Logistics" icon="🏭" active={g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS'}>
-          {g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' ? (
+        <Section title="Receiving Site Logistics" icon="🏭" active={g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && user?.site === sto.receiving_site}>
+          {g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && user?.site === sto.receiving_site ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Confirm receipt details and close out the delivery.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -496,6 +499,84 @@ export function STODetail() {
             </div>
           )}
         </Section>
+
+        {/* ── Tracking Reference (editable by requestor or admin) ── */}
+        {(isRequestor || g === 'admin') && (
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-800">Tracking Reference</h3>
+              {!editTracking && (
+                <button
+                  onClick={() => {
+                    setTrackingForm({
+                      sto_number: sto.sto_number ?? '',
+                      shipment_id: sto.shipment_id ?? '',
+                      corporate_sto_tracker_status: sto.corporate_sto_tracker_status ?? '',
+                    });
+                    setEditTracking(true);
+                  }}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+            {editTracking ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { key: 'sto_number',                  label: 'STO Number' },
+                    { key: 'shipment_id',                 label: 'Shipment ID' },
+                    { key: 'corporate_sto_tracker_status', label: 'Corporate STO Tracker Status' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                      <input
+                        value={trackingForm[f.key] ?? ''}
+                        onChange={e => setTrackingForm(p => ({ ...p, [f.key]: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={actionLoading}
+                    onClick={async () => {
+                      setActionLoading(true);
+                      setMessage(null);
+                      try {
+                        await api.patch(`/sto/${id}/tracking`, trackingForm);
+                        setMessage({ text: 'Tracking reference updated', ok: true });
+                        setEditTracking(false);
+                        load();
+                      } catch (err: unknown) {
+                        const msg = err && typeof err === 'object' && 'response' in err
+                          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+                          : 'Error';
+                        setMessage({ text: msg || 'Error', ok: false });
+                      } finally {
+                        setActionLoading(false);
+                      }
+                    }}
+                    className="bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-800 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setEditTracking(false)} className="text-gray-500 hover:text-gray-700 px-3 text-sm">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                <div><span className="text-xs text-gray-400 block">STO Number</span>{sto.sto_number || '–'}</div>
+                <div><span className="text-xs text-gray-400 block">Shipment ID</span>{sto.shipment_id || '–'}</div>
+                <div><span className="text-xs text-gray-400 block">Corporate Tracker Status</span>{sto.corporate_sto_tracker_status || '–'}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Audit Log ── */}
         {sto.audit_log && sto.audit_log.length > 0 && (

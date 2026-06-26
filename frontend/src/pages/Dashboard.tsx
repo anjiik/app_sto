@@ -148,18 +148,26 @@ export function Dashboard() {
       return s ? `?${s}` : '';
     }
 
-    // Management users have two pending-action buckets: shipping-site MANAGEMENT_REVIEW
-    // and receiving-site RECEIVING_MGMT_REVIEW. Fetch both and combine.
-    const queueFetch = user.group === 'management'
-      ? Promise.all([
-          api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${user.site}&limit=20`),
-          api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${user.site}&limit=20`),
-        ]).then(([mgmt, recvMgmt]) => {
-          const combined = [...mgmt.data.data, ...recvMgmt.data.data];
-          const total = mgmt.data.pagination.total + recvMgmt.data.pagination.total;
-          return { data: { data: combined, pagination: { total } } };
-        })
-      : api.get(`/sto${qs({ status: queueConfig.statuses[0], limit: '20' })}`);
+    // Each group's queue is scoped to their site. Management has two buckets.
+    let queueFetch: Promise<{ data: { data: STORequest[]; pagination: { total: number } } }>;
+    if (user.group === 'management') {
+      queueFetch = Promise.all([
+        api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${user.site}&limit=20`),
+        api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${user.site}&limit=20`),
+      ]).then(([mgmt, recvMgmt]) => {
+        const combined = [...mgmt.data.data, ...recvMgmt.data.data];
+        const total = mgmt.data.pagination.total + recvMgmt.data.pagination.total;
+        return { data: { data: combined, pagination: { total } } };
+      });
+    } else if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
+      queueFetch = api.get(`/sto?status=${queueConfig.statuses[0]}&shipping_site=${user.site}&limit=20`);
+    } else if (user.group === 'receiving_logistics') {
+      queueFetch = api.get(`/sto?status=RECEIVING_LOGISTICS&receiving_site=${user.site}&limit=20`);
+    } else if (user.group === 'receiving_site') {
+      queueFetch = api.get(`/sto?status=DRAFT&receiving_site=${user.site}&limit=20`);
+    } else {
+      queueFetch = api.get(`/sto${qs({ status: queueConfig.statuses[0], limit: '20' })}`);
+    }
 
     Promise.all([
       // 1. Pipeline stage counts — GROUP BY in SQL, zero rows transferred
@@ -249,11 +257,9 @@ export function Dashboard() {
               </span>
             </div>
           </div>
-          {user?.group === 'receiving_site' && (
-            <Link to="/sto/new" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 font-medium text-sm">
-              + New STO Request
-            </Link>
-          )}
+          <Link to="/sto/new" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 font-medium text-sm">
+            + New STO Request
+          </Link>
         </div>
 
         {/* ── KPI Cards ── */}

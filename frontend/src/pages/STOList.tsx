@@ -58,7 +58,7 @@ const STATUS_LABELS: Record<STOStatus, string> = {
 const PAGE_SIZE = 50;
 
 export function STOList() {
-  const { user } = useAuth();
+  useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [stos,          setStos]          = useState<STORequest[]>([]);

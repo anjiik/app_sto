@@ -18,9 +18,6 @@ async function getSto(id: number): Promise<Record<string, unknown> | undefined> 
 // POST /api/sto/:id/submit
 router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (!can(user, 'receiving_site')) {
-    res.status(403).json({ message: 'Only the Receiving Site can submit STOs' }); return;
-  }
   const id = parseInt(req.params.id, 10);
   if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
   try {
@@ -123,7 +120,14 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const materialValue = parseFloat(String(sto.material_value || '0'));
     const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000');
     const freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000');
-    const mgmtRequired = materialValue > matThreshold || freightCost > freightThreshold;
+    const COLD_CONDITIONS = ['Cold below 0', 'Frozen'];
+    const isColdShipping = COLD_CONDITIONS.includes(String(sto.shipping_conditions || ''));
+    const freightToValueRatio = materialValue > 0 ? freightCost / materialValue : 0;
+    const mgmtRequired =
+      materialValue > matThreshold ||
+      freightCost > freightThreshold ||
+      isColdShipping ||
+      freightToValueRatio > 0.30;
     const newStatus: STOStatus = mgmtRequired ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS';
 
     await withTransaction(async (execute) => {
@@ -152,8 +156,14 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         management_approval_required: mgmtRequired ? 1 : 0,
         status: newStatus,
       });
+      const reasons = [
+        materialValue > matThreshold     && `material $${materialValue.toLocaleString()} > threshold`,
+        freightCost > freightThreshold    && `freight $${freightCost.toLocaleString()} > threshold`,
+        isColdShipping                    && `cold shipping (${sto.shipping_conditions})`,
+        freightToValueRatio > 0.30        && `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
+      ].filter(Boolean).join('; ');
       await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.name,
-        `Freight: $${freightCost}. Dual mgmt approval ${mgmtRequired ? 'required' : 'not required'}.`, execute);
+        `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? `required — ${reasons}` : 'not required'}.`, execute);
     });
     res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Receiving Logistics', new_status: newStatus });
   } catch (err) {
