@@ -95,10 +95,17 @@ export function STOForm() {
         navigate(`/sto/${res.data.id}`);
       }
     } catch (err: unknown) {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+      const data = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response?.data
         : undefined;
-      setError(msg || (isEdit ? 'Failed to update STO' : 'Failed to create STO'));
+      if (data?.errors) {
+        const fieldErrors = Object.entries(data.errors)
+          .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(', ')}`)
+          .join('\n');
+        setError(`Validation failed:\n${fieldErrors}`);
+      } else {
+        setError(data?.message || (isEdit ? 'Failed to update STO' : 'Failed to create STO'));
+      }
     } finally {
       setSaving(false);
     }
@@ -127,7 +134,7 @@ export function STOForm() {
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">{error}</div>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 whitespace-pre-line">{error}</div>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
