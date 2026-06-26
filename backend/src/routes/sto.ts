@@ -49,7 +49,7 @@ const stoBaseObject = z.object({
   expedited_estimated_ship_date:     z.string().nullish(),
   repeat_shipment_calendar_year:     z.string().nullish(),
   rush_request:                      z.boolean().optional().default(false),
-  priority:                          z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().default(3),
+  priority:                          z.coerce.number().int().min(1).max(3).optional().default(3),
   public_holiday:                    z.boolean().optional().default(false),
   requesting_plant:                  z.string().optional(),
   toll_mfg:                          z.boolean().optional().default(false),
