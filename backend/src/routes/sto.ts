@@ -298,9 +298,6 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (!can(user, 'receiving_site')) {
-    res.status(403).json({ message: 'Only the Receiving Site can create STOs' }); return;
-  }
 
   const parsed = createStoSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -388,9 +385,6 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
   if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
 
   const user = req.user!;
-  if (!can(user, 'receiving_site')) {
-    res.status(403).json({ message: 'Only the Receiving Site can edit STOs' }); return;
-  }
 
   const parsed = updateStoSchema.safeParse(req.body);
   if (!parsed.success) {
