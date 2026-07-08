@@ -242,13 +242,25 @@ export function STODetail() {
               </button>
             )}
             {g === 'admin' && sto.status !== 'DRAFT' && (
-              <button
-                onClick={() => { if (window.confirm(`Revert this STO one step back from ${sto.status}?`)) doAction('revert', {}); }}
-                disabled={actionLoading}
-                className="bg-white border border-red-300 text-red-700 px-4 py-2.5 rounded-lg hover:bg-red-50 font-medium text-sm disabled:opacity-50"
-              >
-                Revert One Step
-              </button>
+              <>
+                <button
+                  onClick={() => { if (window.confirm(`Revert this STO one step back from ${sto.status}?`)) doAction('revert', {}); }}
+                  disabled={actionLoading}
+                  className="bg-white border border-red-300 text-red-700 px-4 py-2.5 rounded-lg hover:bg-red-50 font-medium text-sm disabled:opacity-50"
+                >
+                  Revert One Step
+                </button>
+                <button
+                  onClick={() => {
+                    const reason = window.prompt('Reason for sending this STO back a step (required):');
+                    if (reason && reason.trim()) doAction('send-back', { reason: reason.trim() });
+                  }}
+                  disabled={actionLoading}
+                  className="bg-white border border-amber-300 text-amber-700 px-4 py-2.5 rounded-lg hover:bg-amber-50 font-medium text-sm disabled:opacity-50"
+                >
+                  Send Back a Step
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -271,6 +283,21 @@ export function STODetail() {
         {/* Timeline */}
         <Timeline status={sto.status} />
 
+        {/* Shipment tracking preview — key reference IDs at a glance */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'STO Number', value: sto.sto_number },
+            { label: 'Shipment ID', value: sto.shipment_id },
+            { label: 'STO Tracker ID', value: sto.tracking_id },
+            { label: 'Corporate Tracker Status', value: sto.corporate_sto_tracker_status },
+          ].map(item => (
+            <div key={item.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wider text-gray-400">{item.label}</div>
+              <div className="text-sm font-semibold text-gray-800 mt-0.5 font-mono break-all">{item.value || '–'}</div>
+            </div>
+          ))}
+        </div>
+
         {/* ── SECTION 1: Request & Material Info (Receiving Site fills) ── */}
         <Section title="Request &amp; Material Information" icon="📋" active={g === 'receiving_site' && sto.status === 'DRAFT'}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
@@ -286,8 +313,6 @@ export function STODetail() {
               <Row label="Request Date" value={fmt(sto.request_date)} />
               <Row label="Need By Date" value={fmt(sto.receiving_site_need_by_date)} />
               <Row label="Std. Est. Ship Date" value={fmt(sto.standard_estimated_ship_date)} />
-              <Row label="Est. Ship By" value={fmt(sto.estimated_ship_by_date)} />
-              <Row label="Expedited Ship Date" value={fmt(sto.expedited_estimated_ship_date)} />
               <Row label="Repeat Shipment Year" value={sto.repeat_shipment_calendar_year} />
             </div>
             <div>
@@ -308,6 +333,7 @@ export function STODetail() {
               <Row label="Public Holiday" value={sto.public_holiday} />
               <Row label="Toll MFG" value={sto.toll_mfg} />
               <Row label="Controlled Shipping" value={sto.controlled_shipping_required} />
+              {sto.controlled_shipping_required && <Row label="Controlled Shipping Notes" value={sto.controlled_shipping_notes} />}
               <Row label="Insurance Loss Req." value={sto.insurance_loss_required} />
             </div>
           </div>
@@ -373,16 +399,24 @@ export function STODetail() {
         <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site}>
           {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold/frozen shipping, or freight cost &gt; 30% of material value.</p>
+              {sto.mgmt_confirmed ? (
+                <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-lg text-sm">
+                  Management has approved. Review and confirm the shipment details below (edit anything that changed), then continue to Receiving.
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold/frozen shipping, or freight cost &gt; 30% of material value.</p>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton' },
-                  { key: 'tracking_id',            label: 'Tracking ID',                           placeholder: '' },
+                  { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton', prefill: sto.container_information },
+                  { key: 'tracking_id',            label: 'STO Tracker ID',                        placeholder: '', prefill: sto.tracking_id },
+                  { key: 'shipment_id',            label: 'Shipment ID',                           placeholder: 'e.g. SHP-20001', prefill: sto.shipment_id },
                 ].map(f => (
                   <div key={f.key}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
                     <input
                       placeholder={f.placeholder}
+                      defaultValue={(f.prefill as string) ?? ''}
                       onChange={e => setLogisticsForm(p => ({ ...p, [f.key]: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
@@ -392,25 +426,30 @@ export function STODetail() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Freight Cost (USD) <span className="text-red-500">*</span></label>
                   <input
                     type="number" step="0.01" placeholder="0.00"
+                    defaultValue={sto.freight_cost != null ? String(sto.freight_cost) : ''}
                     onChange={e => setLogisticsForm(p => ({ ...p, freight_cost: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">Management approval required if &gt;$20,000 or &gt;30% of material value</p>
                 </div>
                 {[
-                  { key: 'pgi_date',               label: 'PGI Date (Goods Issued from SAP)' },
-                  { key: 'estimated_delivery_date', label: 'Estimated Delivery Date' },
-                  { key: 'actual_ship_date',        label: 'Actual Ship Date' },
+                  { key: 'expedited_estimated_ship_date', label: 'Expedited Estimated Ship Date', prefill: sto.expedited_estimated_ship_date },
+                  { key: 'pgi_date',                      label: 'PGI Date (Goods Issued from SAP)', prefill: sto.pgi_date },
+                  { key: 'estimated_delivery_date',        label: 'Estimated Delivery Date', prefill: sto.estimated_delivery_date },
+                  { key: 'actual_ship_date',               label: 'Actual Ship Date', prefill: sto.actual_ship_date },
                 ].map(f => (
                   <div key={f.key}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
-                    <input type="date" onChange={e => setLogisticsForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    <input type="date"
+                      defaultValue={f.prefill ? String(f.prefill).slice(0, 10) : ''}
+                      onChange={e => setLogisticsForm(p => ({ ...p, [f.key]: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                   </div>
                 ))}
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" onChange={e => setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))}
+                <input type="checkbox" defaultChecked={Boolean(sto.ready_to_ship)}
+                  onChange={e => setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))}
                   className="w-4 h-4 text-teal-600 rounded" />
                 <span className="text-sm text-gray-700 font-medium">Ready to Ship</span>
               </label>
@@ -419,7 +458,7 @@ export function STODetail() {
                 disabled={actionLoading}
                 className="bg-teal-700 text-white px-5 py-2 rounded-lg hover:bg-teal-800 font-medium text-sm disabled:opacity-50"
               >
-                Submit Logistics →
+                {sto.mgmt_confirmed ? 'Confirm & Continue →' : 'Submit Logistics →'}
               </button>
             </div>
           ) : (
@@ -427,10 +466,12 @@ export function STODetail() {
               <div><span className="text-xs text-gray-400 block">Container Info</span>{sto.container_information || '–'}</div>
               <div><span className="text-xs text-gray-400 block">Freight Cost</span>{sto.freight_cost != null ? `$${Number(sto.freight_cost).toLocaleString()}` : '–'}</div>
               <div><span className="text-xs text-gray-400 block">Ready to Ship</span>{sto.ready_to_ship ? 'Yes' : '–'}</div>
+              <div><span className="text-xs text-gray-400 block">Expedited Ship Date</span>{fmt(sto.expedited_estimated_ship_date)}</div>
               <div><span className="text-xs text-gray-400 block">PGI Date</span>{fmt(sto.pgi_date)}</div>
               <div><span className="text-xs text-gray-400 block">Est. Delivery Date</span>{fmt(sto.estimated_delivery_date)}</div>
               <div><span className="text-xs text-gray-400 block">Actual Ship Date</span>{fmt(sto.actual_ship_date)}</div>
-              <div><span className="text-xs text-gray-400 block">Tracking ID</span>{sto.tracking_id || '–'}</div>
+              <div><span className="text-xs text-gray-400 block">STO Tracker ID</span>{sto.tracking_id || '–'}</div>
+              <div><span className="text-xs text-gray-400 block">Shipment ID</span>{sto.shipment_id || '–'}</div>
             </div>
           )}
         </Section>

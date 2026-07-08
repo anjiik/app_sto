@@ -128,7 +128,15 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
       freightCost > freightThreshold ||
       isColdShipping ||
       freightToValueRatio > 0.30;
-    const newStatus: STOStatus = mgmtRequired ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS';
+
+    // Logistics is visited twice when management approval is needed:
+    //   1st pass → route to MANAGEMENT_REVIEW.
+    //   After management approves the STO comes back here with mgmt_confirmed = 1;
+    //   this 2nd pass is the confirm/edit step and advances to receiving.
+    // If no management approval is required, skip straight to receiving.
+    const alreadyConfirmed = Boolean(sto.mgmt_confirmed);
+    const goToMgmt = mgmtRequired && !alreadyConfirmed;
+    const newStatus: STOStatus = goToMgmt ? 'MANAGEMENT_REVIEW' : 'RECEIVING_MGMT_REVIEW';
 
     await withTransaction(async (execute) => {
       await execute(`
@@ -138,6 +146,8 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           ready_to_ship = @ready_to_ship,
           pgi_date = @pgi_date,
           tracking_id = @tracking_id,
+          shipment_id = COALESCE(@shipment_id, shipment_id),
+          expedited_estimated_ship_date = @expedited_estimated_ship_date,
           actual_ship_date = @actual_ship_date,
           estimated_delivery_date = @estimated_delivery_date,
           management_approval_required = @management_approval_required,
@@ -151,6 +161,8 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         ready_to_ship: body.ready_to_ship ? 1 : 0,
         pgi_date: body.pgi_date || null,
         tracking_id: body.tracking_id || null,
+        shipment_id: body.shipment_id || null,
+        expedited_estimated_ship_date: body.expedited_estimated_ship_date || null,
         actual_ship_date: body.actual_ship_date || null,
         estimated_delivery_date: body.estimated_delivery_date || null,
         management_approval_required: mgmtRequired ? 1 : 0,
@@ -162,10 +174,17 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         isColdShipping                    && `cold shipping (${sto.shipping_conditions})`,
         freightToValueRatio > 0.30        && `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
       ].filter(Boolean).join('; ');
-      await logAudit(sto.id as number, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', newStatus, user.name,
-        `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? `required — ${reasons}` : 'not required'}.`, execute);
+      const auditNote = alreadyConfirmed
+        ? 'Logistics confirmed after management approval.'
+        : `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? `required — ${reasons}` : 'not required'}.`;
+      await logAudit(sto.id as number,
+        alreadyConfirmed ? 'LOGISTICS_CONFIRMED' : 'LOGISTICS_SUBMITTED',
+        'SHIPPING_LOGISTICS', newStatus, user.name, auditNote, execute);
     });
-    res.json({ message: mgmtRequired ? 'Sent to Management review' : 'Sent to Receiving Logistics', new_status: newStatus });
+    res.json({
+      message: goToMgmt ? 'Sent to Management review' : 'Sent to Receiving Management review',
+      new_status: newStatus,
+    });
   } catch (err) {
     logger.error({ err }, 'logistics error');
     res.status(500).json({ message: 'Internal server error' });
@@ -193,7 +212,9 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (user.site !== sto.shipping_site) {
       res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
     }
-    const newStatus: STOStatus = approved ? 'RECEIVING_MGMT_REVIEW' : 'REJECTED';
+    // On approval the STO returns to Shipping Logistics for a confirm/edit pass
+    // (mgmt_confirmed = 1 tells the logistics step not to loop back to management).
+    const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -202,6 +223,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
           management_approved_at = GETDATE(),
           management_notes = @notes,
           igb_complete = @igb_complete,
+          mgmt_confirmed = @mgmtConfirmed,
           status = @status,
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
@@ -212,13 +234,14 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
         approvedBy: null,
         notes: notes || null,
         igb_complete: igb_complete ? 1 : 0,
+        mgmtConfirmed: approved ? 1 : 0,
         status: newStatus,
         rejectionReason: approved ? null : (notes || 'Rejected by Shipping Site Management'),
       });
       await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
         'MANAGEMENT_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Shipping management approved — sent to Receiving Management' : 'Rejected', new_status: newStatus });
+    res.json({ message: approved ? 'Shipping management approved — returned to Shipping Logistics to confirm' : 'Rejected', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'management error');
     res.status(500).json({ message: 'Internal server error' });
@@ -366,6 +389,52 @@ router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void
     res.json({ message: `Reverted to ${toStatus}`, new_status: toStatus });
   } catch (err) {
     logger.error({ err }, 'revert error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// POST /api/sto/:id/send-back — admin only, sends the STO back one step with a
+// required reason. Distinct from /revert: the reason is mandatory and surfaced
+// to the receiving step as the rejection_reason so they know what to change.
+router.post('/:id/send-back', async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = req.user!;
+  if (user.group !== 'admin') {
+    res.status(403).json({ message: 'Admin access required' }); return;
+  }
+  const id = parseInt(req.params.id, 10);
+  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+
+  const { reason } = req.body as { reason?: string };
+  if (!reason || !reason.trim()) {
+    res.status(400).json({ message: 'A reason is required to send an STO back' }); return;
+  }
+
+  try {
+    const sto = await getSto(id);
+    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+
+    const prevEntry = await dbQueryOne<{ old_status: string | null }>(
+      'SELECT TOP 1 old_status FROM sto_audit_log WHERE sto_request_id = @id ORDER BY performed_at DESC',
+      { id },
+    );
+    if (!prevEntry || prevEntry.old_status === null) {
+      res.status(400).json({ message: 'Cannot send back — no previous step exists' }); return;
+    }
+
+    const fromStatus = sto.status as STOStatus;
+    const toStatus = prevEntry.old_status as STOStatus;
+
+    await withTransaction(async (execute) => {
+      await execute(
+        'UPDATE sto_requests SET status = @status, rejection_reason = @reason, updated_at = GETDATE() WHERE id = @id',
+        { id, status: toStatus, reason: reason.trim() },
+      );
+      await logAudit(id, 'SENT_BACK', fromStatus, toStatus, user.name,
+        `Admin sent back from ${fromStatus} to ${toStatus}: ${reason.trim()}`, execute);
+    });
+    res.json({ message: `Sent back to ${toStatus}`, new_status: toStatus });
+  } catch (err) {
+    logger.error({ err }, 'send-back error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });

@@ -50,6 +50,7 @@ export interface STORequest {
   container_information?: string;
   shipping_conditions?: string;
   controlled_shipping_required: boolean;
+  controlled_shipping_notes?: string;
   brand_at_receiving_site?: string;
   material_value?: number;
   freight_cost?: number;
@@ -58,6 +59,7 @@ export interface STORequest {
   receiving_site_need_by_date?: string;
   estimated_ship_by_date?: string;
   management_approval_required: boolean;
+  mgmt_confirmed?: boolean;
   planning_approved?: boolean;
   planning_notes?: string;
   management_approved?: boolean;

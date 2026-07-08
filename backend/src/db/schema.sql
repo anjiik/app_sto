@@ -33,6 +33,7 @@ CREATE TABLE sto_requests (
     container_information           VARCHAR(500),
     shipping_conditions             VARCHAR(500),
     controlled_shipping_required    BIT DEFAULT 0,
+    controlled_shipping_notes       NVARCHAR(1000),
     brand_at_receiving_site         VARCHAR(200),
 
     material_value                  DECIMAL(18,2),
@@ -44,6 +45,7 @@ CREATE TABLE sto_requests (
     estimated_ship_by_date          DATE,
 
     management_approval_required    BIT DEFAULT 0,
+    mgmt_confirmed                  BIT DEFAULT 0,
 
     planning_approved               BIT,
     planning_approved_by_user_id    INT,

@@ -33,8 +33,9 @@ function addDays(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const SHIPPING_CONDITIONS = ['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen'] as const;
+const SHIPPING_CONDITIONS = ['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen', 'Other'] as const;
 const COLD_MGMT_CONDITIONS = new Set(['Cold below 0', 'Frozen']);
+const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'] as const;
 
 export function STOForm() {
   const { id } = useParams<{ id?: string }>();
@@ -50,14 +51,18 @@ export function STOForm() {
   const priority           = watch('priority');
   const shippingConditions = watch('shipping_conditions') as string | undefined;
   const materialValue      = watch('material_value');
+  const controlledShipping = watch('controlled_shipping_required');
 
-  // Auto-populate standard estimated ship date from priority (new forms only)
+  // Auto-populate standard estimated ship date from priority. The field is only
+  // editable when Rush is checked; otherwise it stays locked to the priority-based
+  // date, so we re-derive it whenever priority changes and rush is off.
   useEffect(() => {
     if (isEdit) return;
+    if (rushRequest) return;
     const p = String(priority || '3');
     const days = p === '1' ? 15 : p === '2' ? 30 : 45;
     setValue('standard_estimated_ship_date', addDays(days));
-  }, [priority, setValue, isEdit]);
+  }, [priority, rushRequest, setValue, isEdit]);
 
   const coldShipping  = COLD_MGMT_CONDITIONS.has(shippingConditions ?? '');
   const mgmtByValue   = parseFloat(String(materialValue || 0)) > 100000;
@@ -67,6 +72,10 @@ export function STOForm() {
     api.get(`/sto/${id}`)
       .then(r => {
         const s = r.data;
+        // A stored condition that isn't one of the standard options means the
+        // requestor previously chose "Other" — restore that state in the form.
+        const storedCond = s.shipping_conditions ?? '';
+        const isStandardCond = (SHIPPING_CONDITIONS as readonly string[]).includes(storedCond) && storedCond !== 'Other';
         reset({
           requestor_name:                s.requestor_name ?? '',
           requestor_email:               s.requestor_email ?? '',
@@ -77,8 +86,6 @@ export function STOForm() {
           receiving_site:                s.receiving_site ?? '',
           standard_estimated_ship_date:  toDate(s.standard_estimated_ship_date),
           receiving_site_need_by_date:   toDate(s.receiving_site_need_by_date),
-          estimated_ship_by_date:        toDate(s.estimated_ship_by_date),
-          expedited_estimated_ship_date: toDate(s.expedited_estimated_ship_date),
           rush_request:                  Boolean(s.rush_request),
           public_holiday:                Boolean(s.public_holiday),
           toll_mfg:                      Boolean(s.toll_mfg),
@@ -89,9 +96,11 @@ export function STOForm() {
           inco_terms:                    s.inco_terms ?? '',
           quantity:                      s.quantity ?? '',
           uom:                           s.uom ?? '',
-          shipping_conditions:           s.shipping_conditions ?? '',
+          shipping_conditions:           storedCond ? (isStandardCond ? storedCond : 'Other') : '',
+          shipping_conditions_other:     isStandardCond ? '' : storedCond,
           material_value:                s.material_value ?? '',
           controlled_shipping_required:  Boolean(s.controlled_shipping_required),
+          controlled_shipping_notes:     s.controlled_shipping_notes ?? '',
           sto_number:                    s.sto_number ?? '',
           shipment_id:                   s.shipment_id ?? '',
           corporate_sto_tracker_status:  s.corporate_sto_tracker_status ?? '',
@@ -104,15 +113,25 @@ export function STOForm() {
   async function onSubmit(data: FormData) {
     setSaving(true);
     setError('');
+    // Resolve the "Other" shipping condition into the real value the backend stores,
+    // then drop the helper-only field so it isn't sent.
+    const { shipping_conditions_other, ...rest } = data as FormData & { shipping_conditions_other?: string };
+    const payload: FormData = {
+      ...rest,
+      shipping_conditions:
+        rest.shipping_conditions === 'Other'
+          ? (shipping_conditions_other || '').toString().trim()
+          : (rest.shipping_conditions as string),
+    };
     try {
       if (isEdit) {
-        await api.put(`/sto/${id}`, data);
+        await api.put(`/sto/${id}`, payload);
         navigate(`/sto/${id}`);
       } else {
         const res = await api.post('/sto', {
-          ...data,
+          ...payload,
           request_date: new Date().toISOString().slice(0, 10),
-          requestor_name: data.requestor_name || user?.name,
+          requestor_name: payload.requestor_name || user?.name,
         });
         navigate(`/sto/${res.data.id}`);
       }
@@ -192,24 +211,32 @@ export function STOForm() {
                 <input {...register('repeat_shipment_calendar_year')} className={INPUT} placeholder="e.g. 2026" />
               </Field>
               <Field label="Shipping Site" required hint="Site shipping FROM">
-                <input {...register('shipping_site', { required: true })} className={INPUT} placeholder="Plant A" />
+                <select {...register('shipping_site', { required: true })} className={INPUT}>
+                  <option value="">— Select —</option>
+                  {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </Field>
               <Field label="Receiving Site" required hint="Site shipping TO">
-                <input {...register('receiving_site', { required: true })} className={INPUT} placeholder="Plant B" />
+                <select {...register('receiving_site', { required: true })} className={INPUT}>
+                  <option value="">— Select —</option>
+                  {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </Field>
-              <Field label="Standard Estimated Ship Date" hint={`Auto-calculated from priority (P1=15d, P2=30d, P3=45d)`}>
+              <Field
+                label="Standard Estimated Ship Date"
+                hint={rushRequest
+                  ? 'Rush selected — you can adjust this date.'
+                  : 'Auto-calculated from priority (P1=15d, P2=30d, P3=45d)'}
+              >
                 <input
                   type="date"
                   {...register('standard_estimated_ship_date')}
-                  readOnly
-                  className={`${INPUT} bg-gray-50 cursor-not-allowed`}
+                  readOnly={!rushRequest}
+                  className={rushRequest ? INPUT : `${INPUT} bg-gray-50 cursor-not-allowed`}
                 />
               </Field>
               <Field label="Receiving Site Need By Date" required>
                 <input type="date" {...register('receiving_site_need_by_date', { required: true })} className={INPUT} />
-              </Field>
-              <Field label="Estimated Ship By Date">
-                <input type="date" {...register('estimated_ship_by_date')} className={INPUT} />
               </Field>
             </div>
 
@@ -230,11 +257,6 @@ export function STOForm() {
               <Field label="Rush Reason" required hint="Required for rush requests">
                 <textarea {...register('rush_reason', { required: !!rushRequest })} rows={2} className={INPUT} placeholder="Explain urgency..." />
                 {errors.rush_reason && <p className="text-red-500 text-xs mt-1">Rush reason is required</p>}
-              </Field>
-            )}
-            {rushRequest && (
-              <Field label="Expedited Estimated Ship Date">
-                <input type="date" {...register('expedited_estimated_ship_date')} className={INPUT} />
               </Field>
             )}
           </div>
@@ -269,21 +291,47 @@ export function STOForm() {
               <Field label="INCO Terms" hint="e.g. EXW, FOB, CIF, DAP">
                 <input {...register('inco_terms')} className={INPUT} placeholder="e.g. EXW, FOB" />
               </Field>
-              <Field label="Quantity" required>
-                <input type="number" step="any" {...register('quantity', { required: true, min: 0.001 })} className={INPUT} placeholder="0" />
+              <Field label="Quantity" required hint="Whole number of units">
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  {...register('quantity', {
+                    required: 'Quantity is required',
+                    min: { value: 1, message: 'Must be at least 1' },
+                    validate: v => Number.isInteger(Number(v)) || 'Quantity must be a whole number',
+                  })}
+                  className={INPUT}
+                  placeholder="0"
+                />
+                {errors.quantity && <p className="text-red-500 text-xs mt-1">{String(errors.quantity.message)}</p>}
               </Field>
               <Field label="UOM" required hint="Unit of Measure">
                 <input {...register('uom', { required: true })} className={INPUT} placeholder="e.g. EA, KG, LT" />
               </Field>
               <Field label="Shipping Conditions" required>
-                <select {...register('shipping_conditions', { required: 'Shipping condition is required' })} className={INPUT}>
-                  <option value="">— Select —</option>
-                  {SHIPPING_CONDITIONS.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select {...register('shipping_conditions', { required: 'Shipping condition is required' })} className={INPUT}>
+                    <option value="">— Select —</option>
+                    {SHIPPING_CONDITIONS.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  {shippingConditions === 'Other' && (
+                    <input
+                      {...register('shipping_conditions_other', {
+                        required: shippingConditions === 'Other' ? 'Describe the condition' : false,
+                      })}
+                      className={INPUT}
+                      placeholder="Specify condition"
+                    />
+                  )}
+                </div>
                 {errors.shipping_conditions && (
                   <p className="text-red-500 text-xs mt-1">{String(errors.shipping_conditions.message)}</p>
+                )}
+                {shippingConditions === 'Other' && errors.shipping_conditions_other && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.shipping_conditions_other.message)}</p>
                 )}
                 {coldShipping && (
                   <p className="text-orange-600 text-xs mt-1 font-medium">
@@ -294,15 +342,19 @@ export function STOForm() {
               <Field
                 label="Material Value (USD)"
                 required
-                hint="Material value > $100,000 OR freight cost > $20,000 OR freight cost > 30% of material value will require management approval."
+                hint="Enter a dollar amount, e.g. 12500.00. Values > $100,000 (or freight > $20,000, or freight > 30% of material value) require management approval."
               >
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('material_value', { required: 'Material value is required', min: { value: 0, message: 'Must be 0 or greater' } })}
-                  className={INPUT}
-                  placeholder="0.00"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('material_value', { required: 'Material value is required', min: { value: 0, message: 'Must be 0 or greater' } })}
+                    className={`${INPUT} pl-7`}
+                    placeholder="0.00"
+                  />
+                </div>
                 {errors.material_value && (
                   <p className="text-red-500 text-xs mt-1">{String(errors.material_value.message)}</p>
                 )}
@@ -319,6 +371,21 @@ export function STOForm() {
                 <span className="text-sm text-gray-700">Controlled Shipping Required</span>
               </label>
             </div>
+            {controlledShipping && (
+              <Field label="Controlled Shipping Comment" required hint="Explain the controlled-shipping handling requirements">
+                <textarea
+                  {...register('controlled_shipping_notes', {
+                    required: controlledShipping ? 'Comment is required for controlled shipping' : false,
+                  })}
+                  rows={2}
+                  className={INPUT}
+                  placeholder="e.g. Requires temperature logger and chain-of-custody signatures"
+                />
+                {errors.controlled_shipping_notes && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.controlled_shipping_notes.message)}</p>
+                )}
+              </Field>
+            )}
           </div>
 
           {/* Tracking Reference */}

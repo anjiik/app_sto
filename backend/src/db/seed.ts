@@ -377,6 +377,9 @@ const DEMO_USERS: DemoUser[] = [
   { username: 'xyz.mgmt',  display_name: 'Patrick James', site: 'XYZ', group_key: 'management' },
   { username: 'xyz.fin',   display_name: 'Quinn Patel',   site: 'XYZ', group_key: 'finance' },
   { username: 'xyz.rlog',  display_name: 'Rachel Tran',   site: 'XYZ', group_key: 'receiving_logistics' },
+
+  // ── Admin (cross-site; can act on any step and send STOs back) ──────────────
+  { username: 'admin',     display_name: 'Demo Admin',    site: 'ABC', group_key: 'admin' },
 ];
 
 async function seedDemoUsers(): Promise<void> {
