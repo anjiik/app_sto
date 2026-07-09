@@ -15,6 +15,28 @@ async function getSto(id: number): Promise<Record<string, unknown> | undefined> 
   return dbQueryOne<Record<string, unknown>>('SELECT * FROM sto_requests WHERE id = @id', { id });
 }
 
+// Canonical forward order of workflow steps. "Back one step" for the admin
+// revert / send-back actions walks this list one position earlier, based on the
+// STO's CURRENT status — NOT the audit log, so it works repeatedly (each click
+// steps back one more) regardless of loop-backs recorded in the history.
+const WORKFLOW_ORDER: STOStatus[] = [
+  'DRAFT',
+  'PLANNING_REVIEW',
+  'SHIPPING_LOGISTICS',
+  'MANAGEMENT_REVIEW',
+  'RECEIVING_MGMT_REVIEW',
+  'RECEIVING_LOGISTICS',
+  'CLOSED',
+];
+
+// Returns the status one step earlier than `current`, or null if there is none
+// (current is DRAFT, REJECTED, or unknown).
+function previousStep(current: STOStatus): STOStatus | null {
+  const idx = WORKFLOW_ORDER.indexOf(current);
+  if (idx <= 0) return null;
+  return WORKFLOW_ORDER[idx - 1];
+}
+
 // POST /api/sto/:id/submit
 router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
@@ -359,7 +381,9 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
   }
 });
 
-// POST /api/sto/:id/revert — admin only, reverts one step using audit log
+// POST /api/sto/:id/revert — admin only, steps the STO back one workflow step.
+// Uses the canonical WORKFLOW_ORDER off the CURRENT status, so clicking it
+// repeatedly keeps walking backwards one step at a time.
 router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (user.group !== 'admin') {
@@ -371,20 +395,15 @@ router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void
     const sto = await getSto(id);
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
 
-    const prevEntry = await dbQueryOne<{ old_status: string | null }>(
-      'SELECT TOP 1 old_status FROM sto_audit_log WHERE sto_request_id = @id ORDER BY performed_at DESC',
-      { id },
-    );
-    if (!prevEntry || prevEntry.old_status === null) {
-      res.status(400).json({ message: 'Cannot revert — no previous step exists' }); return;
-    }
-
     const fromStatus = sto.status as STOStatus;
-    const toStatus = prevEntry.old_status as STOStatus;
+    const toStatus = previousStep(fromStatus);
+    if (!toStatus) {
+      res.status(400).json({ message: 'Cannot revert — already at the first step' }); return;
+    }
 
     await withTransaction(async (execute) => {
       await execute(
-        'UPDATE sto_requests SET status = @status, rejection_reason = NULL, updated_at = GETDATE() WHERE id = @id',
+        'UPDATE sto_requests SET status = @status, mgmt_confirmed = 0, rejection_reason = NULL, updated_at = GETDATE() WHERE id = @id',
         { id, status: toStatus },
       );
       await logAudit(id, 'REVERTED', fromStatus, toStatus, user.name,
@@ -417,20 +436,15 @@ router.post('/:id/send-back', async (req: AuthRequest, res: Response): Promise<v
     const sto = await getSto(id);
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
 
-    const prevEntry = await dbQueryOne<{ old_status: string | null }>(
-      'SELECT TOP 1 old_status FROM sto_audit_log WHERE sto_request_id = @id ORDER BY performed_at DESC',
-      { id },
-    );
-    if (!prevEntry || prevEntry.old_status === null) {
-      res.status(400).json({ message: 'Cannot send back — no previous step exists' }); return;
-    }
-
     const fromStatus = sto.status as STOStatus;
-    const toStatus = prevEntry.old_status as STOStatus;
+    const toStatus = previousStep(fromStatus);
+    if (!toStatus) {
+      res.status(400).json({ message: 'Cannot send back — already at the first step' }); return;
+    }
 
     await withTransaction(async (execute) => {
       await execute(
-        'UPDATE sto_requests SET status = @status, rejection_reason = @reason, updated_at = GETDATE() WHERE id = @id',
+        'UPDATE sto_requests SET status = @status, mgmt_confirmed = 0, rejection_reason = @reason, updated_at = GETDATE() WHERE id = @id',
         { id, status: toStatus, reason: reason.trim() },
       );
       await logAudit(id, 'SENT_BACK', fromStatus, toStatus, user.name,
