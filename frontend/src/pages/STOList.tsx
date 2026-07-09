@@ -56,6 +56,10 @@ const STATUS_LABELS: Record<STOStatus, string> = {
 };
 
 const PAGE_SIZE = 50;
+const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'];
+
+interface Route { shipping_site: string; receiving_site: string; }
+const routeKey = (r: Route) => `${r.shipping_site}→${r.receiving_site}`;
 
 export function STOList() {
   useAuth();
@@ -67,19 +71,57 @@ export function STOList() {
   const [error,         setError]         = useState<string | null>(null);
   const [search,        setSearch]        = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [requestors,    setRequestors]    = useState<string[]>([]);
+  const [routes,        setRoutes]        = useState<Route[]>([]);
 
-  const statusFilter   = searchParams.get('status')   || '';
-  const priorityFilter = searchParams.get('priority') || '';
-  const page           = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-  const totalPages     = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const statusFilter    = searchParams.get('status')        || '';
+  const priorityFilter  = searchParams.get('priority')      || '';
+  const shippingSite    = searchParams.get('shipping_site') || '';
+  const receivingSite   = searchParams.get('receiving_site')|| '';
+  const requestorFilter = searchParams.get('requestor')     || '';
+  const routeFilter     = searchParams.get('route')         || '';
+  const needByFrom      = searchParams.get('need_by_from')  || '';
+  const needByTo        = searchParams.get('need_by_to')    || '';
+  const page            = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const totalPages      = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // A selected route overrides the individual site filters (it IS a site pair).
+  const [routeShip, routeRecv] = routeFilter ? routeFilter.split('→') : ['', ''];
+
+  // Distinct requestors + routes for the dropdowns — fetched once.
+  useEffect(() => {
+    api.get('/sto/filter-options')
+      .then(r => {
+        setRequestors(r.data.requestors || []);
+        setRoutes(r.data.routes || []);
+      })
+      .catch(() => { /* non-fatal: dropdowns just stay empty */ });
+  }, []);
+
+  // Build the query params shared by the list + export requests.
+  function buildParams(): URLSearchParams {
+    const params = new URLSearchParams();
+    if (statusFilter)    params.set('status',    statusFilter);
+    if (priorityFilter)  params.set('priority',  priorityFilter);
+    if (search)          params.set('search',    search);
+    if (requestorFilter) params.set('requestor', requestorFilter);
+    if (needByFrom)      params.set('need_by_from', needByFrom);
+    if (needByTo)        params.set('need_by_to',   needByTo);
+    // Route wins over the standalone site dropdowns when set.
+    if (routeFilter) {
+      if (routeShip) params.set('shipping_site',  routeShip);
+      if (routeRecv) params.set('receiving_site', routeRecv);
+    } else {
+      if (shippingSite)  params.set('shipping_site',  shippingSite);
+      if (receivingSite) params.set('receiving_site', receivingSite);
+    }
+    return params;
+  }
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams();
-    if (statusFilter)   params.set('status',   statusFilter);
-    if (priorityFilter) params.set('priority', priorityFilter);
-    if (search)         params.set('search',   search);
+    const params = buildParams();
     params.set('page',  String(page));
     params.set('limit', String(PAGE_SIZE));
 
@@ -90,16 +132,13 @@ export function STOList() {
       })
       .catch(err => setError(err.response?.data?.message || 'Failed to load STOs'))
       .finally(() => setLoading(false));
-  }, [statusFilter, priorityFilter, search, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, priorityFilter, search, shippingSite, receivingSite, requestorFilter, routeFilter, needByFrom, needByTo, page]);
 
   async function handleExport() {
     setExportLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (statusFilter)   params.set('status',   statusFilter);
-      if (priorityFilter) params.set('priority', priorityFilter);
-      if (search)         params.set('search',   search);
-      const r = await api.get(`/sto/export?${params}`);
+      const r = await api.get(`/sto/export?${buildParams()}`);
       downloadCSV(r.data);
     } catch {
       setError('Export failed. Please try again.');
@@ -111,6 +150,9 @@ export function STOList() {
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value); else next.delete(key);
+    // Route and the individual site dropdowns are mutually exclusive.
+    if (key === 'route' && value) { next.delete('shipping_site'); next.delete('receiving_site'); }
+    if ((key === 'shipping_site' || key === 'receiving_site') && value) next.delete('route');
     next.delete('page'); // reset to page 1 when filter changes
     setSearchParams(next);
   }
@@ -145,32 +187,119 @@ export function STOList() {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3">
-          <input
-            type="text"
-            placeholder="Search STO ID, material, requestor..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <select
-            value={statusFilter}
-            onChange={e => setFilter('status', e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Statuses</option>
-            {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-          </select>
-          <select
-            value={priorityFilter}
-            onChange={e => setFilter('priority', e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Priorities</option>
-            <option value="1">1 – Urgent</option>
-            <option value="2">2 – Expedited</option>
-            <option value="3">3 – Standard</option>
-          </select>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+          <div className="flex flex-wrap gap-3">
+            <input
+              type="text"
+              placeholder="Search STO ID, material, requestor..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={statusFilter}
+              onChange={e => setFilter('status', e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Statuses</option>
+              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            </select>
+            <select
+              value={priorityFilter}
+              onChange={e => setFilter('priority', e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Priorities</option>
+              <option value="1">1 – Urgent</option>
+              <option value="2">2 – Expedited</option>
+              <option value="3">3 – Standard</option>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-3 items-end">
+            {/* From site — cleared when a route is selected */}
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">From Site</span>
+              <select
+                value={shippingSite}
+                disabled={!!routeFilter}
+                onChange={e => setFilter('shipping_site', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">All</option>
+                {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">To Site</span>
+              <select
+                value={receivingSite}
+                disabled={!!routeFilter}
+                onChange={e => setFilter('receiving_site', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">All</option>
+                {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">Route</span>
+              <select
+                value={routeFilter}
+                onChange={e => setFilter('route', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Routes</option>
+                {routes.map(r => (
+                  <option key={routeKey(r)} value={routeKey(r)}>
+                    {r.shipping_site} → {r.receiving_site}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">Requestor</span>
+              <select
+                value={requestorFilter}
+                onChange={e => setFilter('requestor', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Requestors</option>
+                {requestors.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">Need By From</span>
+              <input
+                type="date"
+                value={needByFrom}
+                onChange={e => setFilter('need_by_from', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">Need By To</span>
+              <input
+                type="date"
+                value={needByTo}
+                onChange={e => setFilter('need_by_to', e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+            {(shippingSite || receivingSite || routeFilter || requestorFilter || needByFrom || needByTo) && (
+              <button
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  ['shipping_site', 'receiving_site', 'route', 'requestor', 'need_by_from', 'need_by_to', 'page']
+                    .forEach(k => next.delete(k));
+                  setSearchParams(next);
+                }}
+                className="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">

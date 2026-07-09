@@ -99,7 +99,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
       status, priority, search,
-      shipping_site, receiving_site,
+      shipping_site, receiving_site, requestor,
+      need_by_from, need_by_to,
       rush_only, active_only, has_need_by, sort,
       page: pageStr, limit: limitStr,
     } = req.query as Record<string, string>;
@@ -117,6 +118,9 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     if (priority)      { conditions.push('priority = @priority');           params.priority      = parseInt(priority, 10); }
     if (shipping_site) { conditions.push('shipping_site = @shipping_site'); params.shipping_site = shipping_site; }
     if (receiving_site){ conditions.push('receiving_site = @receiving_site'); params.receiving_site = receiving_site; }
+    if (requestor)     { conditions.push('requestor_name = @requestor');    params.requestor     = requestor; }
+    if (need_by_from)  { conditions.push('receiving_site_need_by_date >= @need_by_from'); params.need_by_from = need_by_from; }
+    if (need_by_to)    { conditions.push('receiving_site_need_by_date <= @need_by_to');   params.need_by_to   = need_by_to; }
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");
@@ -234,6 +238,8 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
   try {
     const {
       status, priority, search,
+      shipping_site, receiving_site, requestor,
+      need_by_from, need_by_to,
       rush_only, active_only,
     } = req.query as Record<string, string>;
 
@@ -242,6 +248,11 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
 
     if (status)   { conditions.push('status = @status');     params.status   = status; }
     if (priority) { conditions.push('priority = @priority'); params.priority = parseInt(priority, 10); }
+    if (shipping_site) { conditions.push('shipping_site = @shipping_site'); params.shipping_site = shipping_site; }
+    if (receiving_site){ conditions.push('receiving_site = @receiving_site'); params.receiving_site = receiving_site; }
+    if (requestor)     { conditions.push('requestor_name = @requestor');    params.requestor     = requestor; }
+    if (need_by_from)  { conditions.push('receiving_site_need_by_date >= @need_by_from'); params.need_by_from = need_by_from; }
+    if (need_by_to)    { conditions.push('receiving_site_need_by_date <= @need_by_to');   params.need_by_to   = need_by_to; }
 
     if (rush_only   === '1') conditions.push('rush_request = 1');
     if (active_only === '1') conditions.push("status NOT IN ('CLOSED', 'REJECTED')");
@@ -269,6 +280,34 @@ router.get('/export', async (req: AuthRequest, res: Response): Promise<void> => 
     res.json(rows.map(normalizeSto));
   } catch (err) {
     logger.error({ err }, 'sto export error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ── GET /api/sto/filter-options ───────────────────────────────────────────────
+// Distinct values used to populate the list-page filter dropdowns:
+//   requestors — every distinct requestor_name currently on an STO
+//   routes     — every distinct shipping_site → receiving_site pair
+router.get('/filter-options', async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const requestorRows = await dbQuery<{ requestor_name: string }>(`
+      SELECT DISTINCT requestor_name
+      FROM sto_requests
+      WHERE archived = 0 AND requestor_name IS NOT NULL AND requestor_name <> ''
+      ORDER BY requestor_name
+    `);
+    const routeRows = await dbQuery<{ shipping_site: string; receiving_site: string }>(`
+      SELECT DISTINCT shipping_site, receiving_site
+      FROM sto_requests
+      WHERE archived = 0 AND shipping_site IS NOT NULL AND receiving_site IS NOT NULL
+      ORDER BY shipping_site, receiving_site
+    `);
+    res.json({
+      requestors: requestorRows.map(r => r.requestor_name),
+      routes: routeRows.map(r => ({ shipping_site: r.shipping_site, receiving_site: r.receiving_site })),
+    });
+  } catch (err) {
+    logger.error({ err }, 'filter-options GET error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });

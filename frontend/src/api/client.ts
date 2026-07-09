@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' });
+// Default API path is prefixed with the app's base (/sto/) so requests go to
+// /sto/api and flow through the same IIS ^sto/(.*) reverse-proxy rule.
+// Override with VITE_API_URL at build time if the backend is exposed elsewhere.
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || `${import.meta.env.BASE_URL}api`,
+});
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('sto_token');

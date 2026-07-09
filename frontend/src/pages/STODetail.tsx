@@ -77,14 +77,12 @@ function Timeline({ status }: { status: STOStatus }) {
 }
 
 // ── Approval panel (for planning / management / finance) ────────────────────
-function ApprovalPanel({ title, onApprove, loading, showIgb }: {
+function ApprovalPanel({ title, onApprove, loading }: {
   title: string;
-  onApprove: (approved: boolean, notes: string, igb_complete?: boolean) => void;
+  onApprove: (approved: boolean, notes: string) => void;
   loading: boolean;
-  showIgb?: boolean;
 }) {
   const [note, setNote] = useState('');
-  const [igb, setIgb] = useState(false);
   const [open, setOpen] = useState(false);
 
   return (
@@ -96,12 +94,6 @@ function ApprovalPanel({ title, onApprove, loading, showIgb }: {
         </button>
       ) : (
         <div className="space-y-3">
-          {showIgb && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={igb} onChange={e => setIgb(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
-              <span className="text-sm text-gray-700 font-medium">IGB Complete</span>
-            </label>
-          )}
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
@@ -110,9 +102,9 @@ function ApprovalPanel({ title, onApprove, loading, showIgb }: {
             className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <div className="flex gap-2">
-            <button disabled={loading} onClick={() => onApprove(true, note, igb)}
+            <button disabled={loading} onClick={() => onApprove(true, note)}
               className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">✓ Approve</button>
-            <button disabled={loading} onClick={() => onApprove(false, note, igb)}
+            <button disabled={loading} onClick={() => onApprove(false, note)}
               className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">✗ Reject</button>
             <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-700 px-2 text-sm">Cancel</button>
           </div>
@@ -401,7 +393,7 @@ export function STODetail() {
             <div className="space-y-4">
               {sto.mgmt_confirmed ? (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-lg text-sm">
-                  Management has approved. Review and confirm the shipment details below (edit anything that changed), then continue to Receiving.
+                  Both management approvals are complete. Review and confirm the shipment details below (edit anything that changed), then continue to Receiving Logistics.
                 </div>
               ) : (
                 <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold/frozen shipping, or freight cost &gt; 30% of material value.</p>
@@ -483,14 +475,12 @@ export function STODetail() {
           ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && user?.site === sto.shipping_site ? (
             <ApprovalPanel
               title="Management Approval"
-              showIgb
               loading={actionLoading}
-              onApprove={(approved, notes, igb_complete) => doAction('management', { approved, notes, igb_complete })}
+              onApprove={(approved, notes) => doAction('management', { approved, notes })}
             />
           ) : (
             <div className="space-y-2">
               <ApprovalResult approved={sto.management_approved} notes={sto.management_notes} />
-              {sto.igb_complete && <div className="text-xs text-gray-500">IGB Complete: Yes</div>}
             </div>
           )}
         </Section>

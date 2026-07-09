@@ -129,14 +129,16 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
       isColdShipping ||
       freightToValueRatio > 0.30;
 
-    // Logistics is visited twice when management approval is needed:
-    //   1st pass → route to MANAGEMENT_REVIEW.
-    //   After management approves the STO comes back here with mgmt_confirmed = 1;
-    //   this 2nd pass is the confirm/edit step and advances to receiving.
-    // If no management approval is required, skip straight to receiving.
+    // Flow when management approval is required:
+    //   SHIPPING_LOGISTICS → MANAGEMENT_REVIEW → RECEIVING_MGMT_REVIEW
+    //     → back to SHIPPING_LOGISTICS (confirm pass) → RECEIVING_LOGISTICS
+    // The confirm pass is marked by mgmt_confirmed = 1 (set once both managements
+    // have approved), so this step advances straight to receiving logistics.
+    // If no management approval is required, skip everything and go straight to
+    // RECEIVING_LOGISTICS.
     const alreadyConfirmed = Boolean(sto.mgmt_confirmed);
     const goToMgmt = mgmtRequired && !alreadyConfirmed;
-    const newStatus: STOStatus = goToMgmt ? 'MANAGEMENT_REVIEW' : 'RECEIVING_MGMT_REVIEW';
+    const newStatus: STOStatus = goToMgmt ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS';
 
     await withTransaction(async (execute) => {
       await execute(`
@@ -182,7 +184,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         'SHIPPING_LOGISTICS', newStatus, user.name, auditNote, execute);
     });
     res.json({
-      message: goToMgmt ? 'Sent to Management review' : 'Sent to Receiving Management review',
+      message: goToMgmt ? 'Sent to Management review' : 'Sent to Receiving Logistics',
       new_status: newStatus,
     });
   } catch (err) {
@@ -199,7 +201,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
   }
   const id = parseInt(req.params.id, 10);
   if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
-  const { approved, notes, igb_complete } = req.body as { approved: boolean; notes?: string; igb_complete?: boolean };
+  const { approved, notes } = req.body as { approved: boolean; notes?: string };
   if (typeof approved !== 'boolean') {
     res.status(400).json({ message: '`approved` must be a boolean' }); return;
   }
@@ -212,9 +214,10 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (user.site !== sto.shipping_site) {
       res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
     }
-    // On approval the STO returns to Shipping Logistics for a confirm/edit pass
-    // (mgmt_confirmed = 1 tells the logistics step not to loop back to management).
-    const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
+    // Shipping management approval hands off to the receiving-site management
+    // review. The confirm pass at logistics only happens after BOTH managements
+    // have approved (see the receiving-management route).
+    const newStatus: STOStatus = approved ? 'RECEIVING_MGMT_REVIEW' : 'REJECTED';
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -222,8 +225,6 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
           management_approved_by_user_id = @approvedBy,
           management_approved_at = GETDATE(),
           management_notes = @notes,
-          igb_complete = @igb_complete,
-          mgmt_confirmed = @mgmtConfirmed,
           status = @status,
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
@@ -233,15 +234,13 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
         managementApproved: approved ? 1 : 0,
         approvedBy: null,
         notes: notes || null,
-        igb_complete: igb_complete ? 1 : 0,
-        mgmtConfirmed: approved ? 1 : 0,
         status: newStatus,
         rejectionReason: approved ? null : (notes || 'Rejected by Shipping Site Management'),
       });
       await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
         'MANAGEMENT_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Shipping management approved — returned to Shipping Logistics to confirm' : 'Rejected', new_status: newStatus });
+    res.json({ message: approved ? 'Shipping management approved — sent to Receiving Management' : 'Rejected', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'management error');
     res.status(500).json({ message: 'Internal server error' });
@@ -269,7 +268,10 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
     if (user.site !== sto.receiving_site) {
       res.status(403).json({ message: 'Only the receiving site management can approve this step' }); return;
     }
-    const newStatus: STOStatus = approved ? 'RECEIVING_LOGISTICS' : 'REJECTED';
+    // Both managements have now approved. Return the STO to Shipping Logistics
+    // for the confirm/edit pass (mgmt_confirmed = 1 tells logistics to advance
+    // straight to Receiving Logistics rather than looping back to management).
+    const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -277,6 +279,7 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
           receiving_mgmt_approved_by_user_id = @approvedBy,
           receiving_mgmt_approved_at = GETDATE(),
           receiving_mgmt_notes = @notes,
+          mgmt_confirmed = @mgmtConfirmed,
           status = @status,
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
@@ -286,13 +289,14 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
         receivingMgmtApproved: approved ? 1 : 0,
         approvedBy: null,
         notes: notes || null,
+        mgmtConfirmed: approved ? 1 : 0,
         status: newStatus,
         rejectionReason: approved ? null : (notes || 'Rejected by Receiving Site Management'),
       });
       await logAudit(sto.id as number, approved ? 'RECEIVING_MGMT_APPROVED' : 'RECEIVING_MGMT_REJECTED',
         'RECEIVING_MGMT_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Receiving management approved — sent to Receiving Logistics' : 'Rejected', new_status: newStatus });
+    res.json({ message: approved ? 'Receiving management approved — returned to Shipping Logistics to confirm' : 'Rejected', new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'receiving-management error');
     res.status(500).json({ message: 'Internal server error' });
