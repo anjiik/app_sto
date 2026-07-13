@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest, can } from '../middleware/auth';
+import { authenticate, AuthRequest, can, userHasSite } from '../middleware/auth';
 import { dbQueryOne, withTransaction } from '../db/connection';
 import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
@@ -70,22 +70,43 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
   }
   const id = parseInt(req.params.id, 10);
   if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
-  const { approved, notes, mpn_number, batch_number, expiration_date } = req.body as {
-    approved: boolean; notes?: string; mpn_number?: string; batch_number?: string; expiration_date?: string;
+  const { approved, decision, notes, mpn_number, batch_number, expiration_date } = req.body as {
+    approved?: boolean;
+    decision?: 'approve' | 'reject' | 'revise';
+    notes?: string; mpn_number?: string; batch_number?: string; expiration_date?: string;
   };
-  if (typeof approved !== 'boolean') {
-    res.status(400).json({ message: '`approved` must be a boolean' }); return;
+
+  // Resolve the outcome. `decision` is the new tri-state API; `approved` is kept
+  // for backward compatibility (true → approve, false → reject).
+  const outcome: 'approve' | 'reject' | 'revise' =
+    decision ?? (approved === true ? 'approve' : approved === false ? 'reject' : 'reject');
+  if (!['approve', 'reject', 'revise'].includes(outcome)) {
+    res.status(400).json({ message: 'decision must be approve, reject, or revise' }); return;
   }
+  // Revise and reject both need a note explaining what to fix / why.
+  if ((outcome === 'revise' || outcome === 'reject') && (!notes || !notes.trim())) {
+    res.status(400).json({ message: `A note is required to ${outcome} the request` }); return;
+  }
+
   try {
     const sto = await getSto(id);
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'PLANNING_REVIEW') {
       res.status(400).json({ message: 'STO is not in Planning Review' }); return;
     }
-    if (approved && (!mpn_number || !batch_number || !expiration_date)) {
+    if (outcome === 'approve' && (!mpn_number || !batch_number || !expiration_date)) {
       res.status(400).json({ message: 'MPN Number, Batch Number and Expiration Date are required to approve' }); return;
     }
-    const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
+
+    // approve → Shipping Logistics; revise → back to the requestor as DRAFT;
+    // reject → REJECTED (terminal).
+    const newStatus: STOStatus =
+      outcome === 'approve' ? 'SHIPPING_LOGISTICS' :
+      outcome === 'revise'  ? 'DRAFT' : 'REJECTED';
+    const action =
+      outcome === 'approve' ? 'PLANNING_APPROVED' :
+      outcome === 'revise'  ? 'PLANNING_REVISION_REQUESTED' : 'PLANNING_REJECTED';
+
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -102,19 +123,26 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
         WHERE id = @id
       `, {
         id: sto.id,
-        planningApproved: approved ? 1 : 0,
+        planningApproved: outcome === 'approve' ? 1 : 0,
         approvedBy: null,
         notes: notes || null,
         mpn_number: mpn_number || null,
         batch_number: batch_number || null,
         expiration_date: expiration_date || null,
         status: newStatus,
-        rejectionReason: approved ? null : (notes || 'Rejected by Shipping Planning'),
+        // For revise, surface the note to the requestor as the reason shown on
+        // the draft; for reject, the rejection reason; for approve, clear it.
+        rejectionReason:
+          outcome === 'approve' ? null :
+          outcome === 'revise'  ? `Revision requested by Shipping Planning: ${notes}` :
+                                  (notes || 'Rejected by Shipping Planning'),
       });
-      await logAudit(sto.id as number, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED',
-        'PLANNING_REVIEW', newStatus, user.name, notes, execute);
+      await logAudit(sto.id as number, action, 'PLANNING_REVIEW', newStatus, user.name, notes, execute);
     });
-    res.json({ message: approved ? 'Approved — sent to Shipping Logistics' : 'Rejected', new_status: newStatus });
+    const msg =
+      outcome === 'approve' ? 'Approved — sent to Shipping Logistics' :
+      outcome === 'revise'  ? 'Revision requested — sent back to the requestor' : 'Rejected';
+    res.json({ message: msg, new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'planning error');
     res.status(500).json({ message: 'Internal server error' });
@@ -142,7 +170,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const materialValue = parseFloat(String(sto.material_value || '0'));
     const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000');
     const freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000');
-    const COLD_CONDITIONS = ['Cold below 0', 'Frozen'];
+    const COLD_CONDITIONS = ['Cold 2-8C', 'Cold below 0', 'Frozen'];
     const isColdShipping = COLD_CONDITIONS.includes(String(sto.shipping_conditions || ''));
     const freightToValueRatio = materialValue > 0 ? freightCost / materialValue : 0;
     const mgmtRequired =
@@ -162,6 +190,21 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const goToMgmt = mgmtRequired && !alreadyConfirmed;
     const newStatus: STOStatus = goToMgmt ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS';
 
+    // On the post-management confirm pass, actual ship date, estimated delivery
+    // date, PGI date and ready-to-ship become mandatory before the STO can move
+    // on to receiving logistics.
+    if (alreadyConfirmed) {
+      const missing: string[] = [];
+      if (!body.actual_ship_date)         missing.push('Actual Ship Date');
+      if (!body.estimated_delivery_date)  missing.push('Estimated Delivery Date');
+      if (!body.pgi_date)                 missing.push('PGI Date');
+      if (!body.ready_to_ship)            missing.push('Ready to Ship');
+      if (missing.length) {
+        res.status(400).json({ message: `Required before continuing: ${missing.join(', ')}` });
+        return;
+      }
+    }
+
     await withTransaction(async (execute) => {
       await execute(`
         UPDATE sto_requests SET
@@ -169,7 +212,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           freight_cost = @freight_cost,
           ready_to_ship = @ready_to_ship,
           pgi_date = @pgi_date,
-          tracking_id = @tracking_id,
+          sto_number = COALESCE(@sto_number, sto_number),
           shipment_id = COALESCE(@shipment_id, shipment_id),
           expedited_estimated_ship_date = @expedited_estimated_ship_date,
           actual_ship_date = @actual_ship_date,
@@ -184,7 +227,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         freight_cost: rawFreightCost != null && rawFreightCost !== '' ? freightCost : null,
         ready_to_ship: body.ready_to_ship ? 1 : 0,
         pgi_date: body.pgi_date || null,
-        tracking_id: body.tracking_id || null,
+        sto_number: body.sto_number || null,
         shipment_id: body.shipment_id || null,
         expedited_estimated_ship_date: body.expedited_estimated_ship_date || null,
         actual_ship_date: body.actual_ship_date || null,
@@ -233,7 +276,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (sto.status !== 'MANAGEMENT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Management Review' }); return;
     }
-    if (user.site !== sto.shipping_site) {
+    if (!userHasSite(user, sto.shipping_site as string)) {
       res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
     }
     // Shipping management approval hands off to the receiving-site management
@@ -287,7 +330,7 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
     if (sto.status !== 'RECEIVING_MGMT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Receiving Management Review' }); return;
     }
-    if (user.site !== sto.receiving_site) {
+    if (!userHasSite(user, sto.receiving_site as string)) {
       res.status(403).json({ message: 'Only the receiving site management can approve this step' }); return;
     }
     // Both managements have now approved. Return the STO to Shipping Logistics

@@ -20,7 +20,8 @@ export interface JwtPayload {
   adUsername: string;
   group: Group;
   name: string;
-  site: string;
+  site: string;      // primary site (used for defaults/display, and backward compat)
+  sites?: string[];  // all sites this user can act on / see (multi-site access)
 }
 
 export interface AuthRequest extends Express.Request {

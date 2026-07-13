@@ -148,23 +148,25 @@ export function Dashboard() {
       return s ? `?${s}` : '';
     }
 
-    // Each group's queue is scoped to their site. Management has two buckets.
+    // Each group's queue is scoped to their site(s). Multi-site users pass a
+    // comma-separated list so the backend returns data for every assigned site.
+    const sitesParam = (user.sites && user.sites.length ? user.sites : [user.site]).join(',');
     let queueFetch: Promise<{ data: { data: STORequest[]; pagination: { total: number } } }>;
     if (user.group === 'management') {
       queueFetch = Promise.all([
-        api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${user.site}&limit=20`),
-        api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${user.site}&limit=20`),
+        api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${encodeURIComponent(sitesParam)}&limit=20`),
+        api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`),
       ]).then(([mgmt, recvMgmt]) => {
         const combined = [...mgmt.data.data, ...recvMgmt.data.data];
         const total = mgmt.data.pagination.total + recvMgmt.data.pagination.total;
         return { data: { data: combined, pagination: { total } } };
       });
     } else if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      queueFetch = api.get(`/sto?status=${queueConfig.statuses[0]}&shipping_site=${user.site}&limit=20`);
+      queueFetch = api.get(`/sto?status=${queueConfig.statuses[0]}&shipping_site=${encodeURIComponent(sitesParam)}&limit=20`);
     } else if (user.group === 'receiving_logistics') {
-      queueFetch = api.get(`/sto?status=RECEIVING_LOGISTICS&receiving_site=${user.site}&limit=20`);
+      queueFetch = api.get(`/sto?status=RECEIVING_LOGISTICS&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`);
     } else if (user.group === 'receiving_site') {
-      queueFetch = api.get(`/sto?status=DRAFT&receiving_site=${user.site}&limit=20`);
+      queueFetch = api.get(`/sto?status=DRAFT&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`);
     } else {
       queueFetch = api.get(`/sto${qs({ status: queueConfig.statuses[0], limit: '20' })}`);
     }
@@ -253,7 +255,7 @@ export function Dashboard() {
                 </span>
               )}
               <span className="text-gray-400 text-sm">
-                {user?.site ?? 'All Sites'}
+                {user?.sites && user.sites.length ? user.sites.join(', ') : (user?.site ?? 'All Sites')}
               </span>
             </div>
           </div>

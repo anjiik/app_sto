@@ -6,6 +6,7 @@ import { Analytics } from './pages/Analytics';
 import { STOList } from './pages/STOList';
 import { STOForm } from './pages/STOForm';
 import { STODetail } from './pages/STODetail';
+import { AppInfo } from './pages/AppInfo';
 
 function Spinner() {
   return (
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="/sto/new"      element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
       <Route path="/sto/:id/edit" element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
       <Route path="/sto/:id"      element={<ProtectedRoute><STODetail /></ProtectedRoute>} />
+      <Route path="/app-info"     element={<ProtectedRoute><AppInfo /></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

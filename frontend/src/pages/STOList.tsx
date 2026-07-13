@@ -11,6 +11,23 @@ function escape(v: unknown): string {
   return `"${s}"`;
 }
 
+function downloadRowsCSV(
+  rows: Record<string, unknown>[],
+  headers: string[],
+  fields: string[],
+  filename: string,
+): void {
+  const lines = rows.map(r => fields.map(f => escape(r[f])).join(','));
+  const csv = [headers.map(h => escape(h)).join(','), ...lines].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function downloadCSV(rows: Record<string, unknown>[]): void {
   const headers = [
     'STO ID', 'Status', 'Request Date', 'Requestor', 'Requestor Email',
@@ -62,8 +79,10 @@ interface Route { shipping_site: string; receiving_site: string; }
 const routeKey = (r: Route) => `${r.shipping_site}→${r.receiving_site}`;
 
 export function STOList() {
-  useAuth();
+  const { user } = useAuth();
+  const isAdmin = user?.group === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const [stos,          setStos]          = useState<STORequest[]>([]);
   const [total,         setTotal]         = useState(0);
@@ -147,6 +166,24 @@ export function STOList() {
     }
   }
 
+  // Admin-only: export the full audit trail as an Excel-friendly CSV.
+  async function handleAuditExport() {
+    setAuditLoading(true);
+    try {
+      const r = await api.get('/sto/audit-log/export');
+      downloadRowsCSV(
+        r.data,
+        ['Audit ID', 'STO ID', 'Action', 'From Status', 'To Status', 'Performed By', 'Notes', 'Performed At'],
+        ['id', 'sto_id', 'action', 'old_status', 'new_status', 'performed_by_name', 'notes', 'performed_at'],
+        `sto-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+    } catch {
+      setError('Audit export failed. Please try again.');
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value); else next.delete(key);
@@ -181,6 +218,21 @@ export function STOList() {
               )}
               Export CSV
             </button>
+            {isAdmin && (
+              <button
+                onClick={handleAuditExport}
+                disabled={auditLoading}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Export the full audit trail (admin only)"
+              >
+                {auditLoading ? (
+                  <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>↓</span>
+                )}
+                Export Audit Trail
+              </button>
+            )}
             <Link to="/sto/new" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 font-medium text-sm">
               + New Request
             </Link>

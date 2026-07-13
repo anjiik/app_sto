@@ -20,7 +20,8 @@ export interface User {
   adUsername: string;
   group: Group;
   name: string;
-  site: string;
+  site: string;      // primary site
+  sites?: string[];  // all sites this user can act on / see
 }
 
 export interface STORequest {

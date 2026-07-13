@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { authenticate, AuthRequest, can } from '../middleware/auth';
+import { authenticate, AuthRequest, can, userHasSite } from '../middleware/auth';
 import { dbQuery, dbQueryOne, dbExecute } from '../db/connection';
 import { logAudit } from '../db/audit';
 import logger from '../lib/logger';
@@ -114,10 +114,24 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const conditions: string[] = ['archived = 0'];
     const params: Record<string, unknown> = {};
 
+    // Site filters accept a single value ("ABC") or a comma-separated list
+    // ("ABC,ABL") for multi-site users. Builds column = @p or column IN (@p0,…).
+    const addSiteFilter = (column: string, raw: string, prefix: string) => {
+      const vals = raw.split(',').map(s => s.trim()).filter(Boolean);
+      if (vals.length === 0) return;
+      if (vals.length === 1) {
+        conditions.push(`${column} = @${prefix}`);
+        params[prefix] = vals[0];
+      } else {
+        const keys = vals.map((v, i) => { params[`${prefix}${i}`] = v; return `@${prefix}${i}`; });
+        conditions.push(`${column} IN (${keys.join(', ')})`);
+      }
+    };
+
     if (status)        { conditions.push('status = @status');               params.status        = status; }
     if (priority)      { conditions.push('priority = @priority');           params.priority      = parseInt(priority, 10); }
-    if (shipping_site) { conditions.push('shipping_site = @shipping_site'); params.shipping_site = shipping_site; }
-    if (receiving_site){ conditions.push('receiving_site = @receiving_site'); params.receiving_site = receiving_site; }
+    if (shipping_site) addSiteFilter('shipping_site', shipping_site, 'shipping_site');
+    if (receiving_site) addSiteFilter('receiving_site', receiving_site, 'receiving_site');
     if (requestor)     { conditions.push('requestor_name = @requestor');    params.requestor     = requestor; }
     if (need_by_from)  { conditions.push('receiving_site_need_by_date >= @need_by_from'); params.need_by_from = need_by_from; }
     if (need_by_to)    { conditions.push('receiving_site_need_by_date <= @need_by_to');   params.need_by_to   = need_by_to; }
@@ -188,6 +202,27 @@ router.get('/audit-log', async (req: AuthRequest, res: Response): Promise<void> 
     res.json(rows);
   } catch (err) {
     logger.error({ err }, 'audit-log GET error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ── GET /api/sto/audit-log/export ─────────────────────────────────────────────
+// Admin-only. Returns the FULL audit trail (no 20-row cap) for Excel/CSV export.
+router.get('/audit-log/export', async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.group !== 'admin') {
+    res.status(403).json({ message: 'Admin access required' }); return;
+  }
+  try {
+    const rows = await dbQuery<Record<string, unknown>>(`
+      SELECT l.id, r.sto_id, l.action, l.old_status, l.new_status,
+             l.performed_by_name, l.notes, l.performed_at
+      FROM sto_audit_log l
+      JOIN sto_requests r ON r.id = l.sto_request_id
+      ORDER BY l.performed_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    logger.error({ err }, 'audit-log export error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -444,7 +479,7 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
     if (!can(user, 'admin') && existing.status !== 'DRAFT') {
       res.status(400).json({ message: 'Only DRAFT STOs can be edited' }); return;
     }
-    if (!can(user, 'admin') && existing.receiving_site !== user.site) {
+    if (!can(user, 'admin') && !userHasSite(user, existing.receiving_site)) {
       res.status(403).json({ message: 'You can only edit STOs at your site' }); return;
     }
 

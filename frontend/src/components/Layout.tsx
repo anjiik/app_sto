@@ -37,6 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { to: '/sto',        label: 'All STOs' },
     { to: '/analytics',  label: 'Analytics' },
     ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
+    { to: '/app-info',   label: 'App Info' },
   ];
 
   const groupColor = user ? GROUP_COLORS[user.group] : 'bg-blue-900';

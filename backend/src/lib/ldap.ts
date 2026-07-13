@@ -32,7 +32,8 @@ export interface LdapAuthResult {
   adUsername:  string;
   email:       string;
   group:       Group;
-  site:        string;
+  site:        string;    // primary site (first matching group)
+  sites:       string[];  // all sites the user has this role at
 }
 
 // Sanitise values before embedding them in LDAP filter strings.
@@ -68,31 +69,40 @@ const CLIENT_OPTS = () => ({
   // tlsOptions: { rejectUnauthorized: false },
 });
 
-// Scans the user's AD group memberships for a {SITE}_{SUFFIX} pattern and
-// derives both the app role and the site code from the first matching group.
-function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string } {
+// Scans the user's AD group memberships and derives the app role (from the first
+// matching group) plus EVERY site the user has that same role at. This lets a
+// user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
+function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; sites: string[] } {
   const cns = memberOf.map(extractCN);
-  for (const cn of cns) {
-    const match = GROUP_MAP[cn.toUpperCase()];
-    if (match) return match;
+  const matches = cns
+    .map(cn => GROUP_MAP[cn.toUpperCase()])
+    .filter((m): m is { group: Group; site: string } => !!m);
+
+  if (matches.length === 0) {
+    throw new Error(
+      'Your account is not in any STO application group. ' +
+      'Contact your administrator to be added to one of the configured AD groups.',
+    );
   }
-  throw new Error(
-    'Your account is not in any STO application group. ' +
-    'Contact your administrator to be added to one of the configured AD groups.',
-  );
+
+  // The first match determines the role; collect all sites sharing that role.
+  const group = matches[0].group;
+  const sites = Array.from(new Set(matches.filter(m => m.group === group).map(m => m.site)));
+  return { group, site: matches[0].site, sites };
 }
 
 function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
   const memberOf = entry.memberOf
     ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
     : [];
-  const { group, site } = resolveGroupAndSite(memberOf);
+  const { group, site, sites } = resolveGroupAndSite(memberOf);
   return {
     displayName: (entry.displayName as string) || sam,
     adUsername:  (entry.sAMAccountName as string) || sam,
     email:       (entry.mail as string) || '',
     group,
     site,
+    sites,
   };
 }
 

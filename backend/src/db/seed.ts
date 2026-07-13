@@ -380,6 +380,10 @@ const DEMO_USERS: DemoUser[] = [
 
   // ── Admin (cross-site; can act on any step and send STOs back) ──────────────
   { username: 'admin',     display_name: 'Demo Admin',    site: 'ABC', group_key: 'admin' },
+
+  // ── Multi-site demo user: logistics for BOTH ABC and ABL (comma-separated
+  //    site list — the login path splits this into sites[] for multi-site access) ──
+  { username: 'multi.slog', display_name: 'Sam Rivera',   site: 'ABC,ABL', group_key: 'shipping_logistics' },
 ];
 
 async function seedDemoUsers(): Promise<void> {

@@ -27,14 +27,25 @@ function toDate(v: string | null | undefined): string {
   return v ? v.slice(0, 10) : '';
 }
 
+// If a date lands on Saturday or Sunday, push it forward to the following Monday.
+// Shipments don't go out on weekends, so the standard estimate shifts to Monday.
+function pushWeekendToMonday(d: Date): Date {
+  const day = d.getDay(); // 0 = Sun, 6 = Sat
+  if (day === 6) d.setDate(d.getDate() + 2);
+  else if (day === 0) d.setDate(d.getDate() + 1);
+  return d;
+}
+
 function addDays(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() + n);
+  pushWeekendToMonday(d);
   return d.toISOString().slice(0, 10);
 }
 
 const SHIPPING_CONDITIONS = ['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen', 'Other'] as const;
-const COLD_MGMT_CONDITIONS = new Set(['Cold below 0', 'Frozen']);
+// Cold-chain conditions that require management approval from both sites.
+const COLD_MGMT_CONDITIONS = new Set(['Cold 2-8C', 'Cold below 0', 'Frozen']);
 const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'] as const;
 
 export function STOForm() {
@@ -52,15 +63,22 @@ export function STOForm() {
   const shippingConditions = watch('shipping_conditions') as string | undefined;
   const materialValue      = watch('material_value');
   const controlledShipping = watch('controlled_shipping_required');
+  const [shiftedToMonday, setShiftedToMonday] = useState(false);
 
   // Auto-populate standard estimated ship date from priority. The field is only
   // editable when Rush is checked; otherwise it stays locked to the priority-based
   // date, so we re-derive it whenever priority changes and rush is off.
+  // If the computed date falls on a weekend it is pushed to the following Monday
+  // (addDays handles the shift) and we flag it so the form can show a note.
   useEffect(() => {
     if (isEdit) return;
-    if (rushRequest) return;
+    if (rushRequest) { setShiftedToMonday(false); return; }
     const p = String(priority || '3');
     const days = p === '1' ? 15 : p === '2' ? 30 : 45;
+    // Determine whether the un-shifted date would have been a weekend.
+    const raw = new Date();
+    raw.setDate(raw.getDate() + days);
+    setShiftedToMonday(raw.getDay() === 0 || raw.getDay() === 6);
     setValue('standard_estimated_ship_date', addDays(days));
   }, [priority, rushRequest, setValue, isEdit]);
 
@@ -234,6 +252,11 @@ export function STOForm() {
                   readOnly={!rushRequest}
                   className={rushRequest ? INPUT : `${INPUT} bg-gray-50 cursor-not-allowed`}
                 />
+                {!rushRequest && shiftedToMonday && (
+                  <p className="text-blue-600 text-xs mt-1">
+                    ℹ The calculated date fell on a weekend, so it was pushed to the following Monday.
+                  </p>
+                )}
               </Field>
               <Field label="Receiving Site Need By Date" required>
                 <input type="date" {...register('receiving_site_need_by_date', { required: true })} className={INPUT} />

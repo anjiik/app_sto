@@ -34,9 +34,10 @@ const GROUP_LABELS: Record<Group, string> = {
 };
 
 function issueToken(
-  adUsername: string, group: Group, displayName: string, site: string,
+  adUsername: string, group: Group, displayName: string, site: string, sites?: string[],
 ): { token: string; user: JwtPayload } {
-  const payload: JwtPayload = { adUsername, group, name: displayName, site };
+  const siteList = sites && sites.length ? sites : [site];
+  const payload: JwtPayload = { adUsername, group, name: displayName, site, sites: siteList };
   const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '8h' });
   return { token, user: payload };
 }
@@ -61,7 +62,13 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
         res.status(401).json({ message: 'Invalid username or password' });
         return;
       }
-      const { token, user } = issueToken(username, demoUser.group_key as Group, demoUser.display_name, demoUser.site);
+      // Demo mode: the `site` column may be a comma-separated list (e.g. "ABC,ABL")
+      // to test multi-site access. The first entry is the primary site.
+      const demoSites = demoUser.site.split(',').map(s => s.trim()).filter(Boolean);
+      const { token, user } = issueToken(
+        username, demoUser.group_key as Group, demoUser.display_name,
+        demoSites[0] || demoUser.site, demoSites,
+      );
       res.json({ token, user });
     } catch (err) {
       console.error('[dev auth] Error:', err);
@@ -73,9 +80,9 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
   // ── Production mode: validate against AD, derive role + site from AD groups ──
   console.log(`[AD auth] Login attempt for: ${username}`);
   try {
-    const { displayName, adUsername, group, site } = await authenticateWithAD(username, password);
-    console.log(`[AD auth] Login succeeded: ${adUsername} → group=${group} site=${site}`);
-    const { token, user } = issueToken(adUsername, group, displayName, site);
+    const { displayName, adUsername, group, site, sites } = await authenticateWithAD(username, password);
+    console.log(`[AD auth] Login succeeded: ${adUsername} → group=${group} sites=${sites.join(',')}`);
+    const { token, user } = issueToken(adUsername, group, displayName, site, sites);
     res.json({ token, user });
   } catch (err: any) {
     console.error(`[AD auth] Failed for ${username}:`, err.message);

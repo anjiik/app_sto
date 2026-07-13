@@ -37,3 +37,15 @@ export function requireGroup(...groups: Group[]) {
 export function can(user: JwtPayload, ...groups: Group[]): boolean {
   return user.group === 'admin' || groups.includes(user.group);
 }
+
+// All sites a user can act on. Falls back to the single `site` when `sites` is
+// absent (older tokens issued before multi-site support).
+export function userSites(user: JwtPayload): string[] {
+  return user.sites && user.sites.length ? user.sites : [user.site];
+}
+
+// True if the given site is one the user is assigned to.
+export function userHasSite(user: JwtPayload, site: string | null | undefined): boolean {
+  if (!site) return false;
+  return userSites(user).includes(site);
+}

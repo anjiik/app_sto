@@ -77,9 +77,12 @@ function Timeline({ status }: { status: STOStatus }) {
 }
 
 // ── Approval panel (for planning / management / finance) ────────────────────
-function ApprovalPanel({ title, onApprove, loading }: {
+// onRevise is optional: when provided a third "Request Revision" button appears
+// (used by the planning step to send the STO back to the requestor as a draft).
+function ApprovalPanel({ title, onApprove, onRevise, loading }: {
   title: string;
   onApprove: (approved: boolean, notes: string) => void;
+  onRevise?: (notes: string) => void;
   loading: boolean;
 }) {
   const [note, setNote] = useState('');
@@ -97,13 +100,17 @@ function ApprovalPanel({ title, onApprove, loading }: {
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Optional notes..."
+            placeholder={onRevise ? 'Notes (required to reject or request revision)...' : 'Optional notes...'}
             rows={2}
             className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button disabled={loading} onClick={() => onApprove(true, note)}
               className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">✓ Approve</button>
+            {onRevise && (
+              <button disabled={loading} onClick={() => onRevise(note)}
+                className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50">↩ Request Revision</button>
+            )}
             <button disabled={loading} onClick={() => onApprove(false, note)}
               className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">✗ Reject</button>
             <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-700 px-2 text-sm">Cancel</button>
@@ -188,14 +195,20 @@ export function STODetail() {
   const g = user?.group;
   const isRequestor = user?.name === sto.requestor_name;
 
+  // Multi-site: a user may be assigned to several sites. Membership checks use
+  // the whole list rather than a single site.
+  const mySites = user?.sites && user.sites.length ? user.sites : user?.site ? [user.site] : [];
+  const atShippingSite = !!sto.shipping_site && mySites.includes(sto.shipping_site);
+  const atReceivingSite = !!sto.receiving_site && mySites.includes(sto.receiving_site);
+
   // Who is active right now?
   const myTurn = (
     ((isRequestor || g === 'admin') && sto.status === 'DRAFT') ||
-    (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW'      && user?.site === sto.shipping_site) ||
-    (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'   && user?.site === sto.shipping_site) ||
-    (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW'     && user?.site === sto.shipping_site) ||
-    (g === 'management'         && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site) ||
-    (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS'  && user?.site === sto.receiving_site)
+    (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW'      && atShippingSite) ||
+    (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'   && atShippingSite) ||
+    (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW'     && atShippingSite) ||
+    (g === 'management'         && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite) ||
+    (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS'  && atReceivingSite)
   );
 
   return (
@@ -225,7 +238,9 @@ export function STODetail() {
                 Submit for Planning Review →
               </button>
             )}
-            {g === 'admin' && (
+            {/* Admin can edit any STO; the requestor can edit their own while it's
+                still a DRAFT (initial request + material information). */}
+            {(g === 'admin' || (isRequestor && sto.status === 'DRAFT')) && (
               <button
                 onClick={() => navigate(`/sto/${id}/edit`)}
                 className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 font-medium text-sm"
@@ -332,8 +347,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 2: Shipping Planning Review ── */}
-        <Section title="Shipping Site Planning Review" icon="🗂️" active={g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && user?.site === sto.shipping_site}>
-          {g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && user?.site === sto.shipping_site ? (
+        <Section title="Shipping Site Planning Review" icon="🗂️" active={g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && atShippingSite}>
+          {g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && atShippingSite ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Complete the inventory review fields below, then approve or reject.</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -371,7 +386,14 @@ export function STODetail() {
               <ApprovalPanel
                 title="Inventory Request"
                 loading={actionLoading}
-                onApprove={(approved, notes) => doAction('planning', { approved, notes, ...planningForm })}
+                onApprove={(approved, notes) => {
+                  if (!approved && !notes.trim()) { setMessage({ text: 'A note is required to reject.', ok: false }); return; }
+                  doAction('planning', { decision: approved ? 'approve' : 'reject', notes, ...planningForm });
+                }}
+                onRevise={(notes) => {
+                  if (!notes.trim()) { setMessage({ text: 'A note is required to request a revision.', ok: false }); return; }
+                  doAction('planning', { decision: 'revise', notes });
+                }}
               />
 
             </div>
@@ -388,20 +410,20 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 3: Shipping Logistics ── */}
-        <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site}>
-          {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && user?.site === sto.shipping_site ? (
+        <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && atShippingSite}>
+          {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && atShippingSite ? (
             <div className="space-y-4">
               {sto.mgmt_confirmed ? (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-lg text-sm">
                   Both management approvals are complete. Review and confirm the shipment details below (edit anything that changed), then continue to Receiving Logistics.
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold/frozen shipping, or freight cost &gt; 30% of material value.</p>
+                <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold-chain shipping (2-8C, below 0, or frozen), or freight cost &gt; 30% of material value.</p>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton', prefill: sto.container_information },
-                  { key: 'tracking_id',            label: 'STO Tracker ID',                        placeholder: '', prefill: sto.tracking_id },
+                  { key: 'sto_number',             label: 'STO Number',                            placeholder: 'e.g. STO-2026-00001', prefill: sto.sto_number },
                   { key: 'shipment_id',            label: 'Shipment ID',                           placeholder: 'e.g. SHP-20001', prefill: sto.shipment_id },
                 ].map(f => (
                   <div key={f.key}>
@@ -425,13 +447,15 @@ export function STODetail() {
                   <p className="text-xs text-gray-400 mt-1">Management approval required if &gt;$20,000 or &gt;30% of material value</p>
                 </div>
                 {[
-                  { key: 'expedited_estimated_ship_date', label: 'Expedited Estimated Ship Date', prefill: sto.expedited_estimated_ship_date },
-                  { key: 'pgi_date',                      label: 'PGI Date (Goods Issued from SAP)', prefill: sto.pgi_date },
-                  { key: 'estimated_delivery_date',        label: 'Estimated Delivery Date', prefill: sto.estimated_delivery_date },
-                  { key: 'actual_ship_date',               label: 'Actual Ship Date', prefill: sto.actual_ship_date },
+                  { key: 'expedited_estimated_ship_date', label: 'Expedited Estimated Ship Date', prefill: sto.expedited_estimated_ship_date, req: false },
+                  { key: 'pgi_date',                      label: 'PGI Date (Goods Issued from SAP)', prefill: sto.pgi_date, req: sto.mgmt_confirmed },
+                  { key: 'estimated_delivery_date',        label: 'Estimated Delivery Date', prefill: sto.estimated_delivery_date, req: sto.mgmt_confirmed },
+                  { key: 'actual_ship_date',               label: 'Actual Ship Date', prefill: sto.actual_ship_date, req: sto.mgmt_confirmed },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {f.label} {f.req && <span className="text-red-500">*</span>}
+                    </label>
                     <input type="date"
                       defaultValue={f.prefill ? String(f.prefill).slice(0, 10) : ''}
                       onChange={e => setLogisticsForm(p => ({ ...p, [f.key]: e.target.value }))}
@@ -443,10 +467,33 @@ export function STODetail() {
                 <input type="checkbox" defaultChecked={Boolean(sto.ready_to_ship)}
                   onChange={e => setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))}
                   className="w-4 h-4 text-teal-600 rounded" />
-                <span className="text-sm text-gray-700 font-medium">Ready to Ship</span>
+                <span className="text-sm text-gray-700 font-medium">
+                  Ready to Ship {sto.mgmt_confirmed && <span className="text-red-500">*</span>}
+                </span>
               </label>
+              {sto.mgmt_confirmed && (
+                <p className="text-xs text-gray-500">
+                  Actual ship date, estimated delivery date, PGI date and Ready to Ship are required before continuing.
+                </p>
+              )}
               <button
-                onClick={() => doAction('logistics', logisticsForm)}
+                onClick={() => {
+                  // On the confirm pass, enforce the mandatory fields client-side
+                  // before hitting the server (server re-validates as well).
+                  if (sto.mgmt_confirmed) {
+                    const f = logisticsForm;
+                    const missing: string[] = [];
+                    if (!f.actual_ship_date && !sto.actual_ship_date)               missing.push('Actual Ship Date');
+                    if (!f.estimated_delivery_date && !sto.estimated_delivery_date) missing.push('Estimated Delivery Date');
+                    if (!f.pgi_date && !sto.pgi_date)                               missing.push('PGI Date');
+                    if (!f.ready_to_ship && !sto.ready_to_ship)                     missing.push('Ready to Ship');
+                    if (missing.length) {
+                      setMessage({ text: `Required before continuing: ${missing.join(', ')}`, ok: false });
+                      return;
+                    }
+                  }
+                  doAction('logistics', logisticsForm);
+                }}
                 disabled={actionLoading}
                 className="bg-teal-700 text-white px-5 py-2 rounded-lg hover:bg-teal-800 font-medium text-sm disabled:opacity-50"
               >
@@ -462,17 +509,17 @@ export function STODetail() {
               <div><span className="text-xs text-gray-400 block">PGI Date</span>{fmt(sto.pgi_date)}</div>
               <div><span className="text-xs text-gray-400 block">Est. Delivery Date</span>{fmt(sto.estimated_delivery_date)}</div>
               <div><span className="text-xs text-gray-400 block">Actual Ship Date</span>{fmt(sto.actual_ship_date)}</div>
-              <div><span className="text-xs text-gray-400 block">STO Tracker ID</span>{sto.tracking_id || '–'}</div>
+              <div><span className="text-xs text-gray-400 block">STO Number</span>{sto.sto_number || '–'}</div>
               <div><span className="text-xs text-gray-400 block">Shipment ID</span>{sto.shipment_id || '–'}</div>
             </div>
           )}
         </Section>
 
         {/* ── SECTION 4: Management Review ── */}
-        <Section title="Shipping Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && user?.site === sto.shipping_site}>
+        <Section title="Shipping Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && atShippingSite}>
           {sto.management_approval_required === false && sto.status !== 'MANAGEMENT_REVIEW' ? (
             <div className="text-sm text-gray-400 italic">Not required for this order</div>
-          ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && user?.site === sto.shipping_site ? (
+          ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && atShippingSite ? (
             <ApprovalPanel
               title="Management Approval"
               loading={actionLoading}
@@ -486,8 +533,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 5: Receiving Site Management Review ── */}
-        <Section title="Receiving Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site}>
-          {g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && user?.site === sto.receiving_site ? (
+        <Section title="Receiving Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite}>
+          {g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite ? (
             <ApprovalPanel
               title="Receiving Site Management Approval"
               loading={actionLoading}
@@ -499,8 +546,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 6: Receiving Logistics ── */}
-        <Section title="Receiving Site Logistics" icon="🏭" active={g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && user?.site === sto.receiving_site}>
-          {g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && user?.site === sto.receiving_site ? (
+        <Section title="Receiving Site Logistics" icon="🏭" active={g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && atReceivingSite}>
+          {g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && atReceivingSite ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Confirm receipt details and close out the delivery.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
