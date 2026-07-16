@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>STO Management — User Guide</title>
+<style>
+  :root {
+    --blue: #1d4ed8;
+    --blue-dark: #1e3a8a;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg-soft: #f9fafb;
+    --amber: #b45309;
+    --green: #047857;
+    --red: #b91c1c;
+  }
+  @page {
+    size: A4;
+    margin: 20mm 16mm 18mm 16mm;
+    @bottom-center { content: counter(page); }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.5;
+    margin: 0;
+  }
+  h1, h2, h3, h4 { color: var(--blue-dark); line-height: 1.25; }
+  h1 { font-size: 26pt; margin: 0 0 4pt; }
+  h2 {
+    font-size: 15pt;
+    margin: 22pt 0 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 2px solid var(--blue);
+    page-break-after: avoid;
+  }
+  h3 { font-size: 12pt; margin: 14pt 0 4pt; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; margin: 10pt 0 2pt; color: var(--ink); page-break-after: avoid; }
+  p { margin: 4pt 0; }
+  ul, ol { margin: 4pt 0 4pt; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  code {
+    background: #eef2ff; color: var(--blue-dark);
+    padding: 0 3px; border-radius: 3px; font-size: 9.5pt;
+    font-family: "Consolas", "SF Mono", Menlo, monospace;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); color: var(--blue-dark); font-weight: 600; }
+  tr { page-break-inside: avoid; }
+  .cover {
+    height: 247mm; display: flex; flex-direction: column;
+    justify-content: center; page-break-after: always;
+  }
+  .cover .badge {
+    display: inline-block; background: var(--blue); color: #fff;
+    font-size: 9pt; letter-spacing: 2px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 4px; align-self: flex-start;
+  }
+  .cover h1 { font-size: 40pt; margin: 16pt 0 6pt; }
+  .cover .sub { font-size: 14pt; color: var(--muted); }
+  .cover .meta { margin-top: 40pt; font-size: 10pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12pt; }
+  .toc { page-break-after: always; }
+  .toc ol { list-style: none; padding-left: 0; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; margin: 6pt 0; font-weight: 600; }
+  .toc > ol > li::before { content: counter(toc) ".  "; color: var(--blue); }
+  .toc ul { list-style: none; padding-left: 22pt; font-weight: 400; font-size: 9.5pt; color: var(--muted); }
+  .lead { font-size: 11.5pt; color: var(--muted); margin-bottom: 10pt; }
+  .callout {
+    border-left: 4px solid var(--blue); background: var(--bg-soft);
+    padding: 8px 12px; margin: 8pt 0; border-radius: 0 6px 6px 0;
+    page-break-inside: avoid;
+  }
+  .callout.tip { border-color: var(--green); }
+  .callout.warn { border-color: var(--amber); }
+  .callout .label { font-weight: 700; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  .callout.tip .label { color: var(--green); }
+  .callout.warn .label { color: var(--amber); }
+  .callout.note .label { color: var(--blue); }
+  .pill {
+    display: inline-block; font-size: 8.5pt; font-weight: 600;
+    padding: 1px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .pill.gray { background: #f3f4f6; color: #374151; }
+  .pill.blue { background: #dbeafe; color: #1e40af; }
+  .pill.amber { background: #fef3c7; color: #92400e; }
+  .pill.green { background: #d1fae5; color: #065f46; }
+  .pill.red { background: #fee2e2; color: #991b1b; }
+  .flow { text-align: center; margin: 10pt 0; page-break-inside: avoid; }
+  .flow .step {
+    display: inline-block; background: #eef2ff; border: 1px solid #c7d2fe;
+    color: var(--blue-dark); font-size: 8.5pt; font-weight: 600;
+    padding: 4px 9px; border-radius: 6px; margin: 2px 0;
+  }
+  .flow .arrow { color: var(--muted); margin: 0 3px; font-size: 9pt; }
+  .role-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8pt 0; page-break-inside: avoid; }
+  .role-card h3 { margin-top: 0; }
+  .kicker { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 1px; color: var(--blue); font-weight: 700; }
+  section { page-break-before: always; }
+  section.first { page-break-before: avoid; }
+  .two-col { column-count: 2; column-gap: 18pt; }
+  .footer-note { font-size: 8.5pt; color: var(--muted); margin-top: 16pt; border-top: 1px solid var(--line); padding-top: 6pt; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <span class="badge">User Guide</span>
+  <h1>STO Management</h1>
+  <div class="sub">Stock Transfer Order requests, approvals &amp; tracking — a complete guide for every role.</div>
+  <div class="meta">
+    <strong>Audience:</strong> Requestors, Planning, Logistics, Management &amp; Receiving teams<br>
+    <strong>Access:</strong> Available in-app under <code>/sto</code> · App Info page<br>
+    <strong>Version:</strong> Covers the current form &amp; workflow (multi-site, weekend ship-date shift, dual management approval)
+  </div>
+</div>
+
+<!-- ============ TOC ============ -->
+<div class="toc">
+  <h2 style="border:none; margin-top:0;">Contents</h2>
+  <ol>
+    <li>Getting Started
+      <ul><li>Signing in · Your role · Navigating the app</li></ul>
+    </li>
+    <li>The STO Lifecycle at a Glance
+      <ul><li>Workflow diagram · Statuses explained</li></ul>
+    </li>
+    <li>Creating &amp; Submitting a Request <span class="pill gray">Requestor</span>
+      <ul><li>Form fields · Rush &amp; ship dates · Validation</li></ul>
+    </li>
+    <li>Planning Review <span class="pill gray">Shipping Planning</span></li>
+    <li>Shipping Logistics <span class="pill gray">Shipping Logistics</span></li>
+    <li>Management Approval <span class="pill gray">Management</span></li>
+    <li>Receiving &amp; Closeout <span class="pill gray">Receiving Logistics</span></li>
+    <li>Dashboard &amp; Work Queues</li>
+    <li>Finding STOs: List, Filters &amp; Export</li>
+    <li>Reading an STO: Detail, Timeline &amp; Audit</li>
+    <li>Analytics</li>
+    <li>Admin Tasks: Revert, Send Back &amp; Archive</li>
+    <li>Multi-Site Access</li>
+    <li>Reference &amp; Troubleshooting</li>
+  </ol>
+</div>
+
+<!-- ============ 1. GETTING STARTED ============ -->
+<section class="first">
+  <span class="kicker">Section 1</span>
+  <h2>Getting Started</h2>
+  <p class="lead">STO Management is a web app for creating, approving, and tracking Stock Transfer Orders between sites. This guide walks through every step, organized by the role you play.</p>
+
+  <h3>Signing in</h3>
+  <p>Open the app in your browser at your organization's STO address (served under <code>/sto</code>). Sign in with your normal work credentials — access is granted through your Active Directory group for your <strong>site</strong> and <strong>role</strong> (for example <code>ABC_LOGISTICS</code>). If you can't sign in, see <em>Requesting Access</em> in Section 14.</p>
+
+  <h3>Your role determines what you see</h3>
+  <p>The app is role-aware: your dashboard, queues, and available actions all depend on your role. You may hold more than one role or cover more than one site. The six roles are:</p>
+  <table>
+    <tr><th>Role</th><th>What you do</th></tr>
+    <tr><td><span class="pill gray">Requestor</span> <code>receiving_site</code></td><td>Create and submit new STO requests; track your own drafts.</td></tr>
+    <tr><td><span class="pill blue">Shipping Planning</span> <code>shipping_planning</code></td><td>Review requests for feasibility; add planning details; approve, revise, or reject.</td></tr>
+    <tr><td><span class="pill blue">Shipping Logistics</span> <code>shipping_logistics</code></td><td>Add freight &amp; shipping details; route for management approval when required.</td></tr>
+    <tr><td><span class="pill amber">Management</span> <code>management</code></td><td>Approve high-value or cold-chain shipments at the shipping <em>and</em> receiving site.</td></tr>
+    <tr><td><span class="pill green">Receiving Logistics</span> <code>receiving_logistics</code></td><td>Confirm receipt and close out the delivery.</td></tr>
+    <tr><td><span class="pill red">Admin</span> <code>admin</code></td><td>Fix mistakes (revert / send back), manage archiving, oversee all sites.</td></tr>
+  </table>
+
+  <h3>Navigating the app</h3>
+  <p>The top navigation bar is available on every page:</p>
+  <ul>
+    <li><strong>Dashboard</strong> — your personal work queue and key numbers (Section 8).</li>
+    <li><strong>STOs</strong> — the searchable list of all requests with filters and CSV export (Section 9).</li>
+    <li><strong>Analytics</strong> — charts and trends across all STOs (Section 11).</li>
+    <li><strong>App Info</strong> — this guide, access requests, and administrator contacts.</li>
+  </ul>
+  <div class="callout tip"><span class="label">Tip</span><br>Start every session on the <strong>Dashboard</strong>. It shows exactly what is waiting on you, so nothing sits idle.</div>
+</section>
+
+<!-- ============ 2. LIFECYCLE ============ -->
+<section>
+  <span class="kicker">Section 2</span>
+  <h2>The STO Lifecycle at a Glance</h2>
+  <p class="lead">Every STO moves through the same ordered path. Each hand-off is one role's responsibility. Management approval is only inserted when a shipment is high-value or cold-chain.</p>
+
+  <div class="flow">
+    <span class="step">Draft</span><span class="arrow">→</span>
+    <span class="step">Planning Review</span><span class="arrow">→</span>
+    <span class="step">Shipping Logistics</span><span class="arrow">→</span>
+    <span class="step">Management Review*</span><span class="arrow">→</span>
+    <span class="step">Receiving Mgmt Review*</span><span class="arrow">→</span>
+    <span class="step">Receiving Logistics</span><span class="arrow">→</span>
+    <span class="step">Closed</span>
+  </div>
+  <p style="text-align:center; font-size:9pt; color:var(--muted);">* Management steps are skipped automatically when approval is not required (see Section 6).</p>
+
+  <h3>What each status means</h3>
+  <table>
+    <tr><th>Status</th><th>Meaning</th><th>Waiting on</th></tr>
+    <tr><td><span class="pill gray">Draft</span></td><td>Being written; not yet submitted. Editable.</td><td>Requestor</td></tr>
+    <tr><td><span class="pill blue">Planning Review</span></td><td>Submitted; under feasibility review.</td><td>Shipping Planning</td></tr>
+    <tr><td><span class="pill blue">Shipping Logistics</span></td><td>Approved by planning; freight &amp; shipping details being added.</td><td>Shipping Logistics</td></tr>
+    <tr><td><span class="pill amber">Management Review</span></td><td>Awaiting shipping-site management sign-off.</td><td>Management (shipping)</td></tr>
+    <tr><td><span class="pill amber">Receiving Mgmt Review</span></td><td>Awaiting receiving-site management sign-off.</td><td>Management (receiving)</td></tr>
+    <tr><td><span class="pill green">Receiving Logistics</span></td><td>Shipped; awaiting receipt confirmation &amp; closeout.</td><td>Receiving Logistics</td></tr>
+    <tr><td><span class="pill green">Closed</span></td><td>Delivered and closed. Requestor is notified by email.</td><td>— (complete)</td></tr>
+    <tr><td><span class="pill red">Rejected</span></td><td>Declined at an approval step. The reason is recorded.</td><td>— (terminal)</td></tr>
+  </table>
+  <div class="callout note"><span class="label">Note</span><br>A request can also be <strong>revised</strong> back to Draft by Planning, or <strong>sent back</strong> a step by an Admin. In both cases a reason is attached so you know what to fix.</div>
+</section>
+
+<!-- ============ 3. CREATING ============ -->
+<section>
+  <span class="kicker">Section 3 · Requestor</span>
+  <h2>Creating &amp; Submitting a Request</h2>
+  <p class="lead">Requestors (and admins) create new STOs. From the <strong>STOs</strong> list or the Dashboard, click <strong>New STO</strong> to open the form.</p>
+
+  <h3>Filling in the form</h3>
+  <p>Fields are grouped into sections. Required fields are validated before you can submit.</p>
+
+  <h4>Requestor &amp; material</h4>
+  <table>
+    <tr><th>Field</th><th>Notes</th></tr>
+    <tr><td>Requestor name / email / requesting plant</td><td>Who the request is for.</td></tr>
+    <tr><td>Material (SAP) <span class="pill red">required</span></td><td>Exactly <strong>8 digits</strong>.</td></tr>
+    <tr><td>Material description <span class="pill red">required</span></td><td>Plain-language description.</td></tr>
+    <tr><td>Quantity &amp; UoM <span class="pill red">required</span></td><td>Positive whole number and unit of measure.</td></tr>
+    <tr><td>Brand at receiving site <span class="pill red">required</span></td><td>Brand as it will be labeled at destination.</td></tr>
+    <tr><td>MPN / Batch / Expiration</td><td>Left blank here — <strong>filled in by Planning</strong>.</td></tr>
+  </table>
+
+  <h4>Shipping details</h4>
+  <table>
+    <tr><th>Field</th><th>Notes</th></tr>
+    <tr><td>Shipping site &amp; receiving site <span class="pill red">required</span></td><td>Where it ships from and to.</td></tr>
+    <tr><td>Shipping conditions <span class="pill red">required</span></td><td>Ambient, Cold 2–8 °C, Cold below 0, Frozen, or <em>Other</em> (free text). Cold-chain choices trigger management approval later.</td></tr>
+    <tr><td>Controlled shipping</td><td>Check if controlled; add notes if needed.</td></tr>
+  </table>
+
+  <h4>Dates &amp; urgency</h4>
+  <table>
+    <tr><th>Field</th><th>Notes</th></tr>
+    <tr><td>Priority <span class="pill red">required</span></td><td>Priority 1, 2, or 3 — sets the standard estimated ship date automatically.</td></tr>
+    <tr><td>Rush request</td><td>Check to flag as rush. A <strong>rush reason is then required.</strong></td></tr>
+    <tr><td>Standard estimated ship date</td><td>Auto-calculated (see below). Editable on rush.</td></tr>
+    <tr><td>Receiving site need-by date</td><td>Optional but recommended — drives "due soon" and "overdue" flags on dashboards.</td></tr>
+  </table>
+
+  <h4>Financial</h4>
+  <table>
+    <tr><th>Field</th><th>Notes</th></tr>
+    <tr><td>Material value <span class="pill red">required</span></td><td>Value of the goods. High values trigger management approval.</td></tr>
+    <tr><td>Inco terms / insurance</td><td>Optional commercial details.</td></tr>
+  </table>
+
+  <h3>How the estimated ship date is calculated</h3>
+  <p>When you pick a priority, the app sets a <strong>standard estimated ship date</strong> from today:</p>
+  <ul>
+    <li><span class="pill amber">Priority 1</span> → today + 15 days</li>
+    <li><span class="pill blue">Priority 2</span> → today + 30 days</li>
+    <li><span class="pill gray">Priority 3</span> → today + 45 days</li>
+  </ul>
+  <div class="callout note"><span class="label">Weekend shift</span><br>If that date lands on a <strong>Saturday or Sunday, it moves to the following Monday</strong> automatically. The form shows a small note when this happens so the date isn't a surprise.</div>
+
+  <h3>Submitting</h3>
+  <p>Save creates or updates a <span class="pill gray">Draft</span> — drafts are private to you and fully editable. When ready, click <strong>Submit</strong>. The STO advances to <span class="pill blue">Planning Review</span> and appears in the Planning team's queue. You'll be told what's missing if any required field is blank.</p>
+  <div class="callout warn"><span class="label">Before you submit</span><br>Double-check the SAP number (8 digits), quantity, sites, and — if urgent — the rush reason. After submission you can't edit directly; you'd need Planning to revise it or an Admin to send it back.</div>
+</section>
+
+<!-- ============ 4. PLANNING ============ -->
+<section>
+  <span class="kicker">Section 4 · Shipping Planning</span>
+  <h2>Planning Review</h2>
+  <p class="lead">Planning is the first approval. You confirm the request is feasible and fill in material specifics before it moves to logistics.</p>
+
+  <h3>Your queue</h3>
+  <p>On the Dashboard, the <strong>"Awaiting your Planning Review"</strong> queue lists every STO at <span class="pill blue">Planning Review</span> for your shipping site. Open one to review it.</p>
+
+  <h3>Adding planning details</h3>
+  <p>On the STO detail page you can record:</p>
+  <ul>
+    <li><strong>MPN number</strong>, <strong>batch number</strong>, and <strong>expiration date</strong> for the material.</li>
+    <li><strong>Planning notes</strong> — context for downstream roles.</li>
+  </ul>
+
+  <h3>Your three choices</h3>
+  <div class="role-card">
+    <h3><span class="pill green">Approve</span></h3>
+    <p>Sends the STO forward to <span class="pill blue">Shipping Logistics</span>. Your name and time are recorded on the timeline.</p>
+  </div>
+  <div class="role-card">
+    <h3><span class="pill amber">Revise</span></h3>
+    <p>Sends the STO <strong>back to Draft</strong> with your note attached as the reason. The requestor fixes it and resubmits. Use this for correctable issues (wrong quantity, missing detail).</p>
+  </div>
+  <div class="role-card">
+    <h3><span class="pill red">Reject</span></h3>
+    <p>Declines the request permanently (status <span class="pill red">Rejected</span>). The reason is stored in the audit trail. Use this when the request shouldn't proceed at all.</p>
+  </div>
+  <div class="callout tip"><span class="label">Tip</span><br>Prefer <strong>Revise</strong> over Reject when the requestor can salvage the request — it keeps the history in one thread instead of forcing a brand-new STO.</div>
+</section>
+
+<!-- ============ 5. LOGISTICS ============ -->
+<section>
+  <span class="kicker">Section 5 · Shipping Logistics</span>
+  <h2>Shipping Logistics</h2>
+  <p class="lead">Logistics adds the shipping and freight details, then submits. The app decides whether management approval is needed and routes accordingly.</p>
+
+  <h3>Your queue</h3>
+  <p>The <strong>"Awaiting your Logistics Submission"</strong> queue holds STOs at <span class="pill blue">Shipping Logistics</span> for your site.</p>
+
+  <h3>What you add</h3>
+  <ul>
+    <li><strong>Freight cost</strong> and shipping details.</li>
+    <li>STO number, shipment ID, and tracking information as they become available.</li>
+  </ul>
+
+  <h3>What happens when you submit</h3>
+  <p>The app checks four conditions. If <strong>any</strong> is true, the STO is routed to <span class="pill amber">Management Review</span>; otherwise it goes straight to <span class="pill green">Receiving Logistics</span>.</p>
+  <table>
+    <tr><th>Condition</th><th>Threshold (default)</th></tr>
+    <tr><td>Material value is high</td><td>over $100,000</td></tr>
+    <tr><td>Freight cost is high</td><td>over $20,000</td></tr>
+    <tr><td>Freight is large relative to value</td><td>freight ÷ value &gt; 30%</td></tr>
+    <tr><td>Cold-chain shipping conditions</td><td>Cold 2–8 °C, Cold below 0, or Frozen</td></tr>
+  </table>
+  <div class="callout note"><span class="label">Note</span><br>The dollar thresholds are configured by your administrators and may differ at your organization. The behavior — high value / high freight / high ratio / cold-chain → management approval — is always the same.</div>
+
+  <h3>The confirm pass</h3>
+  <p>When management approval <em>was</em> required, the STO comes back to you one more time after both management approvals. On this pass you finalize the shipment — <strong>actual ship date, estimated delivery date, PGI date, ready-to-ship</strong> — and it then advances to <span class="pill green">Receiving Logistics</span>. (It will not loop back to management again.)</p>
+</section>
+
+<!-- ============ 6. MANAGEMENT ============ -->
+<section>
+  <span class="kicker">Section 6 · Management</span>
+  <h2>Management Approval</h2>
+  <p class="lead">Management sign-off protects high-value and cold-chain shipments. It happens at <strong>both</strong> the shipping site and the receiving site.</p>
+
+  <h3>When it's required</h3>
+  <p>Management review only appears when logistics submits an STO that meets one of the four conditions in Section 5 (high value, high freight, high freight-to-value ratio, or cold-chain). Routine shipments skip both management steps entirely.</p>
+
+  <h3>Two approvals, in order</h3>
+  <ol>
+    <li><span class="pill amber">Management Review</span> — <strong>shipping-site</strong> management approves or rejects.</li>
+    <li><span class="pill amber">Receiving Mgmt Review</span> — <strong>receiving-site</strong> management approves or rejects.</li>
+  </ol>
+  <p>Both appear in the management <strong>"Awaiting your Management Approval"</strong> queue. If you cover both sites, you'll see both steps.</p>
+
+  <h3>Your choices</h3>
+  <ul>
+    <li><span class="pill green">Approve</span> — records your sign-off and advances the STO. After the receiving-site approval, it returns to Shipping Logistics for the confirm pass (Section 5).</li>
+    <li><span class="pill red">Reject</span> — declines the STO (status <span class="pill red">Rejected</span>) with your reason recorded.</li>
+  </ul>
+  <div class="callout warn"><span class="label">Both are required</span><br>A management-flagged STO cannot ship until <strong>both</strong> shipping-site and receiving-site management have approved. If either rejects, it stops.</div>
+</section>
+
+<!-- ============ 7. RECEIVING ============ -->
+<section>
+  <span class="kicker">Section 7 · Receiving Logistics</span>
+  <h2>Receiving &amp; Closeout</h2>
+  <p class="lead">Receiving Logistics is the final human step: confirm the goods arrived and close the delivery.</p>
+
+  <h3>Your queue</h3>
+  <p>The <strong>"Awaiting your Receipt Confirmation"</strong> queue lists STOs at <span class="pill green">Receiving Logistics</span> for your receiving site.</p>
+
+  <h3>Confirming receipt</h3>
+  <p>Record the <strong>actual receipt date</strong> when the shipment arrives. You can update receipt information without closing — the STO stays in <span class="pill green">Receiving Logistics</span> until you're ready to finalize.</p>
+
+  <h3>Closing out</h3>
+  <p>When the delivery is complete, mark <strong>delivery closed out</strong>. The STO moves to <span class="pill green">Closed</span> and the original requestor receives a completion email automatically.</p>
+  <div class="callout tip"><span class="label">Tip</span><br>Only close out once you've confirmed quantity and condition. Closing is the terminal step — reopening requires an admin.</div>
+</section>
+
+<!-- ============ 8. DASHBOARD ============ -->
+<section>
+  <span class="kicker">Section 8</span>
+  <h2>Dashboard &amp; Work Queues</h2>
+  <p class="lead">The Dashboard is your home base. It filters the whole system down to just what needs <em>your</em> attention.</p>
+
+  <h3>Your work queue</h3>
+  <p>The main panel shows the STOs waiting on your role and site — the exact label depends on your role (e.g. "Awaiting your Planning Review", "Awaiting your Receipt Confirmation"). Click any row to open it.</p>
+
+  <h3>Key numbers (KPIs)</h3>
+  <table>
+    <tr><th>Card</th><th>What it counts</th></tr>
+    <tr><td><span class="pill amber">Rush Active</span></td><td>Active rush requests still in flight.</td></tr>
+    <tr><td><span class="pill blue">Due Soon</span></td><td>STOs whose need-by date is close (about a week out).</td></tr>
+    <tr><td><span class="pill red">Overdue</span></td><td>STOs past their need-by date and not yet closed.</td></tr>
+  </table>
+
+  <h3>Pipeline &amp; recent activity</h3>
+  <p>A row of pipeline pills shows how many STOs sit at each status — a quick read on where work is piling up. Below that, a <strong>recent activity</strong> feed lists the latest actions across the system so you can see momentum at a glance.</p>
+  <div class="callout tip"><span class="label">Tip</span><br>Watch the <strong>Overdue</strong> and <strong>Due Soon</strong> cards daily. They rely on the receiving-site need-by date, so encourage requestors to always set one.</div>
+</section>
+
+<!-- ============ 9. LIST & FILTERS ============ -->
+<section>
+  <span class="kicker">Section 9</span>
+  <h2>Finding STOs: List, Filters &amp; Export</h2>
+  <p class="lead">The <strong>STOs</strong> page lists every request you can see, with powerful filters and one-click CSV export.</p>
+
+  <h3>Search</h3>
+  <p>The search box matches across <strong>SAP number, material description, STO ID, and requestor name</strong> — type any fragment to narrow the list.</p>
+
+  <h3>Filters</h3>
+  <p>Combine any of these to zero in:</p>
+  <table>
+    <tr><th>Filter</th><th>Use it to…</th></tr>
+    <tr><td>Status</td><td>Show only one workflow stage (e.g. all Receiving Logistics).</td></tr>
+    <tr><td>Priority</td><td>Focus on Priority 1 / 2 / 3.</td></tr>
+    <tr><td>Shipping site / Receiving site</td><td>Filter by one or more sites (multi-site supported).</td></tr>
+    <tr><td>Requestor</td><td>All STOs from a given requestor.</td></tr>
+    <tr><td>Need-by date range</td><td>Everything due within a window.</td></tr>
+    <tr><td>Rush only</td><td>Just active rush requests.</td></tr>
+    <tr><td>Active only</td><td>Hide Closed and Rejected.</td></tr>
+    <tr><td>Has need-by</td><td>Only rows with a need-by date set.</td></tr>
+  </table>
+  <p>You can also <strong>sort by need-by date</strong> (earliest first) to triage what's most urgent.</p>
+
+  <h3>Export to CSV</h3>
+  <p>Click <strong>Export</strong> to download the current view as a CSV file — handy for reporting, sharing, or offline analysis. The export respects your active filters.</p>
+  <div class="callout note"><span class="label">Note</span><br>The list only ever shows STOs you're entitled to see, based on your site(s) and role. Admins see everything.</div>
+</section>
+
+<!-- ============ 10. DETAIL ============ -->
+<section>
+  <span class="kicker">Section 10</span>
+  <h2>Reading an STO: Detail, Timeline &amp; Audit</h2>
+  <p class="lead">Click any STO to open its detail page — the single source of truth for that request.</p>
+
+  <h3>What's on the page</h3>
+  <ul>
+    <li><strong>All request details</strong> — every field entered by the requestor, planning, and logistics.</li>
+    <li><strong>Process timeline</strong> — the workflow steps with the current position highlighted, so you can see how far along it is and what's next.</li>
+    <li><strong>Action panel</strong> — context-aware buttons for <em>your</em> role at the current step (approve, revise, reject, confirm, close, etc.). If it's not your turn, you'll simply see the read-only view.</li>
+    <li><strong>Audit log</strong> — a complete, timestamped record of every action, who took it, and any notes or reasons.</li>
+  </ul>
+
+  <h3>Spotting a hold-up</h3>
+  <p>The current status and timeline tell you who the STO is waiting on. If it's been sitting a while, check the audit log for a <strong>revise</strong> or <strong>send-back</strong> reason — the request may be waiting on a fix from an earlier role.</p>
+  <div class="callout tip"><span class="label">Tip</span><br>When a request has been sent back, the reason appears prominently. Read it first — it tells you exactly what needs to change before it can move on.</div>
+</section>
+
+<!-- ============ 11. ANALYTICS ============ -->
+<section>
+  <span class="kicker">Section 11</span>
+  <h2>Analytics</h2>
+  <p class="lead">The Analytics page turns all your STOs into charts and trends for reporting and planning.</p>
+
+  <h3>What you'll find</h3>
+  <ul>
+    <li><strong>Summary KPIs</strong> — totals for all, active, closed, and rejected STOs, plus total value and rush count.</li>
+    <li><strong>Status distribution</strong> — how STOs are spread across the workflow.</li>
+    <li><strong>Monthly trends</strong> — volume and value over time.</li>
+    <li><strong>Site flows</strong> — how many STOs move from each site to each other site.</li>
+    <li><strong>Rush split</strong> — rush vs. normal volume month by month.</li>
+    <li><strong>Raw data table</strong> — searchable and exportable underlying rows.</li>
+  </ul>
+  <p>Use the filters (status, rush, date range) to focus a chart on a period or category.</p>
+  <div class="callout tip"><span class="label">Tip</span><br>The site-flow view is useful for capacity planning — it reveals which lanes carry the most volume.</div>
+</section>
+
+<!-- ============ 12. ADMIN ============ -->
+<section>
+  <span class="kicker">Section 12 · Admin</span>
+  <h2>Admin Tasks: Revert, Send Back &amp; Archive</h2>
+  <p class="lead">Admins can correct workflow mistakes and manage long-term data retention. These actions are available on the STO detail page and dashboard.</p>
+
+  <h3>Revert (step back)</h3>
+  <p>Moves an STO <strong>back one step</strong> in the workflow — useful when something advanced by mistake. It clears the current step's reason. You can click it repeatedly to step back several stages.</p>
+
+  <h3>Send Back (step back with a reason)</h3>
+  <p>Like Revert, but requires a <strong>mandatory note</strong>. The note is attached to the STO so the role receiving it knows exactly what to fix. Prefer Send Back over Revert whenever the earlier role needs instructions.</p>
+  <div class="callout warn"><span class="label">Use sparingly</span><br>Revert and Send Back move an STO backward against the normal flow. Every use is logged in the audit trail. Always add a clear reason so the history stays understandable.</div>
+
+  <h3>Archiving</h3>
+  <p>Closed or rejected STOs older than <strong>5 years</strong> can be soft-archived to keep the working set fast. From the dashboard, admins can <strong>preview</strong> how many records are eligible and then <strong>run</strong> the archive. Archived records are hidden from normal lists but not deleted.</p>
+</section>
+
+<!-- ============ 13. MULTI-SITE ============ -->
+<section>
+  <span class="kicker">Section 13</span>
+  <h2>Multi-Site Access</h2>
+  <p class="lead">Many users cover more than one site. The app supports this throughout — your queues, lists, and approvals span all the sites you're assigned to.</p>
+
+  <ul>
+    <li>Your access is defined by your Active Directory groups, one per <em>site + role</em> (e.g. <code>ABC_LOGISTICS</code> and <code>ABL_LOGISTICS</code>).</li>
+    <li>Dashboard queues automatically include work from <strong>every</strong> site you cover.</li>
+    <li>On the STOs list, the shipping-site and receiving-site filters accept <strong>multiple sites at once</strong>.</li>
+    <li>Management users can act on both the shipping-site and receiving-site approval steps for their assigned sites.</li>
+  </ul>
+  <div class="callout note"><span class="label">Note</span><br>If you should see a site's STOs but don't, you may be missing that site's AD group. Request it via the App Info page (Section 14).</div>
+</section>
+
+<!-- ============ 14. REFERENCE ============ -->
+<section>
+  <span class="kicker">Section 14</span>
+  <h2>Reference &amp; Troubleshooting</h2>
+
+  <h3>Requesting access</h3>
+  <p>Access is granted by Active Directory group membership for your <strong>site</strong> and <strong>role</strong> (e.g. <code>ABC_PLANNING</code>). Use the <strong>Requesting Access</strong> link on the <strong>App Info</strong> page and include the site(s) and role you need. For help, contact an administrator (listed on the same page) or your IT service desk.</p>
+
+  <h3>Status quick reference</h3>
+  <table>
+    <tr><th>Status</th><th>Owner</th><th>Next step</th></tr>
+    <tr><td>Draft</td><td>Requestor</td><td>Submit → Planning Review</td></tr>
+    <tr><td>Planning Review</td><td>Shipping Planning</td><td>Approve → Shipping Logistics</td></tr>
+    <tr><td>Shipping Logistics</td><td>Shipping Logistics</td><td>Submit → Management or Receiving Logistics</td></tr>
+    <tr><td>Management Review</td><td>Management (shipping)</td><td>Approve → Receiving Mgmt Review</td></tr>
+    <tr><td>Receiving Mgmt Review</td><td>Management (receiving)</td><td>Approve → Shipping Logistics (confirm)</td></tr>
+    <tr><td>Receiving Logistics</td><td>Receiving Logistics</td><td>Close out → Closed</td></tr>
+    <tr><td>Closed / Rejected</td><td>—</td><td>Terminal</td></tr>
+  </table>
+
+  <h3>Common questions</h3>
+  <h4>I submitted an STO but can't edit it anymore.</h4>
+  <p>Once submitted, an STO is read-only to the requestor. Ask Planning to <em>revise</em> it back to Draft, or an Admin to <em>send it back</em>.</p>
+
+  <h4>My STO went to management approval — why?</h4>
+  <p>It met a threshold: high material value, high freight cost, a high freight-to-value ratio, or cold-chain shipping conditions (Section 5).</p>
+
+  <h4>The estimated ship date isn't what I expected.</h4>
+  <p>It's calculated from priority (15 / 30 / 45 days) and shifts to Monday if it lands on a weekend (Section 3).</p>
+
+  <h4>I can't see STOs for one of my sites.</h4>
+  <p>You're probably missing that site's AD group. Request it via App Info.</p>
+
+  <h4>An STO was closed by mistake.</h4>
+  <p>Contact an admin — reopening a closed STO requires the revert/send-back tools.</p>
+
+  <div class="footer-note">
+    STO Management — User Guide. This guide is available any time from the <strong>App Info</strong> page inside the app.
+    For access issues or corrections, contact an administrator listed on that page.
+  </div>
+</section>
+
+</body>
+</html>

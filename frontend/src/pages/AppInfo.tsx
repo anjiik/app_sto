@@ -37,8 +37,9 @@ export function AppInfo() {
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="font-semibold text-gray-800 mb-2">User Guide</h2>
           <p className="text-sm text-gray-600 mb-4">
-            A step-by-step guide covering the full STO workflow — creating a request,
-            planning review, logistics, management approvals, and receiving.
+            A complete, role-by-role guide to the app — the STO lifecycle, creating and
+            submitting requests, every approval step, dashboards and queues, filters and
+            export, analytics, multi-site access, and admin tasks.
           </p>
           <a
             href={USER_GUIDE_URL}
