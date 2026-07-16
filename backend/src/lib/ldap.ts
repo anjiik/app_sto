@@ -85,6 +85,8 @@ function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; 
   // stray whitespace / hidden characters are visible, plus whether each CN matched
   // a GROUP_MAP key. Remove once login is confirmed working.
   console.log('[AD auth] raw memberOf entries:', memberOf.length);
+  // Clean, copy-friendly list of just the extracted CN names.
+  console.log('[AD auth] CNs:', cns.join(' | ') || '(none)');
   cns.forEach((cn, i) => {
     const matched = !!GROUP_MAP[cn.toUpperCase()];
     console.log(`[AD auth]   [${i}] raw="${memberOf[i]}" cn="${cn}" upper="${cn.toUpperCase()}" match=${matched}`);
