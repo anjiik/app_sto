@@ -80,10 +80,15 @@ const CLIENT_OPTS = () => ({
 // user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
 function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; sites: string[] } {
   const cns = memberOf.map(extractCN);
-  // Debug: log the exact group CNs AD returned and which ones matched GROUP_MAP.
-  // This makes "not in any STO application group" easy to diagnose. Safe to keep;
-  // remove or lower to a debug log level once login is confirmed working.
-  console.log('[AD auth] Group CNs from AD:', cns.join(', ') || '(none)');
+  // Debug: log each raw memberOf DN and the CN extracted from it, quoted so any
+  // stray whitespace / hidden characters are visible, plus whether each CN matched
+  // a GROUP_MAP key. Remove once login is confirmed working.
+  console.log('[AD auth] raw memberOf entries:', memberOf.length);
+  cns.forEach((cn, i) => {
+    const matched = !!GROUP_MAP[cn.toUpperCase()];
+    console.log(`[AD auth]   [${i}] raw="${memberOf[i]}" cn="${cn}" upper="${cn.toUpperCase()}" match=${matched}`);
+  });
+  console.log('[AD auth] GROUP_MAP keys:', Object.keys(GROUP_MAP).join(', '));
   const matches = cns
     .map(cn => GROUP_MAP[cn.toUpperCase()])
     .filter((m): m is { group: Group; site: string } => !!m);
