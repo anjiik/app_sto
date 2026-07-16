@@ -11,6 +11,12 @@ const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
 // Add one entry per group that should have access.
 // The key must match the CN of the group exactly (case-insensitive).
 const GROUP_MAP: Record<string, { group: Group; site: string }> = {
+  // ── Company-wide admin ────────────────────────────────────────────────────
+  // A single admin group that oversees every site. Admins bypass all per-site
+  // action checks (see can() / userHasSite in middleware/auth.ts) and the STO
+  // list is not site-scoped, so the `site` here is only a harmless default
+  // (e.g. for pre-filling requesting_plant if an admin creates an STO).
+  'STO_ADMIN':          { group: 'admin',               site: 'ABC' },
   // ── Site: ABC ─────────────────────────────────────────────────────────────
   'ABC_ADMIN':          { group: 'admin',               site: 'ABC' },
   'ABC_RECEIVING':      { group: 'receiving_site',      site: 'ABC' },
@@ -74,21 +80,31 @@ const CLIENT_OPTS = () => ({
 // user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
 function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; sites: string[] } {
   const cns = memberOf.map(extractCN);
+  // Debug: log the exact group CNs AD returned and which ones matched GROUP_MAP.
+  // This makes "not in any STO application group" easy to diagnose. Safe to keep;
+  // remove or lower to a debug log level once login is confirmed working.
+  console.log('[AD auth] Group CNs from AD:', cns.join(', ') || '(none)');
   const matches = cns
     .map(cn => GROUP_MAP[cn.toUpperCase()])
     .filter((m): m is { group: Group; site: string } => !!m);
 
   if (matches.length === 0) {
+    console.error('[AD auth] No CN matched GROUP_MAP keys:', Object.keys(GROUP_MAP).join(', '));
     throw new Error(
       'Your account is not in any STO application group. ' +
       'Contact your administrator to be added to one of the configured AD groups.',
     );
   }
 
-  // The first match determines the role; collect all sites sharing that role.
-  const group = matches[0].group;
+  // Pick the effective role. If the user is in an admin group, admin always wins
+  // regardless of the order AD returned the groups — otherwise the role is simply
+  // the first matching group. This avoids an admin being downgraded just because
+  // e.g. ABC_LOGISTICS happened to appear before STO_ADMIN in memberOf.
+  const primary = matches.find(m => m.group === 'admin') ?? matches[0];
+  const group = primary.group;
+  // Collect all sites the user has for that same role (multi-site support).
   const sites = Array.from(new Set(matches.filter(m => m.group === group).map(m => m.site)));
-  return { group, site: matches[0].site, sites };
+  return { group, site: primary.site, sites };
 }
 
 function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
