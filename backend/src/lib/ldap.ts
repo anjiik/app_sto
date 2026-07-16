@@ -16,7 +16,8 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   // action checks (see can() / userHasSite in middleware/auth.ts) and the STO
   // list is not site-scoped, so the `site` here is only a harmless default
   // (e.g. for pre-filling requesting_plant if an admin creates an STO).
-  'STO_ADMIN':          { group: 'admin',               site: 'ABC' },
+  // Key is the exact AD group CN (matched case-insensitively).
+  'APP-STO_MANAGEMENT_ADMIN': { group: 'admin',         site: 'ABC' },
   // ── Site: ABC ─────────────────────────────────────────────────────────────
   'ABC_ADMIN':          { group: 'admin',               site: 'ABC' },
   'ABC_RECEIVING':      { group: 'receiving_site',      site: 'ABC' },
