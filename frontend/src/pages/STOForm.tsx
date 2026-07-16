@@ -44,6 +44,10 @@ function addDays(n: number): string {
 }
 
 const SHIPPING_CONDITIONS = ['Ambient', 'Cold 2-8C', 'Cold below 0', 'Frozen', 'Other'] as const;
+// Standard INCO terms need no extra sign-off; anything else ("Other") routes
+// through both management approvals — see approvals.ts logistics step.
+const STANDARD_INCO_TERMS = ['FCA', 'DAP'] as const;
+const INCO_TERMS = [...STANDARD_INCO_TERMS, 'Other'] as const;
 // Cold-chain conditions that require management approval from both sites.
 const COLD_MGMT_CONDITIONS = new Set(['Cold 2-8C', 'Cold below 0', 'Frozen']);
 const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'] as const;
@@ -61,6 +65,7 @@ export function STOForm() {
   const rushRequest        = watch('rush_request');
   const priority           = watch('priority');
   const shippingConditions = watch('shipping_conditions') as string | undefined;
+  const incoTerms          = watch('inco_terms') as string | undefined;
   const materialValue      = watch('material_value');
   const controlledShipping = watch('controlled_shipping_required');
   const [shiftedToMonday, setShiftedToMonday] = useState(false);
@@ -94,6 +99,9 @@ export function STOForm() {
         // requestor previously chose "Other" — restore that state in the form.
         const storedCond = s.shipping_conditions ?? '';
         const isStandardCond = (SHIPPING_CONDITIONS as readonly string[]).includes(storedCond) && storedCond !== 'Other';
+        // Same for INCO terms: a stored value outside the standard set means "Other".
+        const storedInco = s.inco_terms ?? '';
+        const isStandardInco = (STANDARD_INCO_TERMS as readonly string[]).includes(storedInco);
         reset({
           requestor_name:                s.requestor_name ?? '',
           requestor_email:               s.requestor_email ?? '',
@@ -111,7 +119,8 @@ export function STOForm() {
           material_sap:                  s.material_sap ?? '',
           material_description:          s.material_description ?? '',
           brand_at_receiving_site:       s.brand_at_receiving_site ?? '',
-          inco_terms:                    s.inco_terms ?? '',
+          inco_terms:                    storedInco ? (isStandardInco ? storedInco : 'Other') : '',
+          inco_terms_other:              isStandardInco ? '' : storedInco,
           quantity:                      s.quantity ?? '',
           uom:                           s.uom ?? '',
           shipping_conditions:           storedCond ? (isStandardCond ? storedCond : 'Other') : '',
@@ -133,13 +142,18 @@ export function STOForm() {
     setError('');
     // Resolve the "Other" shipping condition into the real value the backend stores,
     // then drop the helper-only field so it isn't sent.
-    const { shipping_conditions_other, ...rest } = data as FormData & { shipping_conditions_other?: string };
+    const { shipping_conditions_other, inco_terms_other, ...rest } =
+      data as FormData & { shipping_conditions_other?: string; inco_terms_other?: string };
     const payload: FormData = {
       ...rest,
       shipping_conditions:
         rest.shipping_conditions === 'Other'
           ? (shipping_conditions_other || '').toString().trim()
           : (rest.shipping_conditions as string),
+      inco_terms:
+        rest.inco_terms === 'Other'
+          ? (inco_terms_other || '').toString().trim()
+          : (rest.inco_terms as string),
     };
     try {
       if (isEdit) {
@@ -311,8 +325,30 @@ export function STOForm() {
                   <p className="text-red-500 text-xs mt-1">{String(errors.brand_at_receiving_site.message)}</p>
                 )}
               </Field>
-              <Field label="INCO Terms" hint="e.g. EXW, FOB, CIF, DAP">
-                <input {...register('inco_terms')} className={INPUT} placeholder="e.g. EXW, FOB" />
+              <Field label="INCO Terms" hint="FCA and DAP are standard; any other term needs management approval">
+                <div className="flex gap-2">
+                  <select {...register('inco_terms')} className={INPUT}>
+                    <option value="">— Select —</option>
+                    {INCO_TERMS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  {incoTerms === 'Other' && (
+                    <input
+                      {...register('inco_terms_other', {
+                        required: incoTerms === 'Other' ? 'Specify the INCO term' : false,
+                      })}
+                      className={INPUT}
+                      placeholder="e.g. EXW, FOB, CIF"
+                    />
+                  )}
+                </div>
+                {incoTerms === 'Other' && (
+                  <p className="text-amber-600 text-xs mt-1">Non-standard INCO term — this STO will require management approval.</p>
+                )}
+                {incoTerms === 'Other' && errors.inco_terms_other && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.inco_terms_other.message)}</p>
+                )}
               </Field>
               <Field label="Quantity" required hint="Whole number of units">
                 <input

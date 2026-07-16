@@ -173,11 +173,19 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const COLD_CONDITIONS = ['Cold 2-8C', 'Cold below 0', 'Frozen'];
     const isColdShipping = COLD_CONDITIONS.includes(String(sto.shipping_conditions || ''));
     const freightToValueRatio = materialValue > 0 ? freightCost / materialValue : 0;
+    // FCA and DAP are the standard INCO terms; any other specified term requires
+    // management approval. A blank term (the field is optional) does not trigger it.
+    // Compared case-insensitively so free-text values stored from the "Other" option
+    // still match if they happen to be FCA/DAP.
+    const STANDARD_INCO_TERMS = ['FCA', 'DAP'];
+    const incoTerms = String(sto.inco_terms || '').trim().toUpperCase();
+    const isNonStandardInco = incoTerms !== '' && !STANDARD_INCO_TERMS.includes(incoTerms);
     const mgmtRequired =
       materialValue > matThreshold ||
       freightCost > freightThreshold ||
       isColdShipping ||
-      freightToValueRatio > 0.30;
+      freightToValueRatio > 0.30 ||
+      isNonStandardInco;
 
     // Flow when management approval is required:
     //   SHIPPING_LOGISTICS → MANAGEMENT_REVIEW → RECEIVING_MGMT_REVIEW
