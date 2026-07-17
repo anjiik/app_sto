@@ -5,6 +5,7 @@ import api from '../api/client';
 import { STORequest, STOStatus, Group } from '../types';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge';
 import { Layout } from '../components/Layout';
+import { isAdmin, userRoles, sitesForRole } from '../lib/grants';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -34,6 +35,41 @@ const GROUP_QUEUE: Partial<Record<Group, { label: string; statuses: STOStatus[] 
   receiving_logistics: { label: 'Awaiting your Receipt Confirmation',      statuses: ['RECEIVING_LOGISTICS'] },
   receiving_site:      { label: 'Your Unsubmitted Drafts',                 statuses: ['DRAFT'] },
 };
+
+// A per-role queue section on the dashboard. Multi-role users see one per role.
+interface QueueSection {
+  role:     Group;
+  label:    string;
+  statuses: STOStatus[];
+  items:    STORequest[];
+  total:    number;
+}
+
+// Build the API calls for a single role's queue, scoped to that role's sites.
+// Returns the fetch plus the statuses/label so results can be assembled per role.
+function fetchRoleQueue(role: Group, sites: string[]): Promise<{ items: STORequest[]; total: number }> {
+  const cfg = GROUP_QUEUE[role]!;
+  const siteParam = encodeURIComponent(sites.join(','));
+  type QueueRes = { data: { data: STORequest[]; pagination: { total: number } } };
+  const get = (q: string): Promise<QueueRes> => api.get(`/sto${q}&limit=20`);
+
+  if (role === 'management') {
+    // Management spans two steps at two site roles: shipping-site review and
+    // receiving-site review. Fetch both and merge.
+    return Promise.all([
+      get(`?status=MANAGEMENT_REVIEW&shipping_site=${siteParam}`),
+      get(`?status=RECEIVING_MGMT_REVIEW&receiving_site=${siteParam}`),
+    ]).then(([a, b]) => ({
+      items: [...a.data.data, ...b.data.data],
+      total: a.data.pagination.total + b.data.pagination.total,
+    }));
+  }
+  const status = cfg.statuses[0];
+  const siteCol = (role === 'receiving_logistics' || role === 'receiving_site')
+    ? 'receiving_site' : 'shipping_site';
+  return get(`?status=${status}&${siteCol}=${siteParam}`)
+    .then(r => ({ items: r.data.data, total: r.data.pagination.total }));
+}
 
 const PIPELINE_STAGES: { label: string; status: STOStatus; color: string }[] = [
   { label: 'Draft',              status: 'DRAFT',                color: 'gray' },
@@ -117,7 +153,8 @@ export function Dashboard() {
 
   // Each piece of state maps directly to one DB query — no derived counting in JS.
   const [stageCounts,    setStageCounts]    = useState<Partial<Record<STOStatus, number>>>({});
-  const [myQueueItems,   setMyQueueItems]   = useState<STORequest[]>([]);
+  // One queue section per role the user holds (sectioned-by-role dashboard).
+  const [queueSections,  setQueueSections]  = useState<QueueSection[]>([]);
   const [myQueueTotal,   setMyQueueTotal]   = useState(0);
   const [kpis,           setKpis]           = useState<Kpis>({ rushActive: 0, dueSoon: 0, overdue: 0 });
   const [rushAlertItems, setRushAlertItems] = useState<STORequest[]>([]);
@@ -130,7 +167,7 @@ export function Dashboard() {
 
   // Load archive preview count for admins
   useEffect(() => {
-    if (user?.group === 'admin') {
+    if (isAdmin(user)) {
       api.get('/admin/archive/preview').then(r => setArchivePreview(r.data)).catch(() => {});
     }
   }, [user]);
@@ -139,43 +176,28 @@ export function Dashboard() {
   useEffect(() => {
     if (!user) return;
 
-    const queueConfig = GROUP_QUEUE[user.group];
-    if (!queueConfig) { setLoading(false); return; }
+    // Build one queue section per role the user holds that has a queue config,
+    // each scoped to the sites where they hold that role. Admins see every role,
+    // scoped across all their sites.
+    const roles = userRoles(user).filter(r => GROUP_QUEUE[r]);
+    const adminRoles: Group[] = ['shipping_planning', 'shipping_logistics', 'management', 'receiving_logistics', 'receiving_site'];
+    const activeRoles = isAdmin(user) ? adminRoles : roles;
 
-    function qs(extra: Record<string, string> = {}): string {
-      const p = new URLSearchParams(extra);
-      const s = p.toString();
-      return s ? `?${s}` : '';
-    }
-
-    // Each group's queue is scoped to their site(s). Multi-site users pass a
-    // comma-separated list so the backend returns data for every assigned site.
-    const sitesParam = (user.sites && user.sites.length ? user.sites : [user.site]).join(',');
-    let queueFetch: Promise<{ data: { data: STORequest[]; pagination: { total: number } } }>;
-    if (user.group === 'management') {
-      queueFetch = Promise.all([
-        api.get(`/sto?status=MANAGEMENT_REVIEW&shipping_site=${encodeURIComponent(sitesParam)}&limit=20`),
-        api.get(`/sto?status=RECEIVING_MGMT_REVIEW&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`),
-      ]).then(([mgmt, recvMgmt]) => {
-        const combined = [...mgmt.data.data, ...recvMgmt.data.data];
-        const total = mgmt.data.pagination.total + recvMgmt.data.pagination.total;
-        return { data: { data: combined, pagination: { total } } };
-      });
-    } else if (user.group === 'shipping_planning' || user.group === 'shipping_logistics') {
-      queueFetch = api.get(`/sto?status=${queueConfig.statuses[0]}&shipping_site=${encodeURIComponent(sitesParam)}&limit=20`);
-    } else if (user.group === 'receiving_logistics') {
-      queueFetch = api.get(`/sto?status=RECEIVING_LOGISTICS&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`);
-    } else if (user.group === 'receiving_site') {
-      queueFetch = api.get(`/sto?status=DRAFT&receiving_site=${encodeURIComponent(sitesParam)}&limit=20`);
-    } else {
-      queueFetch = api.get(`/sto${qs({ status: queueConfig.statuses[0], limit: '20' })}`);
-    }
+    const sectionFetches = activeRoles.map(role =>
+      fetchRoleQueue(role, sitesForRole(user, role))
+        .then(({ items, total }): QueueSection => ({
+          role, label: GROUP_QUEUE[role]!.label, statuses: GROUP_QUEUE[role]!.statuses, items, total,
+        }))
+        .catch((): QueueSection => ({
+          role, label: GROUP_QUEUE[role]!.label, statuses: GROUP_QUEUE[role]!.statuses, items: [], total: 0,
+        })),
+    );
 
     Promise.all([
       // 1. Pipeline stage counts — GROUP BY in SQL, zero rows transferred
       api.get('/analytics/by-status'),
-      // 2. My Action Queue
-      queueFetch,
+      // 2. Per-role action queues
+      Promise.all(sectionFetches),
       // 3. KPI counts — three COUNT(*) queries, no rows transferred
       api.get('/sto/kpis'),
       // 4. Rush alert items — top 4
@@ -184,14 +206,14 @@ export function Dashboard() {
       api.get('/sto?has_need_by=1&active_only=1&sort=need_by_asc&limit=12'),
       // 6. Recent audit activity
       api.get('/sto/audit-log'),
-    ]).then(([byStatusRes, queueRes, kpisRes, rushRes, needByRes, auditRes]) => {
+    ]).then(([byStatusRes, sections, kpisRes, rushRes, needByRes, auditRes]) => {
       const counts: Partial<Record<STOStatus, number>> = {};
       (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
         counts[r.status] = r.count;
       });
       setStageCounts(counts);
-      setMyQueueItems(queueRes.data.data);
-      setMyQueueTotal(queueRes.data.pagination.total);
+      setQueueSections(sections);
+      setMyQueueTotal(sections.reduce((n, s) => n + s.total, 0));
       setKpis(kpisRes.data);
       setRushAlertItems(rushRes.data.data);
       setNeedByItems(needByRes.data.data);
@@ -199,20 +221,19 @@ export function Dashboard() {
     }).finally(() => setLoading(false));
   }, [user]);
 
-  const queueConfig      = user ? GROUP_QUEUE[user.group] : undefined;
-  const myQueueStatuses  = queueConfig?.statuses ?? [];
+  // Apply the queue search across every section's items.
+  const matchesSearch = (s: STORequest, q: string) =>
+    s.sto_id?.toLowerCase().includes(q) ||
+    s.material_description?.toLowerCase().includes(q) ||
+    s.material_sap?.toLowerCase().includes(q) ||
+    s.requestor_name?.toLowerCase().includes(q);
 
-  const filteredQueueItems = queueSearch.trim()
-    ? myQueueItems.filter(s => {
-        const q = queueSearch.toLowerCase();
-        return (
-          s.sto_id?.toLowerCase().includes(q) ||
-          s.material_description?.toLowerCase().includes(q) ||
-          s.material_sap?.toLowerCase().includes(q) ||
-          s.requestor_name?.toLowerCase().includes(q)
-        );
-      })
-    : myQueueItems;
+  const visibleSections = queueSections.map(sec => ({
+    ...sec,
+    filtered: queueSearch.trim()
+      ? sec.items.filter(s => matchesSearch(s, queueSearch.toLowerCase()))
+      : sec.items,
+  }));
 
   // needByItems is sorted most-overdue → most-urgent → further out.
   // Split into two views: overdue alert list and upcoming section.
@@ -230,13 +251,17 @@ export function Dashboard() {
     return 'Good evening';
   };
 
-  const groupLabel: Partial<Record<Group, string>> = {
+  const groupLabel: Record<Group, string> = {
     receiving_site:     'Receiving Site',
     shipping_planning:  'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
     management:         'Management',
     receiving_logistics:'Receiving Logistics',
+    admin:              'Admin',
   };
+
+  // Every role the user holds — shown as chips in the header (multi-role aware).
+  const myRoles = user ? userRoles(user) : [];
 
   return (
     <Layout>
@@ -248,12 +273,12 @@ export function Dashboard() {
             <h1 className="text-2xl font-bold text-gray-900">
               {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
             </h1>
-            <div className="flex items-center gap-2 mt-1">
-              {user?.group && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  {groupLabel[user.group]}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {myRoles.map(r => (
+                <span key={r} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {groupLabel[r]}
                 </span>
-              )}
+              ))}
               <span className="text-gray-400 text-sm">
                 {user?.sites && user.sites.length ? user.sites.join(', ') : (user?.site ?? 'All Sites')}
               </span>
@@ -272,104 +297,111 @@ export function Dashboard() {
           <KpiCard value={loading ? '–' : kpis.overdue}    label="Overdue"       sub="Past need-by date"  color="rose" />
         </div>
 
-        {/* ── My Action Queue ── */}
-        {queueConfig && (
-          <div className="bg-white rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 gap-4">
-              <div className="flex items-center gap-2 shrink-0">
-                <h2 className="font-semibold text-gray-900">My Action Queue</h2>
-                {myQueueTotal > 0 && (
-                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{myQueueTotal}</span>
-                )}
-              </div>
+        {/* ── My Action Queue(s) — one section per role held ── */}
+        {visibleSections.length > 0 && (
+          <div className="space-y-4">
+            {/* Single search box across all role sections */}
+            <div className="flex items-center justify-end">
               <input
                 type="text"
-                placeholder="Search queue…"
+                placeholder="Search queues…"
                 value={queueSearch}
                 onChange={e => setQueueSearch(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <Link to={`/sto?status=${myQueueStatuses[0]}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium shrink-0">
-                View all →
-              </Link>
             </div>
 
-            {loading ? (
-              <div className="p-8 text-center text-gray-400">Loading...</div>
-            ) : myQueueItems.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="text-2xl mb-2">✓</div>
-                <div className="text-gray-500 font-medium">Queue is clear</div>
-                <div className="text-gray-400 text-sm mt-1">Nothing waiting for your action</div>
-              </div>
-            ) : filteredQueueItems.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 text-sm">
-                No queue items match &ldquo;{queueSearch}&rdquo;
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">STO</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Material</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Priority</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Need-By</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Waiting</th>
-                      <th className="px-4 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredQueueItems.map(sto => {
-                      const waiting = daysSince(sto.updated_at);
-                      const isStalled = waiting >= 3;
-                      return (
-                        <tr key={sto.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-3">
-                            <div className="font-mono font-medium text-gray-900 text-sm">{sto.sto_id}</div>
-                            {sto.rush_request && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 mt-0.5">RUSH</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 max-w-[200px]">
-                            <div className="truncate text-gray-700">{sto.material_description || sto.material_sap || '—'}</div>
-                            {sto.quantity && <div className="text-xs text-gray-400">{sto.quantity} {sto.uom}</div>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <PriorityBadge priority={sto.priority} />
-                          </td>
-                          <td className="px-4 py-3">
-                            {sto.receiving_site_need_by_date ? (
-                              <span className={needByColor(sto.receiving_site_need_by_date)}>
-                                {new Date(sto.receiving_site_need_by_date).toLocaleDateString()}
-                                {daysUntil(sto.receiving_site_need_by_date) < 0 && (
-                                  <span className="text-xs ml-1">(overdue)</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-sm ${isStalled ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                              {waiting}d {isStalled && '⚠'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Link
-                              to={`/sto/${sto.id}`}
-                              className="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                              Take Action →
-                            </Link>
-                          </td>
+            {visibleSections.map(sec => (
+              <div key={sec.role} className="bg-white rounded-xl border border-gray-200">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 gap-4">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <h2 className="font-semibold text-gray-900">{sec.label}</h2>
+                    {sec.total > 0 && (
+                      <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{sec.total}</span>
+                    )}
+                  </div>
+                  <Link to={`/sto?status=${sec.statuses[0]}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium shrink-0">
+                    View all →
+                  </Link>
+                </div>
+
+                {loading ? (
+                  <div className="p-8 text-center text-gray-400">Loading...</div>
+                ) : sec.items.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <div className="text-xl mb-1">✓</div>
+                    <div className="text-gray-500 text-sm font-medium">Nothing waiting for your action</div>
+                  </div>
+                ) : sec.filtered.length === 0 ? (
+                  <div className="p-6 text-center text-gray-400 text-sm">
+                    No items match &ldquo;{queueSearch}&rdquo;
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">STO</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Material</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Priority</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Need-By</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Waiting</th>
+                          <th className="px-4 py-3"></th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {sec.filtered.map(sto => {
+                          const waiting = daysSince(sto.updated_at);
+                          const isStalled = waiting >= 3;
+                          return (
+                            <tr key={sto.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-3">
+                                <div className="font-mono font-medium text-gray-900 text-sm">{sto.sto_id}</div>
+                                {sto.rush_request && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 mt-0.5">RUSH</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 max-w-[200px]">
+                                <div className="truncate text-gray-700">{sto.material_description || sto.material_sap || '—'}</div>
+                                {sto.quantity && <div className="text-xs text-gray-400">{sto.quantity} {sto.uom}</div>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <PriorityBadge priority={sto.priority} />
+                              </td>
+                              <td className="px-4 py-3">
+                                {sto.receiving_site_need_by_date ? (
+                                  <span className={needByColor(sto.receiving_site_need_by_date)}>
+                                    {new Date(sto.receiving_site_need_by_date).toLocaleDateString()}
+                                    {daysUntil(sto.receiving_site_need_by_date) < 0 && (
+                                      <span className="text-xs ml-1">(overdue)</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-sm ${isStalled ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                                  {waiting}d {isStalled && '⚠'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <Link
+                                  to={`/sto/${sto.id}`}
+                                  className="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                  Take Action →
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
+            ))}
           </div>
         )}
 
@@ -518,7 +550,7 @@ export function Dashboard() {
         </div>
 
         {/* ── Admin: Archive panel ── */}
-        {user?.group === 'admin' && archivePreview !== null && (
+        {isAdmin(user) && archivePreview !== null && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>

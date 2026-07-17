@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { authenticate, AuthRequest, can, userHasSite } from '../middleware/auth';
+import { authenticate, AuthRequest, can, isAdmin, userHasSite } from '../middleware/auth';
 import { dbQuery, dbQueryOne, dbExecute } from '../db/connection';
 import { logAudit } from '../db/audit';
 import logger from '../lib/logger';
@@ -209,7 +209,7 @@ router.get('/audit-log', async (req: AuthRequest, res: Response): Promise<void> 
 // ── GET /api/sto/audit-log/export ─────────────────────────────────────────────
 // Admin-only. Returns the FULL audit trail (no 20-row cap) for Excel/CSV export.
 router.get('/audit-log/export', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (req.user?.group !== 'admin') {
+  if (!req.user || !isAdmin(req.user)) {
     res.status(403).json({ message: 'Admin access required' }); return;
   }
   try {

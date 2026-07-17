@@ -112,8 +112,12 @@ CREATE TABLE demo_users (
     username     VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(200) NOT NULL,
     display_name VARCHAR(200) NOT NULL,
-    site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, XYZ
-    group_key    VARCHAR(50)  NOT NULL    -- matches Group type: receiving_site, etc.
+    site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, XYZ (legacy; primary/first site)
+    group_key    VARCHAR(50)  NOT NULL,   -- legacy single role: receiving_site, etc.
+    -- Multi-role support: semicolon-separated `role@site` grants, e.g.
+    -- "shipping_logistics@ABC;receiving_logistics@ABC;shipping_planning@ABL".
+    -- When NULL/blank, login falls back to group_key expanded across `site`.
+    grants       VARCHAR(500) NULL
 );
 
 -- ── Referential integrity ──────────────────────────────────────────────────────

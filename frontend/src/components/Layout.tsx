@@ -1,6 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Group } from '../types';
+import { hasRole } from '../lib/grants';
 
 const GROUP_LABELS: Record<Group, string> = {
   receiving_site:      'Receiving Site',
@@ -30,7 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login', { replace: true });
   }
 
-  const canCreateNew = user?.group === 'receiving_site' || user?.group === 'admin';
+  const canCreateNew = hasRole(user, 'receiving_site');
 
   const navLinks = [
     { to: '/dashboard',  label: 'Dashboard' },

@@ -5,6 +5,7 @@ import { STORequest, STOStatus } from '../types';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { isAdmin, hasRole, hasRoleAtSite } from '../lib/grants';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(val?: string | null) {
@@ -192,23 +193,28 @@ export function STODetail() {
   if (loading) return <Layout><div className="p-12 text-center text-gray-400">Loading...</div></Layout>;
   if (!sto) return <Layout><div className="p-12 text-center text-red-500">STO not found</div></Layout>;
 
-  const g = user?.group;
+  const admin = isAdmin(user);
   const isRequestor = user?.name === sto.requestor_name;
 
-  // Multi-site: a user may be assigned to several sites. Membership checks use
-  // the whole list rather than a single site.
-  const mySites = user?.sites && user.sites.length ? user.sites : user?.site ? [user.site] : [];
-  const atShippingSite = !!sto.shipping_site && mySites.includes(sto.shipping_site);
-  const atReceivingSite = !!sto.receiving_site && mySites.includes(sto.receiving_site);
+  // Grant-aware "can act at this STO for a given role" flags. Each requires the
+  // matching role AT the STO's relevant site (or admin), mirroring the backend
+  // guards. Multi-role users get every applicable flag, not just one.
+  const canPlan     = hasRoleAtSite(user, 'shipping_planning',   sto.shipping_site);
+  const canShipLog  = hasRoleAtSite(user, 'shipping_logistics',  sto.shipping_site);
+  const canShipMgmt = hasRoleAtSite(user, 'management',          sto.shipping_site);
+  const canRecvMgmt = hasRoleAtSite(user, 'management',          sto.receiving_site);
+  const canRecvLog  = hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site);
+  // Kept for read-only section framing (e.g. the requestor's own draft section).
+  const isReceivingSiteUser = hasRole(user, 'receiving_site');
 
   // Who is active right now?
   const myTurn = (
-    ((isRequestor || g === 'admin') && sto.status === 'DRAFT') ||
-    (g === 'shipping_planning'  && sto.status === 'PLANNING_REVIEW'      && atShippingSite) ||
-    (g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS'   && atShippingSite) ||
-    (g === 'management'         && sto.status === 'MANAGEMENT_REVIEW'     && atShippingSite) ||
-    (g === 'management'         && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite) ||
-    (g === 'receiving_logistics'&& sto.status === 'RECEIVING_LOGISTICS'  && atReceivingSite)
+    ((isRequestor || admin) && sto.status === 'DRAFT') ||
+    (canPlan     && sto.status === 'PLANNING_REVIEW') ||
+    (canShipLog  && sto.status === 'SHIPPING_LOGISTICS') ||
+    (canShipMgmt && sto.status === 'MANAGEMENT_REVIEW') ||
+    (canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW') ||
+    (canRecvLog  && sto.status === 'RECEIVING_LOGISTICS')
   );
 
   return (
@@ -240,7 +246,7 @@ export function STODetail() {
             )}
             {/* Admin can edit any STO; the requestor can edit their own while it's
                 still a DRAFT (initial request + material information). */}
-            {(g === 'admin' || (isRequestor && sto.status === 'DRAFT')) && (
+            {(admin || (isRequestor && sto.status === 'DRAFT')) && (
               <button
                 onClick={() => navigate(`/sto/${id}/edit`)}
                 className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 font-medium text-sm"
@@ -248,7 +254,7 @@ export function STODetail() {
                 Edit
               </button>
             )}
-            {g === 'admin' && sto.status !== 'DRAFT' && (
+            {admin && sto.status !== 'DRAFT' && (
               <>
                 <button
                   onClick={() => { if (window.confirm(`Revert this STO one step back from ${sto.status}?`)) doAction('revert', {}); }}
@@ -306,7 +312,7 @@ export function STODetail() {
         </div>
 
         {/* ── SECTION 1: Request & Material Info (Receiving Site fills) ── */}
-        <Section title="Request &amp; Material Information" icon="📋" active={g === 'receiving_site' && sto.status === 'DRAFT'}>
+        <Section title="Request &amp; Material Information" icon="📋" active={isReceivingSiteUser && sto.status === 'DRAFT'}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Requestor</p>
@@ -347,8 +353,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 2: Shipping Planning Review ── */}
-        <Section title="Shipping Site Planning Review" icon="🗂️" active={g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && atShippingSite}>
-          {g === 'shipping_planning' && sto.status === 'PLANNING_REVIEW' && atShippingSite ? (
+        <Section title="Shipping Site Planning Review" icon="🗂️" active={canPlan && sto.status === 'PLANNING_REVIEW'}>
+          {canPlan && sto.status === 'PLANNING_REVIEW' ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Complete the inventory review fields below, then approve or reject.</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -410,8 +416,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 3: Shipping Logistics ── */}
-        <Section title="Shipping Site Logistics" icon="📦" active={g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && atShippingSite}>
-          {g === 'shipping_logistics' && sto.status === 'SHIPPING_LOGISTICS' && atShippingSite ? (
+        <Section title="Shipping Site Logistics" icon="📦" active={canShipLog && sto.status === 'SHIPPING_LOGISTICS'}>
+          {canShipLog && sto.status === 'SHIPPING_LOGISTICS' ? (
             <div className="space-y-4">
               {sto.mgmt_confirmed ? (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-lg text-sm">
@@ -516,10 +522,10 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 4: Management Review ── */}
-        <Section title="Shipping Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && atShippingSite}>
+        <Section title="Shipping Site Management Approval" icon="✅" active={canShipMgmt && sto.status === 'MANAGEMENT_REVIEW'}>
           {sto.management_approval_required === false && sto.status !== 'MANAGEMENT_REVIEW' ? (
             <div className="text-sm text-gray-400 italic">Not required for this order</div>
-          ) : g === 'management' && sto.status === 'MANAGEMENT_REVIEW' && atShippingSite ? (
+          ) : canShipMgmt && sto.status === 'MANAGEMENT_REVIEW' ? (
             <ApprovalPanel
               title="Management Approval"
               loading={actionLoading}
@@ -533,8 +539,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 5: Receiving Site Management Review ── */}
-        <Section title="Receiving Site Management Approval" icon="✅" active={g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite}>
-          {g === 'management' && sto.status === 'RECEIVING_MGMT_REVIEW' && atReceivingSite ? (
+        <Section title="Receiving Site Management Approval" icon="✅" active={canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW'}>
+          {canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW' ? (
             <ApprovalPanel
               title="Receiving Site Management Approval"
               loading={actionLoading}
@@ -546,8 +552,8 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 6: Receiving Logistics ── */}
-        <Section title="Receiving Site Logistics" icon="🏭" active={g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && atReceivingSite}>
-          {g === 'receiving_logistics' && sto.status === 'RECEIVING_LOGISTICS' && atReceivingSite ? (
+        <Section title="Receiving Site Logistics" icon="🏭" active={canRecvLog && sto.status === 'RECEIVING_LOGISTICS'}>
+          {canRecvLog && sto.status === 'RECEIVING_LOGISTICS' ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Confirm receipt details and close out the delivery.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -579,7 +585,7 @@ export function STODetail() {
         </Section>
 
         {/* ── Tracking Reference (editable by requestor or admin) ── */}
-        {(isRequestor || g === 'admin') && (
+        {(isRequestor || admin) && (
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-800">Tracking Reference</h3>

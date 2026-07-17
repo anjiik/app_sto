@@ -5,7 +5,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
-import { JwtPayload, Group } from '../types';
+import { JwtPayload, Group, Grant } from '../types';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { dbQuery, dbQueryOne } from '../db/connection';
 import { authenticateWithAD } from '../lib/ldap';
@@ -34,12 +34,36 @@ const GROUP_LABELS: Record<Group, string> = {
 };
 
 function issueToken(
-  adUsername: string, group: Group, displayName: string, site: string, sites?: string[],
+  adUsername: string, displayName: string, grants: Grant[],
 ): { token: string; user: JwtPayload } {
-  const siteList = sites && sites.length ? sites : [site];
-  const payload: JwtPayload = { adUsername, group, name: displayName, site, sites: siteList };
+  // Derived fields for display/back-compat. Primary role: admin if the user holds
+  // any admin grant, else the first grant. Sites: union across all grants.
+  const primary = grants.find(g => g.group === 'admin') ?? grants[0];
+  const sites = Array.from(new Set(grants.map(g => g.site).filter(Boolean)));
+  const payload: JwtPayload = {
+    adUsername, name: displayName, grants,
+    group: primary.group, site: primary.site, sites,
+  };
   const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '8h' });
   return { token, user: payload };
+}
+
+// Build a demo user's grants. Preferred form: the `grants` column is a
+// semicolon-separated list of `role@site` pairs (e.g.
+// "shipping_logistics@ABC;receiving_logistics@ABC;shipping_planning@ABL").
+// Legacy fallback: no `grants` value → expand the single `group_key` across the
+// comma-separated `site` column (one grant per site), preserving old behaviour.
+function parseDemoGrants(grants: string | null, groupKey: string, site: string): Grant[] {
+  const parsed: Grant[] = [];
+  if (grants && grants.trim()) {
+    for (const pair of grants.split(';').map(s => s.trim()).filter(Boolean)) {
+      const [g, s] = pair.split('@').map(x => x.trim());
+      if (g && s) parsed.push({ group: g as Group, site: s });
+    }
+  }
+  if (parsed.length) return parsed;
+  const sites = site.split(',').map(s => s.trim()).filter(Boolean);
+  return (sites.length ? sites : [site]).map(s => ({ group: groupKey as Group, site: s }));
 }
 
 // POST /api/auth/login — { username, password } → JWT
@@ -53,22 +77,17 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
   if (DEV_BYPASS) {
     // ── Dev mode: validate against demo_users; role + site are stored directly ──
     try {
-      interface DemoRow { password_hash: string; display_name: string; site: string; group_key: string; }
+      interface DemoRow { password_hash: string; display_name: string; site: string; group_key: string; grants: string | null; }
       const demoUser = await dbQueryOne<DemoRow>(
-        'SELECT password_hash, display_name, site, group_key FROM demo_users WHERE username = @username',
+        'SELECT password_hash, display_name, site, group_key, grants FROM demo_users WHERE username = @username',
         { username },
       );
       if (!demoUser || !(await bcrypt.compare(password, demoUser.password_hash))) {
         res.status(401).json({ message: 'Invalid username or password' });
         return;
       }
-      // Demo mode: the `site` column may be a comma-separated list (e.g. "ABC,ABL")
-      // to test multi-site access. The first entry is the primary site.
-      const demoSites = demoUser.site.split(',').map(s => s.trim()).filter(Boolean);
-      const { token, user } = issueToken(
-        username, demoUser.group_key as Group, demoUser.display_name,
-        demoSites[0] || demoUser.site, demoSites,
-      );
+      const grants = parseDemoGrants(demoUser.grants, demoUser.group_key, demoUser.site);
+      const { token, user } = issueToken(username, demoUser.display_name, grants);
       res.json({ token, user });
     } catch (err) {
       console.error('[dev auth] Error:', err);
@@ -80,9 +99,9 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
   // ── Production mode: validate against AD, derive role + site from AD groups ──
   console.log(`[AD auth] Login attempt for: ${username}`);
   try {
-    const { displayName, adUsername, group, site, sites } = await authenticateWithAD(username, password);
-    console.log(`[AD auth] Login succeeded: ${adUsername} → group=${group} sites=${sites.join(',')}`);
-    const { token, user } = issueToken(adUsername, group, displayName, site, sites);
+    const { displayName, adUsername, grants } = await authenticateWithAD(username, password);
+    console.log(`[AD auth] Login succeeded: ${adUsername} → grants=${grants.map(g => `${g.group}@${g.site}`).join(', ')}`);
+    const { token, user } = issueToken(adUsername, displayName, grants);
     res.json({ token, user });
   } catch (err: any) {
     console.error(`[AD auth] Failed for ${username}:`, err.message);
@@ -100,9 +119,9 @@ router.get('/demo-users', async (_req: Request, res: Response): Promise<void> =>
   if (!DEV_BYPASS) { res.json([]); return; }
 
   try {
-    interface DemoUserListRow { username: string; display_name: string; site: string; group_key: string; }
+    interface DemoUserListRow { username: string; display_name: string; site: string; group_key: string; grants: string | null; }
     const users = await dbQuery<DemoUserListRow>(
-      'SELECT username, display_name, site, group_key FROM demo_users ORDER BY site, group_key',
+      'SELECT username, display_name, site, group_key, grants FROM demo_users ORDER BY site, group_key',
     );
     res.json(users.map(u => ({
       username: u.username,
@@ -111,6 +130,7 @@ router.get('/demo-users', async (_req: Request, res: Response): Promise<void> =>
       site: u.site,
       group: u.group_key,
       groupLabel: GROUP_LABELS[u.group_key as Group] || u.group_key,
+      grants: u.grants || null,
     })));
   } catch {
     res.json([]);

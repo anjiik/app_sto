@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest, isAdmin } from '../middleware/auth';
 import { dbQueryOne, dbExecute } from '../db/connection';
 import logger from '../lib/logger';
 
@@ -10,7 +10,7 @@ const ARCHIVE_YEARS = 5;
 
 // GET /api/admin/archive/preview — how many records would be archived
 router.get('/archive/preview', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (req.user!.group !== 'admin') {
+  if (!isAdmin(req.user!)) {
     res.status(403).json({ message: 'Admin access required' }); return;
   }
   try {
@@ -30,7 +30,7 @@ router.get('/archive/preview', async (req: AuthRequest, res: Response): Promise<
 
 // POST /api/admin/archive/run — mark eligible records as archived
 router.post('/archive/run', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (req.user!.group !== 'admin') {
+  if (!isAdmin(req.user!)) {
     res.status(403).json({ message: 'Admin access required' }); return;
   }
   try {

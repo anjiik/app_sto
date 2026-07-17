@@ -1,5 +1,5 @@
 import { Client } from 'ldapts';
-import { Group } from '../types';
+import { Group, Grant } from '../types';
 
 const LDAP_URL       = process.env.LDAP_URL          || '';
 const LDAP_DOMAIN    = process.env.LDAP_DOMAIN        || '';
@@ -38,9 +38,10 @@ export interface LdapAuthResult {
   displayName: string;
   adUsername:  string;
   email:       string;
-  group:       Group;
-  site:        string;    // primary site (first matching group)
-  sites:       string[];  // all sites the user has this role at
+  grants:      Grant[];   // every role+site the user holds
+  group:       Group;     // derived primary role (admin if any, else first grant)
+  site:        string;    // derived primary site
+  sites:       string[];  // derived union of all grant sites
 }
 
 // Sanitise values before embedding them in LDAP filter strings.
@@ -79,7 +80,7 @@ const CLIENT_OPTS = () => ({
 // Scans the user's AD group memberships and derives the app role (from the first
 // matching group) plus EVERY site the user has that same role at. This lets a
 // user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
-function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; sites: string[] } {
+function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; site: string; sites: string[] } {
   const cns = memberOf.map(extractCN);
   // Debug: log each raw memberOf DN and the CN extracted from it, quoted so any
   // stray whitespace / hidden characters are visible, plus whether each CN matched
@@ -104,26 +105,33 @@ function resolveGroupAndSite(memberOf: string[]): { group: Group; site: string; 
     );
   }
 
-  // Pick the effective role. If the user is in an admin group, admin always wins
-  // regardless of the order AD returned the groups — otherwise the role is simply
-  // the first matching group. This avoids an admin being downgraded just because
-  // e.g. ABC_LOGISTICS happened to appear before STO_ADMIN in memberOf.
-  const primary = matches.find(m => m.group === 'admin') ?? matches[0];
-  const group = primary.group;
-  // Collect all sites the user has for that same role (multi-site support).
-  const sites = Array.from(new Set(matches.filter(m => m.group === group).map(m => m.site)));
-  return { group, site: primary.site, sites };
+  // Keep EVERY matched group as a distinct role+site grant (deduplicated). This is
+  // what lets one user hold several roles at once, e.g. logistics + receiving
+  // logistics at the same site, or planning at two sites.
+  const seen = new Set<string>();
+  const grants: Grant[] = [];
+  for (const m of matches) {
+    const key = `${m.group}@${m.site}`;
+    if (!seen.has(key)) { seen.add(key); grants.push({ group: m.group, site: m.site }); }
+  }
+
+  // Derived fields for display/back-compat. Primary role: admin if the user has
+  // any admin grant, otherwise the first grant. Sites: union across all grants.
+  const primary = grants.find(g => g.group === 'admin') ?? grants[0];
+  const sites = Array.from(new Set(grants.map(g => g.site)));
+  return { grants, group: primary.group, site: primary.site, sites };
 }
 
 function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
   const memberOf = entry.memberOf
     ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
     : [];
-  const { group, site, sites } = resolveGroupAndSite(memberOf);
+  const { grants, group, site, sites } = resolveGrants(memberOf);
   return {
     displayName: (entry.displayName as string) || sam,
     adUsername:  (entry.sAMAccountName as string) || sam,
     email:       (entry.mail as string) || '',
+    grants,
     group,
     site,
     sites,

@@ -351,6 +351,9 @@ interface DemoUser {
   display_name: string;
   site: string;
   group_key: string;
+  // Optional multi-role grants: semicolon-separated `role@site` pairs. When set,
+  // this takes precedence over group_key/site at login.
+  grants?: string;
 }
 
 const DEMO_USERS: DemoUser[] = [
@@ -384,6 +387,18 @@ const DEMO_USERS: DemoUser[] = [
   // ── Multi-site demo user: logistics for BOTH ABC and ABL (comma-separated
   //    site list — the login path splits this into sites[] for multi-site access) ──
   { username: 'multi.slog', display_name: 'Sam Rivera',   site: 'ABC,ABL', group_key: 'shipping_logistics' },
+
+  // ── Multi-role demo users (use the `grants` field: `role@site;role@site`) ────
+  // Shipping + receiving logistics at the SAME site (ABC): can both ship and
+  // close out deliveries at ABC.
+  { username: 'multi.log', display_name: 'Priya Nair',    site: 'ABC', group_key: 'shipping_logistics',
+    grants: 'shipping_logistics@ABC;receiving_logistics@ABC' },
+  // Planning at TWO sites (ABC and ABL) — one person plans for both.
+  { username: 'multi.plan', display_name: 'Tom Becker',   site: 'ABC', group_key: 'shipping_planning',
+    grants: 'shipping_planning@ABC;shipping_planning@ABL' },
+  // Mixed roles across sites: logistics at ABC + management at ABL.
+  { username: 'multi.mix', display_name: 'Dana Fox',      site: 'ABC', group_key: 'shipping_logistics',
+    grants: 'shipping_logistics@ABC;management@ABL' },
 ];
 
 async function seedDemoUsers(): Promise<void> {
@@ -391,9 +406,9 @@ async function seedDemoUsers(): Promise<void> {
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   for (const u of DEMO_USERS) {
     await dbExecute(
-      `INSERT INTO demo_users (username, password_hash, display_name, site, group_key)
-       VALUES (@username, @hash, @display_name, @site, @group_key)`,
-      { username: u.username, hash, display_name: u.display_name, site: u.site, group_key: u.group_key }
+      `INSERT INTO demo_users (username, password_hash, display_name, site, group_key, grants)
+       VALUES (@username, @hash, @display_name, @site, @group_key, @grants)`,
+      { username: u.username, hash, display_name: u.display_name, site: u.site, group_key: u.group_key, grants: u.grants ?? null }
     );
   }
   console.log(`✓ Seeded ${DEMO_USERS.length} demo users (password: ${DEMO_PASSWORD})`);

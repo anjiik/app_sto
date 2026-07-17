@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest, can, userHasSite } from '../middleware/auth';
+import { authenticate, AuthRequest, can, isAdmin, hasRoleAtSite } from '../middleware/auth';
 import { dbQueryOne, withTransaction } from '../db/connection';
 import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
@@ -94,6 +94,11 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
     if (sto.status !== 'PLANNING_REVIEW') {
       res.status(400).json({ message: 'STO is not in Planning Review' }); return;
     }
+    // Planning is a shipping-site action: must hold shipping_planning at this STO's
+    // shipping site (admins bypass).
+    if (!hasRoleAtSite(user, 'shipping_planning', sto.shipping_site as string)) {
+      res.status(403).json({ message: 'Only Shipping Planning at this STO\'s shipping site can act here' }); return;
+    }
     if (outcome === 'approve' && (!mpn_number || !batch_number || !expiration_date)) {
       res.status(400).json({ message: 'MPN Number, Batch Number and Expiration Date are required to approve' }); return;
     }
@@ -162,6 +167,10 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
     if (sto.status !== 'SHIPPING_LOGISTICS') {
       res.status(400).json({ message: 'STO is not in Shipping Logistics step' }); return;
+    }
+    // Logistics is a shipping-site action.
+    if (!hasRoleAtSite(user, 'shipping_logistics', sto.shipping_site as string)) {
+      res.status(403).json({ message: 'Only Shipping Logistics at this STO\'s shipping site can act here' }); return;
     }
 
     const body = req.body;
@@ -284,7 +293,9 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (sto.status !== 'MANAGEMENT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Management Review' }); return;
     }
-    if (!userHasSite(user, sto.shipping_site as string)) {
+    // Must hold the management role AT the shipping site (same grant), not merely
+    // management somewhere + membership of this site via an unrelated role.
+    if (!hasRoleAtSite(user, 'management', sto.shipping_site as string)) {
       res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
     }
     // Shipping management approval hands off to the receiving-site management
@@ -338,7 +349,7 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
     if (sto.status !== 'RECEIVING_MGMT_REVIEW') {
       res.status(400).json({ message: 'STO is not in Receiving Management Review' }); return;
     }
-    if (!userHasSite(user, sto.receiving_site as string)) {
+    if (!hasRoleAtSite(user, 'management', sto.receiving_site as string)) {
       res.status(403).json({ message: 'Only the receiving site management can approve this step' }); return;
     }
     // Both managements have now approved. Return the STO to Shipping Logistics
@@ -390,6 +401,10 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
     if (sto.status !== 'RECEIVING_LOGISTICS') {
       res.status(400).json({ message: 'STO is not in Receiving Logistics step' }); return;
     }
+    // Receiving is a receiving-site action.
+    if (!hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site as string)) {
+      res.status(403).json({ message: 'Only Receiving Logistics at this STO\'s receiving site can act here' }); return;
+    }
 
     const body = req.body;
     const newStatus: STOStatus = body.delivery_closed_out ? 'CLOSED' : 'RECEIVING_LOGISTICS';
@@ -437,7 +452,7 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
 // repeatedly keeps walking backwards one step at a time.
 router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (user.group !== 'admin') {
+  if (!isAdmin(user)) {
     res.status(403).json({ message: 'Admin access required' }); return;
   }
   const id = parseInt(req.params.id, 10);
@@ -472,7 +487,7 @@ router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void
 // to the receiving step as the rejection_reason so they know what to change.
 router.post('/:id/send-back', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (user.group !== 'admin') {
+  if (!isAdmin(user)) {
     res.status(403).json({ message: 'Admin access required' }); return;
   }
   const id = parseInt(req.params.id, 10);

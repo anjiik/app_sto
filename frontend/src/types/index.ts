@@ -16,12 +16,20 @@ export type STOStatus =
   | 'CLOSED'
   | 'REJECTED';
 
+// A single role held at a single site. A user can hold several at once.
+export interface Grant {
+  group: Group;
+  site: string;
+}
+
 export interface User {
   adUsername: string;
-  group: Group;
   name: string;
+  grants: Grant[];   // every role+site the user holds
+  // Derived, for display/back-compat only — not for gating actions.
+  group: Group;      // "primary" role (admin if any, else first grant's role)
   site: string;      // primary site
-  sites?: string[];  // all sites this user can act on / see
+  sites?: string[];  // union of all grant sites
 }
 
 export interface STORequest {

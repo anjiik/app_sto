@@ -5,6 +5,7 @@ import { STORequest, STOStatus } from '../types';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { isAdmin as checkAdmin } from '../lib/grants';
 
 function escape(v: unknown): string {
   const s = String(v ?? '').replace(/"/g, '""');
@@ -80,7 +81,7 @@ const routeKey = (r: Route) => `${r.shipping_site}→${r.receiving_site}`;
 
 export function STOList() {
   const { user } = useAuth();
-  const isAdmin = user?.group === 'admin';
+  const isAdmin = checkAdmin(user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [auditLoading, setAuditLoading] = useState(false);
 
