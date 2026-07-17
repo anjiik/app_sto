@@ -362,7 +362,6 @@ const DEMO_USERS: DemoUser[] = [
   { username: 'abc.plan',  display_name: 'Brian Scott',   site: 'ABC', group_key: 'shipping_planning' },
   { username: 'abc.slog',  display_name: 'Carol White',   site: 'ABC', group_key: 'shipping_logistics' },
   { username: 'abc.mgmt',  display_name: 'Daniel Ross',   site: 'ABC', group_key: 'management' },
-  { username: 'abc.fin',   display_name: 'Elena Marsh',   site: 'ABC', group_key: 'finance' },
   { username: 'abc.rlog',  display_name: 'Frank Lopez',   site: 'ABC', group_key: 'receiving_logistics' },
 
   // ── Site ABL ──────────────────────────────────────────────────────────────
@@ -370,7 +369,6 @@ const DEMO_USERS: DemoUser[] = [
   { username: 'abl.plan',  display_name: 'Henry Wu',      site: 'ABL', group_key: 'shipping_planning' },
   { username: 'abl.slog',  display_name: 'Isabel Cruz',   site: 'ABL', group_key: 'shipping_logistics' },
   { username: 'abl.mgmt',  display_name: 'James Ford',    site: 'ABL', group_key: 'management' },
-  { username: 'abl.fin',   display_name: 'Karen Bell',    site: 'ABL', group_key: 'finance' },
   { username: 'abl.rlog',  display_name: 'Leo Singh',     site: 'ABL', group_key: 'receiving_logistics' },
 
   // ── Site XYZ ──────────────────────────────────────────────────────────────
@@ -378,7 +376,6 @@ const DEMO_USERS: DemoUser[] = [
   { username: 'xyz.plan',  display_name: 'Nathan Cole',   site: 'XYZ', group_key: 'shipping_planning' },
   { username: 'xyz.slog',  display_name: 'Olivia Reed',   site: 'XYZ', group_key: 'shipping_logistics' },
   { username: 'xyz.mgmt',  display_name: 'Patrick James', site: 'XYZ', group_key: 'management' },
-  { username: 'xyz.fin',   display_name: 'Quinn Patel',   site: 'XYZ', group_key: 'finance' },
   { username: 'xyz.rlog',  display_name: 'Rachel Tran',   site: 'XYZ', group_key: 'receiving_logistics' },
 
   // ── Admin (cross-site; can act on any step and send STOs back) ──────────────
