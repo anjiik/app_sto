@@ -181,7 +181,7 @@ const STOS = [
     delivery_closed_out: 0, status: 'MANAGEMENT_REVIEW',
   },
 
-  // ── 5. FINANCE_REVIEW ─────────────────────────────────────────────────────
+  // ── 5. RECEIVING_MGMT_REVIEW ──────────────────────────────────────────────
   {
     sto_id: 'STO-2026-00005',
     request_date: now,
@@ -206,7 +206,7 @@ const STOS = [
     ready_to_ship: 1, pgi_date: now, tracking_id: 'TRK-UPS-447712',
     management_approved: 1, management_approved_by_user_id: 4,
     management_approved_at: now, management_notes: 'Value within budget. Approved.',
-    delivery_closed_out: 0, status: 'FINANCE_REVIEW',
+    delivery_closed_out: 0, status: 'RECEIVING_MGMT_REVIEW',
   },
 
   // ── 6. RECEIVING_LOGISTICS ────────────────────────────────────────────────
@@ -452,18 +452,25 @@ async function seed() {
     if (sto.status !== 'DRAFT') {
       await insertAudit(id, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', 1, sto.requestor_name, null);
     }
-    if (['SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED'].includes(sto.status)) {
+    // Workflow: PLANNING_REVIEW → SHIPPING_LOGISTICS → (MANAGEMENT_REVIEW →
+    // RECEIVING_MGMT_REVIEW when management approval is required) → RECEIVING_LOGISTICS → CLOSED.
+    const pastPlanning = ['SHIPPING_LOGISTICS', 'MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED'];
+    const pastLogistics = ['MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'];
+    const pastShipMgmt = ['RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'];
+    const pastRecvMgmt = ['RECEIVING_LOGISTICS', 'CLOSED'];
+
+    if (pastPlanning.includes(sto.status)) {
       const approved = sto.planning_approved === 1;
       await insertAudit(id, approved ? 'PLANNING_APPROVED' : 'PLANNING_REJECTED', 'PLANNING_REVIEW', approved ? 'SHIPPING_LOGISTICS' : 'REJECTED', 2, 'Shipping Site Planning', sto.planning_notes || null);
     }
-    if (['MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status)) {
-      await insertAudit(id, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', sto.management_approval_required ? 'MANAGEMENT_REVIEW' : 'FINANCE_REVIEW', 3, 'Shipping Site Logistics', `Freight: $${sto.freight_cost || 0}`);
+    if (pastLogistics.includes(sto.status)) {
+      await insertAudit(id, 'LOGISTICS_SUBMITTED', 'SHIPPING_LOGISTICS', sto.management_approval_required ? 'MANAGEMENT_REVIEW' : 'RECEIVING_LOGISTICS', 3, 'Shipping Site Logistics', `Freight: $${sto.freight_cost || 0}`);
     }
-    if (['FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status) && sto.management_approval_required) {
-      await insertAudit(id, 'MANAGEMENT_APPROVED', 'MANAGEMENT_REVIEW', 'FINANCE_REVIEW', 4, 'Management', sto.management_notes || null);
+    if (pastShipMgmt.includes(sto.status) && sto.management_approval_required) {
+      await insertAudit(id, 'MANAGEMENT_APPROVED', 'MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 4, 'Shipping Site Management', sto.management_notes || null);
     }
-    if (['RECEIVING_LOGISTICS', 'CLOSED'].includes(sto.status)) {
-      await insertAudit(id, 'FINANCE_APPROVED', 'FINANCE_REVIEW', 'RECEIVING_LOGISTICS', 5, 'Finance', sto.finance_notes || null);
+    if (pastRecvMgmt.includes(sto.status) && sto.management_approval_required) {
+      await insertAudit(id, 'RECEIVING_MGMT_APPROVED', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 5, 'Receiving Site Management', null);
     }
     if (sto.status === 'CLOSED') {
       await insertAudit(id, 'DELIVERY_CLOSED', 'RECEIVING_LOGISTICS', 'CLOSED', 6, 'Receiving Site Logistics', `Received: ${sto.actual_receipt_date}`);
