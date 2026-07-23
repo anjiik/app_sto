@@ -18,6 +18,7 @@ const GROUP_COLORS: Record<Group, string> = {
   shipping_planning: 'bg-amber-100 text-amber-800',
   shipping_logistics: 'bg-teal-100 text-teal-800',
   management: 'bg-purple-100 text-purple-800',
+  receiving_management: 'bg-fuchsia-100 text-fuchsia-800',
   receiving_logistics: 'bg-orange-100 text-orange-800',
   admin: 'bg-red-100 text-red-800',
 };

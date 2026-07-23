@@ -35,8 +35,12 @@ const GROUP_QUEUE: Partial<Record<Group, { label: string; statuses: STOStatus[] 
     statuses: ['SHIPPING_LOGISTICS'],
   },
   management: {
-    label: 'Awaiting your Management Approval',
-    statuses: ['MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW'],
+    label: 'Awaiting your Shipping Management Approval',
+    statuses: ['MANAGEMENT_REVIEW'],
+  },
+  receiving_management: {
+    label: 'Awaiting your Receiving Management Approval',
+    statuses: ['RECEIVING_MGMT_REVIEW'],
   },
   receiving_logistics: {
     label: 'Awaiting your Receipt Confirmation',
@@ -67,20 +71,13 @@ function fetchRoleQueue(
   type QueueRes = { data: { data: STORequest[]; pagination: { total: number } } };
   const get = (q: string): Promise<QueueRes> => api.get(`/sto${q}&limit=20`);
 
-  if (role === 'management') {
-    // Management spans two steps at two site roles: shipping-site review and
-    // receiving-site review. Fetch both and merge.
-    return Promise.all([
-      get(`?status=MANAGEMENT_REVIEW&shipping_site=${siteParam}`),
-      get(`?status=RECEIVING_MGMT_REVIEW&receiving_site=${siteParam}`),
-    ]).then(([a, b]) => ({
-      items: [...a.data.data, ...b.data.data],
-      total: a.data.pagination.total + b.data.pagination.total,
-    }));
-  }
   const status = cfg.statuses[0];
+  // Receiving-side roles scope by receiving_site; shipping-side roles by
+  // shipping_site. management = shipping-side; receiving_management = receiving-side.
   const siteCol =
-    role === 'receiving_logistics' || role === 'receiving_site'
+    role === 'receiving_logistics' ||
+    role === 'receiving_site' ||
+    role === 'receiving_management'
       ? 'receiving_site'
       : 'shipping_site';
   return get(`?status=${status}&${siteCol}=${siteParam}`).then(r => ({
@@ -299,6 +296,7 @@ export function Dashboard() {
       'shipping_planning',
       'shipping_logistics',
       'management',
+      'receiving_management',
       'receiving_logistics',
     ];
     const activeRoles = isAdmin(user) ? adminRoles : roles;
@@ -411,7 +409,8 @@ export function Dashboard() {
     receiving_site: 'Receiving Site',
     shipping_planning: 'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
-    management: 'Management',
+    management: 'Shipping Management',
+    receiving_management: 'Receiving Management',
     receiving_logistics: 'Receiving Logistics',
     admin: 'Admin',
   };

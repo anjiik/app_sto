@@ -4,21 +4,23 @@ import { Group } from '../types';
 import { hasRole } from '../lib/grants';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site:      'Receiving Site',
-  shipping_planning:   'Shipping Planning',
-  shipping_logistics:  'Shipping Logistics',
-  management:          'Management',
+  receiving_site: 'Receiving Site',
+  shipping_planning: 'Shipping Planning',
+  shipping_logistics: 'Shipping Logistics',
+  management: 'Shipping Management',
+  receiving_management: 'Receiving Management',
   receiving_logistics: 'Receiving Logistics',
-  admin:               'Admin',
+  admin: 'Admin',
 };
 
 const GROUP_COLORS: Record<Group, string> = {
-  receiving_site:      'bg-blue-700',
-  shipping_planning:   'bg-amber-600',
-  shipping_logistics:  'bg-teal-600',
-  management:          'bg-purple-700',
+  receiving_site: 'bg-blue-700',
+  shipping_planning: 'bg-amber-600',
+  shipping_logistics: 'bg-teal-600',
+  management: 'bg-purple-700',
+  receiving_management: 'bg-fuchsia-700',
   receiving_logistics: 'bg-orange-600',
-  admin:               'bg-red-700',
+  admin: 'bg-red-700',
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -34,11 +36,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const canCreateNew = hasRole(user, 'receiving_site');
 
   const navLinks = [
-    { to: '/dashboard',  label: 'Dashboard' },
-    { to: '/sto',        label: 'All STOs' },
-    { to: '/analytics',  label: 'Analytics' },
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/sto', label: 'All STOs' },
+    { to: '/analytics', label: 'Analytics' },
     ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
-    { to: '/app-info',   label: 'App Info' },
+    { to: '/app-info', label: 'App Info' },
   ];
 
   const groupColor = user ? GROUP_COLORS[user.group] : 'bg-blue-900';
@@ -68,7 +70,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center gap-3">
               {user && (
-                <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg ${groupColor}`}>
+                <div
+                  className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg ${groupColor}`}
+                >
                   <span className="text-sm font-medium">{user.name}</span>
                   <span className="text-xs text-white/70">·</span>
                   <span className="text-xs text-white/80">{GROUP_LABELS[user.group]}</span>

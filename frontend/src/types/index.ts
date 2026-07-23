@@ -2,7 +2,8 @@ export type Group =
   | 'receiving_site'
   | 'shipping_planning'
   | 'shipping_logistics'
-  | 'management'
+  | 'management' // shipping-site management review
+  | 'receiving_management' // receiving-site management review (distinct AD group)
   | 'receiving_logistics'
   | 'admin';
 
@@ -25,11 +26,11 @@ export interface Grant {
 export interface User {
   adUsername: string;
   name: string;
-  grants: Grant[];   // every role+site the user holds
+  grants: Grant[]; // every role+site the user holds
   // Derived, for display/back-compat only — not for gating actions.
-  group: Group;      // "primary" role (admin if any, else first grant's role)
-  site: string;      // primary site
-  sites?: string[];  // union of all grant sites
+  group: Group; // "primary" role (admin if any, else first grant's role)
+  site: string; // primary site
+  sites?: string[]; // union of all grant sites
 }
 
 export interface STORequest {

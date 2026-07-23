@@ -2,7 +2,8 @@ export type Group =
   | 'receiving_site'
   | 'shipping_planning'
   | 'shipping_logistics'
-  | 'management'
+  | 'management' // shipping-site management review
+  | 'receiving_management' // receiving-site management review (distinct AD group)
   | 'receiving_logistics'
   | 'admin';
 
@@ -26,7 +27,7 @@ export interface Grant {
 export interface JwtPayload {
   adUsername: string;
   name: string;
-  grants: Grant[];   // every role+site the user holds (source of truth for authz)
+  grants: Grant[]; // every role+site the user holds (source of truth for authz)
   // Derived, kept for display/back-compat. `group` is the "primary" role (admin
   // if the user has any admin grant, otherwise the first grant's role); `sites`
   // is the union of all grant sites. Do NOT use these for authorization — use the

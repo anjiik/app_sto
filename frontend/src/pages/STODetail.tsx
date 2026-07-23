@@ -27,13 +27,13 @@ function Row({ label, value }: { label: string; value?: string | number | boolea
 
 // ── Process timeline ────────────────────────────────────────────────────────
 const STEPS: { key: STOStatus; label: string }[] = [
-  { key: 'DRAFT',                label: 'Draft' },
-  { key: 'PLANNING_REVIEW',      label: 'Planning' },
-  { key: 'SHIPPING_LOGISTICS',   label: 'Logistics' },
-  { key: 'MANAGEMENT_REVIEW',    label: 'Ship. Mgmt' },
+  { key: 'DRAFT', label: 'Draft' },
+  { key: 'PLANNING_REVIEW', label: 'Planning' },
+  { key: 'SHIPPING_LOGISTICS', label: 'Logistics' },
+  { key: 'MANAGEMENT_REVIEW', label: 'Ship. Mgmt' },
   { key: 'RECEIVING_MGMT_REVIEW', label: 'Recv. Mgmt' },
-  { key: 'RECEIVING_LOGISTICS',  label: 'Recv. Logistics' },
-  { key: 'CLOSED',               label: 'Closed' },
+  { key: 'RECEIVING_LOGISTICS', label: 'Recv. Logistics' },
+  { key: 'CLOSED', label: 'Closed' },
 ];
 
 const STEP_ORDER = STEPS.map(s => s.key);
@@ -56,19 +56,27 @@ function Timeline({ status }: { status: STOStatus }) {
         return (
           <div key={step.key} className="flex items-center">
             <div className="flex flex-col items-center gap-1 px-2">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                done   ? 'bg-blue-600 text-white' :
-                active ? 'bg-blue-700 text-white ring-4 ring-blue-200' :
-                         'bg-gray-200 text-gray-400'
-              }`}>
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  done
+                    ? 'bg-blue-600 text-white'
+                    : active
+                      ? 'bg-blue-700 text-white ring-4 ring-blue-200'
+                      : 'bg-gray-200 text-gray-400'
+                }`}
+              >
                 {done ? '✓' : i + 1}
               </div>
-              <span className={`text-xs whitespace-nowrap ${active ? 'text-blue-700 font-semibold' : done ? 'text-blue-500' : 'text-gray-400'}`}>
+              <span
+                className={`text-xs whitespace-nowrap ${active ? 'text-blue-700 font-semibold' : done ? 'text-blue-500' : 'text-gray-400'}`}
+              >
                 {step.label}
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={`h-0.5 w-6 mt-[-14px] ${i < currentIdx ? 'bg-blue-400' : 'bg-gray-200'}`} />
+              <div
+                className={`h-0.5 w-6 mt-[-14px] ${i < currentIdx ? 'bg-blue-400' : 'bg-gray-200'}`}
+              />
             )}
           </div>
         );
@@ -80,7 +88,12 @@ function Timeline({ status }: { status: STOStatus }) {
 // ── Approval panel (for planning / management / finance) ────────────────────
 // onRevise is optional: when provided a third "Request Revision" button appears
 // (used by the planning step to send the STO back to the requestor as a draft).
-function ApprovalPanel({ title, onApprove, onRevise, loading }: {
+function ApprovalPanel({
+  title,
+  onApprove,
+  onRevise,
+  loading,
+}: {
   title: string;
   onApprove: (approved: boolean, notes: string) => void;
   onRevise?: (notes: string) => void;
@@ -93,7 +106,10 @@ function ApprovalPanel({ title, onApprove, onRevise, loading }: {
     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
       <div className="font-semibold text-amber-900 mb-3">{title} — Action Required</div>
       {!open ? (
-        <button onClick={() => setOpen(true)} className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-700">
+        <button
+          onClick={() => setOpen(true)}
+          className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-700"
+        >
           Review &amp; Decide
         </button>
       ) : (
@@ -101,20 +117,42 @@ function ApprovalPanel({ title, onApprove, onRevise, loading }: {
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder={onRevise ? 'Notes (required to reject or request revision)...' : 'Optional notes...'}
+            placeholder={
+              onRevise ? 'Notes (required to reject or request revision)...' : 'Optional notes...'
+            }
             rows={2}
             className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <div className="flex gap-2 flex-wrap">
-            <button disabled={loading} onClick={() => onApprove(true, note)}
-              className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">✓ Approve</button>
+            <button
+              disabled={loading}
+              onClick={() => onApprove(true, note)}
+              className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+            >
+              ✓ Approve
+            </button>
             {onRevise && (
-              <button disabled={loading} onClick={() => onRevise(note)}
-                className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50">↩ Request Revision</button>
+              <button
+                disabled={loading}
+                onClick={() => onRevise(note)}
+                className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50"
+              >
+                ↩ Request Revision
+              </button>
             )}
-            <button disabled={loading} onClick={() => onApprove(false, note)}
-              className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">✗ Reject</button>
-            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-700 px-2 text-sm">Cancel</button>
+            <button
+              disabled={loading}
+              onClick={() => onApprove(false, note)}
+              className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50"
+            >
+              ✗ Reject
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-gray-500 hover:text-gray-700 px-2 text-sm"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -122,30 +160,58 @@ function ApprovalPanel({ title, onApprove, onRevise, loading }: {
   );
 }
 
-function ApprovalResult({ approved, by, notes }: { approved?: boolean | null; by?: string; notes?: string }) {
-  if (approved === undefined || approved === null) return (
-    <div className="text-sm text-gray-400 italic">Pending</div>
-  );
+function ApprovalResult({
+  approved,
+  by,
+  notes,
+}: {
+  approved?: boolean | null;
+  by?: string;
+  notes?: string;
+}) {
+  if (approved === undefined || approved === null)
+    return <div className="text-sm text-gray-400 italic">Pending</div>;
   return (
-    <div className={`rounded-xl p-3 ${approved ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+    <div
+      className={`rounded-xl p-3 ${approved ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+    >
       <div className={`font-medium text-sm ${approved ? 'text-green-800' : 'text-red-800'}`}>
-        {approved ? '✓ Approved' : '✗ Rejected'}{by ? ` by ${by}` : ''}
+        {approved ? '✓ Approved' : '✗ Rejected'}
+        {by ? ` by ${by}` : ''}
       </div>
-      {notes && <div className={`text-xs mt-1 ${approved ? 'text-green-600' : 'text-red-600'}`}>{notes}</div>}
+      {notes && (
+        <div className={`text-xs mt-1 ${approved ? 'text-green-600' : 'text-red-600'}`}>
+          {notes}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Section wrapper ─────────────────────────────────────────────────────────
-function Section({ title, active, icon, children }: {
-  title: string; active?: boolean; icon: string; children: React.ReactNode;
+function Section({
+  title,
+  active,
+  icon,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  icon: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-xl border p-5 ${active ? 'border-blue-300 bg-blue-50/30 shadow-sm' : 'border-gray-200 bg-white'}`}>
+    <div
+      className={`rounded-xl border p-5 ${active ? 'border-blue-300 bg-blue-50/30 shadow-sm' : 'border-gray-200 bg-white'}`}
+    >
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">{icon}</span>
         <h3 className={`font-semibold ${active ? 'text-blue-800' : 'text-gray-800'}`}>{title}</h3>
-        {active && <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Your Turn</span>}
+        {active && (
+          <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+            Your Turn
+          </span>
+        )}
       </div>
       {children}
     </div>
@@ -161,17 +227,22 @@ export function STODetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const [planningForm,  setPlanningForm]  = useState<Record<string, string>>({});
+  const [planningForm, setPlanningForm] = useState<Record<string, string>>({});
   const [logisticsForm, setLogisticsForm] = useState<Record<string, string | boolean>>({});
-  const [recvForm,      setRecvForm]      = useState<Record<string, string | boolean>>({});
-  const [trackingForm,  setTrackingForm]  = useState<Record<string, string>>({});
-  const [editTracking,  setEditTracking]  = useState(false);
+  const [recvForm, setRecvForm] = useState<Record<string, string | boolean>>({});
+  const [trackingForm, setTrackingForm] = useState<Record<string, string>>({});
+  const [editTracking, setEditTracking] = useState(false);
 
   function load() {
     setLoading(true);
-    api.get(`/sto/${id}`).then(r => setSto(r.data)).finally(() => setLoading(false));
+    api
+      .get(`/sto/${id}`)
+      .then(r => setSto(r.data))
+      .finally(() => setLoading(false));
   }
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    load();
+  }, [id]);
 
   async function doAction(endpoint: string, body: object) {
     setActionLoading(true);
@@ -181,17 +252,28 @@ export function STODetail() {
       setMessage({ text: r.data.message || 'Done', ok: true });
       load();
     } catch (err: unknown) {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-        : 'Error';
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : 'Error';
       setMessage({ text: msg || 'Error', ok: false });
     } finally {
       setActionLoading(false);
     }
   }
 
-  if (loading) return <Layout><div className="p-12 text-center text-gray-400">Loading...</div></Layout>;
-  if (!sto) return <Layout><div className="p-12 text-center text-red-500">STO not found</div></Layout>;
+  if (loading)
+    return (
+      <Layout>
+        <div className="p-12 text-center text-gray-400">Loading...</div>
+      </Layout>
+    );
+  if (!sto)
+    return (
+      <Layout>
+        <div className="p-12 text-center text-red-500">STO not found</div>
+      </Layout>
+    );
 
   const admin = isAdmin(user);
   const isRequestor = user?.name === sto.requestor_name;
@@ -199,39 +281,54 @@ export function STODetail() {
   // Grant-aware "can act at this STO for a given role" flags. Each requires the
   // matching role AT the STO's relevant site (or admin), mirroring the backend
   // guards. Multi-role users get every applicable flag, not just one.
-  const canPlan     = hasRoleAtSite(user, 'shipping_planning',   sto.shipping_site);
-  const canShipLog  = hasRoleAtSite(user, 'shipping_logistics',  sto.shipping_site);
-  const canShipMgmt = hasRoleAtSite(user, 'management',          sto.shipping_site);
-  const canRecvMgmt = hasRoleAtSite(user, 'management',          sto.receiving_site);
-  const canRecvLog  = hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site);
+  const canPlan = hasRoleAtSite(user, 'shipping_planning', sto.shipping_site);
+  const canShipLog = hasRoleAtSite(user, 'shipping_logistics', sto.shipping_site);
+  const canShipMgmt = hasRoleAtSite(user, 'management', sto.shipping_site);
+  const canRecvMgmt = hasRoleAtSite(user, 'receiving_management', sto.receiving_site);
+  const canRecvLog = hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site);
   // Kept for read-only section framing (e.g. the requestor's own draft section).
   const isReceivingSiteUser = hasRole(user, 'receiving_site');
 
   // Who is active right now?
-  const myTurn = (
+  const myTurn =
     ((isRequestor || admin) && sto.status === 'DRAFT') ||
-    (canPlan     && sto.status === 'PLANNING_REVIEW') ||
-    (canShipLog  && sto.status === 'SHIPPING_LOGISTICS') ||
+    (canPlan && sto.status === 'PLANNING_REVIEW') ||
+    (canShipLog && sto.status === 'SHIPPING_LOGISTICS') ||
     (canShipMgmt && sto.status === 'MANAGEMENT_REVIEW') ||
     (canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW') ||
-    (canRecvLog  && sto.status === 'RECEIVING_LOGISTICS')
-  );
+    (canRecvLog && sto.status === 'RECEIVING_LOGISTICS');
 
   return (
     <Layout>
       <div className="max-w-4xl mx-auto space-y-5">
-
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600 text-sm mb-2 block">← Back</button>
+            <button
+              onClick={() => navigate(-1)}
+              className="text-gray-400 hover:text-gray-600 text-sm mb-2 block"
+            >
+              ← Back
+            </button>
             <h1 className="text-2xl font-bold text-gray-900 font-mono">{sto.sto_id}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <StatusBadge status={sto.status} />
               <PriorityBadge priority={sto.priority} />
-              {sto.rush_request && <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-medium">RUSH</span>}
-              {sto.toll_mfg && <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">Toll MFG</span>}
-              {myTurn && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold">Action Required from You</span>}
+              {sto.rush_request && (
+                <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                  RUSH
+                </span>
+              )}
+              {sto.toll_mfg && (
+                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                  Toll MFG
+                </span>
+              )}
+              {myTurn && (
+                <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold">
+                  Action Required from You
+                </span>
+              )}
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -257,7 +354,10 @@ export function STODetail() {
             {admin && sto.status !== 'DRAFT' && (
               <>
                 <button
-                  onClick={() => { if (window.confirm(`Revert this STO one step back from ${sto.status}?`)) doAction('revert', {}); }}
+                  onClick={() => {
+                    if (window.confirm(`Revert this STO one step back from ${sto.status}?`))
+                      doAction('revert', {});
+                  }}
                   disabled={actionLoading}
                   className="bg-white border border-red-300 text-red-700 px-4 py-2.5 rounded-lg hover:bg-red-50 font-medium text-sm disabled:opacity-50"
                 >
@@ -265,7 +365,9 @@ export function STODetail() {
                 </button>
                 <button
                   onClick={() => {
-                    const reason = window.prompt('Reason for sending this STO back a step (required):');
+                    const reason = window.prompt(
+                      'Reason for sending this STO back a step (required):',
+                    );
                     if (reason && reason.trim()) doAction('send-back', { reason: reason.trim() });
                   }}
                   disabled={actionLoading}
@@ -280,7 +382,9 @@ export function STODetail() {
 
         {/* Message */}
         {message && (
-          <div className={`px-4 py-3 rounded-lg text-sm ${message.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+          <div
+            className={`px-4 py-3 rounded-lg text-sm ${message.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}
+          >
             {message.text}
           </div>
         )}
@@ -306,61 +410,103 @@ export function STODetail() {
           ].map(item => (
             <div key={item.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
               <div className="text-[11px] uppercase tracking-wider text-gray-400">{item.label}</div>
-              <div className="text-sm font-semibold text-gray-800 mt-0.5 font-mono break-all">{item.value || '–'}</div>
+              <div className="text-sm font-semibold text-gray-800 mt-0.5 font-mono break-all">
+                {item.value || '–'}
+              </div>
             </div>
           ))}
         </div>
 
         {/* ── SECTION 1: Request & Material Info (Receiving Site fills) ── */}
-        <Section title="Request &amp; Material Information" icon="📋" active={isReceivingSiteUser && sto.status === 'DRAFT'}>
+        <Section
+          title="Request &amp; Material Information"
+          icon="📋"
+          active={isReceivingSiteUser && sto.status === 'DRAFT'}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Requestor</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                Requestor
+              </p>
               <Row label="Name" value={sto.requestor_name} />
               <Row label="Email" value={sto.requestor_email} />
               <Row label="Requesting Plant" value={sto.requesting_plant} />
               <Row label="Shipping Site" value={sto.shipping_site} />
               <Row label="Receiving Site" value={sto.receiving_site} />
 
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">Schedule</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">
+                Schedule
+              </p>
               <Row label="Request Date" value={fmt(sto.request_date)} />
               <Row label="Need By Date" value={fmt(sto.receiving_site_need_by_date)} />
               <Row label="Std. Est. Ship Date" value={fmt(sto.standard_estimated_ship_date)} />
               <Row label="Repeat Shipment Year" value={sto.repeat_shipment_calendar_year} />
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Material</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                Material
+              </p>
               <Row label="SAP Material #" value={sto.material_sap} />
               <Row label="MPN #" value={sto.mpn_number} />
               <Row label="Description" value={sto.material_description} />
-              <Row label="Quantity" value={sto.quantity != null ? `${sto.quantity} ${sto.uom || ''}` : undefined} />
+              <Row
+                label="Quantity"
+                value={sto.quantity != null ? `${sto.quantity} ${sto.uom || ''}` : undefined}
+              />
               <Row label="Batch #" value={sto.batch_number} />
               <Row label="Expiration Date" value={fmt(sto.expiration_date)} />
               <Row label="Shipping Conditions" value={sto.shipping_conditions} />
               <Row label="Brand at Receiving" value={sto.brand_at_receiving_site} />
-              <Row label="Material Value" value={sto.material_value != null ? `$${Number(sto.material_value).toLocaleString()}` : undefined} />
+              <Row
+                label="Material Value"
+                value={
+                  sto.material_value != null
+                    ? `$${Number(sto.material_value).toLocaleString()}`
+                    : undefined
+                }
+              />
 
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">Flags</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">
+                Flags
+              </p>
               <Row label="Rush Request" value={sto.rush_request} />
               {sto.rush_reason && <Row label="Rush Reason" value={sto.rush_reason} />}
               <Row label="Public Holiday" value={sto.public_holiday} />
               <Row label="Toll MFG" value={sto.toll_mfg} />
               <Row label="Controlled Shipping" value={sto.controlled_shipping_required} />
-              {sto.controlled_shipping_required && <Row label="Controlled Shipping Notes" value={sto.controlled_shipping_notes} />}
+              {sto.controlled_shipping_required && (
+                <Row label="Controlled Shipping Notes" value={sto.controlled_shipping_notes} />
+              )}
               <Row label="Insurance Loss Req." value={sto.insurance_loss_required} />
             </div>
           </div>
         </Section>
 
         {/* ── SECTION 2: Shipping Planning Review ── */}
-        <Section title="Shipping Site Planning Review" icon="🗂️" active={canPlan && sto.status === 'PLANNING_REVIEW'}>
+        <Section
+          title="Shipping Site Planning Review"
+          icon="🗂️"
+          active={canPlan && sto.status === 'PLANNING_REVIEW'}
+        >
           {canPlan && sto.status === 'PLANNING_REVIEW' ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Complete the inventory review fields below, then approve or reject.</p>
+              <p className="text-sm text-gray-500">
+                Complete the inventory review fields below, then approve or reject.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
-                  { key: 'mpn_number',      label: 'MPN Number',      placeholder: 'Manufacturer Part Number', required: true },
-                  { key: 'batch_number',    label: 'Batch Number',    placeholder: 'e.g. B-2026-001',          required: true },
+                  {
+                    key: 'mpn_number',
+                    label: 'MPN Number',
+                    placeholder: 'Manufacturer Part Number',
+                    required: true,
+                  },
+                  {
+                    key: 'batch_number',
+                    label: 'Batch Number',
+                    placeholder: 'e.g. B-2026-001',
+                    required: true,
+                  },
                 ].map(f => (
                   <div key={f.key}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -377,38 +523,62 @@ export function STODetail() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Expiration Date <span className="text-red-500">*</span>
                   </label>
-                  <input type="date"
-                    onChange={e => setPlanningForm(p => ({ ...p, expiration_date: e.target.value }))}
+                  <input
+                    type="date"
+                    onChange={e =>
+                      setPlanningForm(p => ({ ...p, expiration_date: e.target.value }))
+                    }
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
                   />
                 </div>
               </div>
               {sto.material_value != null && (
-                <div className={`px-4 py-2 rounded-lg text-sm ${sto.material_value > 100000 ? 'bg-orange-50 border border-orange-200 text-orange-800' : 'bg-gray-50 border border-gray-200 text-gray-600'}`}>
+                <div
+                  className={`px-4 py-2 rounded-lg text-sm ${sto.material_value > 100000 ? 'bg-orange-50 border border-orange-200 text-orange-800' : 'bg-gray-50 border border-gray-200 text-gray-600'}`}
+                >
                   Material Value: <strong>${Number(sto.material_value).toLocaleString()}</strong>
-                  {sto.material_value > 100000 && ' — Management approval will be required (value > $100,000)'}
+                  {sto.material_value > 100000 &&
+                    ' — Management approval will be required (value > $100,000)'}
                 </div>
               )}
               <ApprovalPanel
                 title="Inventory Request"
                 loading={actionLoading}
                 onApprove={(approved, notes) => {
-                  if (!approved && !notes.trim()) { setMessage({ text: 'A note is required to reject.', ok: false }); return; }
-                  doAction('planning', { decision: approved ? 'approve' : 'reject', notes, ...planningForm });
+                  if (!approved && !notes.trim()) {
+                    setMessage({ text: 'A note is required to reject.', ok: false });
+                    return;
+                  }
+                  doAction('planning', {
+                    decision: approved ? 'approve' : 'reject',
+                    notes,
+                    ...planningForm,
+                  });
                 }}
-                onRevise={(notes) => {
-                  if (!notes.trim()) { setMessage({ text: 'A note is required to request a revision.', ok: false }); return; }
+                onRevise={notes => {
+                  if (!notes.trim()) {
+                    setMessage({ text: 'A note is required to request a revision.', ok: false });
+                    return;
+                  }
                   doAction('planning', { decision: 'revise', notes });
                 }}
               />
-
             </div>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3 text-sm">
-                <div><span className="text-xs text-gray-400 block">MPN Number</span>{sto.mpn_number || '–'}</div>
-                <div><span className="text-xs text-gray-400 block">Batch Number</span>{sto.batch_number || '–'}</div>
-                <div><span className="text-xs text-gray-400 block">Expiration Date</span>{fmt(sto.expiration_date)}</div>
+                <div>
+                  <span className="text-xs text-gray-400 block">MPN Number</span>
+                  {sto.mpn_number || '–'}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block">Batch Number</span>
+                  {sto.batch_number || '–'}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block">Expiration Date</span>
+                  {fmt(sto.expiration_date)}
+                </div>
               </div>
               <ApprovalResult approved={sto.planning_approved} notes={sto.planning_notes} />
             </div>
@@ -416,24 +586,50 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 3: Shipping Logistics ── */}
-        <Section title="Shipping Site Logistics" icon="📦" active={canShipLog && sto.status === 'SHIPPING_LOGISTICS'}>
+        <Section
+          title="Shipping Site Logistics"
+          icon="📦"
+          active={canShipLog && sto.status === 'SHIPPING_LOGISTICS'}
+        >
           {canShipLog && sto.status === 'SHIPPING_LOGISTICS' ? (
             <div className="space-y-4">
               {sto.mgmt_confirmed ? (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-lg text-sm">
-                  Both management approvals are complete. Review and confirm the shipment details below (edit anything that changed), then continue to Receiving Logistics.
+                  Both management approvals are complete. Review and confirm the shipment details
+                  below (edit anything that changed), then continue to Receiving Logistics.
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">Fill in the shipment details, then submit. Management approval is required if: material &gt; $100,000, freight &gt; $20,000, cold-chain shipping (2-8C, below 0, or frozen), or freight cost &gt; 30% of material value.</p>
+                <p className="text-sm text-gray-500">
+                  Fill in the shipment details, then submit. Management approval is required if:
+                  material &gt; $100,000, freight &gt; $20,000, cold-chain shipping (2-8C, below 0,
+                  or frozen), or freight cost &gt; 30% of material value.
+                </p>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { key: 'container_information', label: 'Container Information (UOM Conversion)', placeholder: 'e.g. 12 units per carton', prefill: sto.container_information },
-                  { key: 'sto_number',             label: 'STO Number',                            placeholder: 'e.g. STO-2026-00001', prefill: sto.sto_number },
-                  { key: 'shipment_id',            label: 'Shipment ID',                           placeholder: 'e.g. SHP-20001', prefill: sto.shipment_id },
+                  {
+                    key: 'container_information',
+                    label: 'Container Information (UOM Conversion)',
+                    placeholder: 'e.g. 12 units per carton',
+                    prefill: sto.container_information,
+                  },
+                  {
+                    key: 'sto_number',
+                    label: 'STO Number',
+                    placeholder: 'e.g. STO-2026-00001',
+                    prefill: sto.sto_number,
+                  },
+                  {
+                    key: 'shipment_id',
+                    label: 'Shipment ID',
+                    placeholder: 'e.g. SHP-20001',
+                    prefill: sto.shipment_id,
+                  },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {f.label}
+                    </label>
                     <input
                       placeholder={f.placeholder}
                       defaultValue={(f.prefill as string) ?? ''}
@@ -443,43 +639,75 @@ export function STODetail() {
                   </div>
                 ))}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Freight Cost (USD) <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Freight Cost (USD) <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="number" step="0.01" placeholder="0.00"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
                     defaultValue={sto.freight_cost != null ? String(sto.freight_cost) : ''}
                     onChange={e => setLogisticsForm(p => ({ ...p, freight_cost: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Management approval required if &gt;$20,000 or &gt;30% of material value</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Management approval required if &gt;$20,000 or &gt;30% of material value
+                  </p>
                 </div>
                 {[
-                  { key: 'expedited_estimated_ship_date', label: 'Expedited Estimated Ship Date', prefill: sto.expedited_estimated_ship_date, req: false },
-                  { key: 'pgi_date',                      label: 'PGI Date (Goods Issued from SAP)', prefill: sto.pgi_date, req: sto.mgmt_confirmed },
-                  { key: 'estimated_delivery_date',        label: 'Estimated Delivery Date', prefill: sto.estimated_delivery_date, req: sto.mgmt_confirmed },
-                  { key: 'actual_ship_date',               label: 'Actual Ship Date', prefill: sto.actual_ship_date, req: sto.mgmt_confirmed },
+                  {
+                    key: 'expedited_estimated_ship_date',
+                    label: 'Expedited Estimated Ship Date',
+                    prefill: sto.expedited_estimated_ship_date,
+                    req: false,
+                  },
+                  {
+                    key: 'pgi_date',
+                    label: 'PGI Date (Goods Issued from SAP)',
+                    prefill: sto.pgi_date,
+                    req: sto.mgmt_confirmed,
+                  },
+                  {
+                    key: 'estimated_delivery_date',
+                    label: 'Estimated Delivery Date',
+                    prefill: sto.estimated_delivery_date,
+                    req: sto.mgmt_confirmed,
+                  },
+                  {
+                    key: 'actual_ship_date',
+                    label: 'Actual Ship Date',
+                    prefill: sto.actual_ship_date,
+                    req: sto.mgmt_confirmed,
+                  },
                 ].map(f => (
                   <div key={f.key}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {f.label} {f.req && <span className="text-red-500">*</span>}
                     </label>
-                    <input type="date"
+                    <input
+                      type="date"
                       defaultValue={f.prefill ? String(f.prefill).slice(0, 10) : ''}
                       onChange={e => setLogisticsForm(p => ({ ...p, [f.key]: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
                   </div>
                 ))}
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked={Boolean(sto.ready_to_ship)}
+                <input
+                  type="checkbox"
+                  defaultChecked={Boolean(sto.ready_to_ship)}
                   onChange={e => setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))}
-                  className="w-4 h-4 text-teal-600 rounded" />
+                  className="w-4 h-4 text-teal-600 rounded"
+                />
                 <span className="text-sm text-gray-700 font-medium">
                   Ready to Ship {sto.mgmt_confirmed && <span className="text-red-500">*</span>}
                 </span>
               </label>
               {sto.mgmt_confirmed && (
                 <p className="text-xs text-gray-500">
-                  Actual ship date, estimated delivery date, PGI date and Ready to Ship are required before continuing.
+                  Actual ship date, estimated delivery date, PGI date and Ready to Ship are required
+                  before continuing.
                 </p>
               )}
               <button
@@ -489,12 +717,17 @@ export function STODetail() {
                   if (sto.mgmt_confirmed) {
                     const f = logisticsForm;
                     const missing: string[] = [];
-                    if (!f.actual_ship_date && !sto.actual_ship_date)               missing.push('Actual Ship Date');
-                    if (!f.estimated_delivery_date && !sto.estimated_delivery_date) missing.push('Estimated Delivery Date');
-                    if (!f.pgi_date && !sto.pgi_date)                               missing.push('PGI Date');
-                    if (!f.ready_to_ship && !sto.ready_to_ship)                     missing.push('Ready to Ship');
+                    if (!f.actual_ship_date && !sto.actual_ship_date)
+                      missing.push('Actual Ship Date');
+                    if (!f.estimated_delivery_date && !sto.estimated_delivery_date)
+                      missing.push('Estimated Delivery Date');
+                    if (!f.pgi_date && !sto.pgi_date) missing.push('PGI Date');
+                    if (!f.ready_to_ship && !sto.ready_to_ship) missing.push('Ready to Ship');
                     if (missing.length) {
-                      setMessage({ text: `Required before continuing: ${missing.join(', ')}`, ok: false });
+                      setMessage({
+                        text: `Required before continuing: ${missing.join(', ')}`,
+                        ok: false,
+                      });
                       return;
                     }
                   }
@@ -508,21 +741,52 @@ export function STODetail() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-              <div><span className="text-xs text-gray-400 block">Container Info</span>{sto.container_information || '–'}</div>
-              <div><span className="text-xs text-gray-400 block">Freight Cost</span>{sto.freight_cost != null ? `$${Number(sto.freight_cost).toLocaleString()}` : '–'}</div>
-              <div><span className="text-xs text-gray-400 block">Ready to Ship</span>{sto.ready_to_ship ? 'Yes' : '–'}</div>
-              <div><span className="text-xs text-gray-400 block">Expedited Ship Date</span>{fmt(sto.expedited_estimated_ship_date)}</div>
-              <div><span className="text-xs text-gray-400 block">PGI Date</span>{fmt(sto.pgi_date)}</div>
-              <div><span className="text-xs text-gray-400 block">Est. Delivery Date</span>{fmt(sto.estimated_delivery_date)}</div>
-              <div><span className="text-xs text-gray-400 block">Actual Ship Date</span>{fmt(sto.actual_ship_date)}</div>
-              <div><span className="text-xs text-gray-400 block">STO Number</span>{sto.sto_number || '–'}</div>
-              <div><span className="text-xs text-gray-400 block">Shipment ID</span>{sto.shipment_id || '–'}</div>
+              <div>
+                <span className="text-xs text-gray-400 block">Container Info</span>
+                {sto.container_information || '–'}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Freight Cost</span>
+                {sto.freight_cost != null ? `$${Number(sto.freight_cost).toLocaleString()}` : '–'}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Ready to Ship</span>
+                {sto.ready_to_ship ? 'Yes' : '–'}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Expedited Ship Date</span>
+                {fmt(sto.expedited_estimated_ship_date)}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">PGI Date</span>
+                {fmt(sto.pgi_date)}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Est. Delivery Date</span>
+                {fmt(sto.estimated_delivery_date)}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Actual Ship Date</span>
+                {fmt(sto.actual_ship_date)}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">STO Number</span>
+                {sto.sto_number || '–'}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Shipment ID</span>
+                {sto.shipment_id || '–'}
+              </div>
             </div>
           )}
         </Section>
 
         {/* ── SECTION 4: Management Review ── */}
-        <Section title="Shipping Site Management Approval" icon="✅" active={canShipMgmt && sto.status === 'MANAGEMENT_REVIEW'}>
+        <Section
+          title="Shipping Site Management Approval"
+          icon="✅"
+          active={canShipMgmt && sto.status === 'MANAGEMENT_REVIEW'}
+        >
           {sto.management_approval_required === false && sto.status !== 'MANAGEMENT_REVIEW' ? (
             <div className="text-sm text-gray-400 italic">Not required for this order</div>
           ) : canShipMgmt && sto.status === 'MANAGEMENT_REVIEW' ? (
@@ -539,7 +803,11 @@ export function STODetail() {
         </Section>
 
         {/* ── SECTION 5: Receiving Site Management Review ── */}
-        <Section title="Receiving Site Management Approval" icon="✅" active={canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW'}>
+        <Section
+          title="Receiving Site Management Approval"
+          icon="✅"
+          active={canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW'}
+        >
           {canRecvMgmt && sto.status === 'RECEIVING_MGMT_REVIEW' ? (
             <ApprovalPanel
               title="Receiving Site Management Approval"
@@ -547,26 +815,49 @@ export function STODetail() {
               onApprove={(approved, notes) => doAction('receiving-management', { approved, notes })}
             />
           ) : (
-            <ApprovalResult approved={sto.receiving_mgmt_approved} notes={sto.receiving_mgmt_notes} />
+            <ApprovalResult
+              approved={sto.receiving_mgmt_approved}
+              notes={sto.receiving_mgmt_notes}
+            />
           )}
         </Section>
 
         {/* ── SECTION 6: Receiving Logistics ── */}
-        <Section title="Receiving Site Logistics" icon="🏭" active={canRecvLog && sto.status === 'RECEIVING_LOGISTICS'}>
+        <Section
+          title="Receiving Site Logistics"
+          icon="🏭"
+          active={canRecvLog && sto.status === 'RECEIVING_LOGISTICS'}
+        >
           {canRecvLog && sto.status === 'RECEIVING_LOGISTICS' ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Confirm receipt details and close out the delivery.</p>
+              <p className="text-sm text-gray-500">
+                Confirm receipt details and close out the delivery.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Actual Receipt Date <span className="text-red-500">*</span></label>
-                  <input type="date" onChange={e => setRecvForm(p => ({ ...p, actual_receipt_date: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Actual Receipt Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    onChange={e =>
+                      setRecvForm(p => ({ ...p, actual_receipt_date: e.target.value }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
                 </div>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" onChange={e => setRecvForm(p => ({ ...p, delivery_closed_out: e.target.checked }))}
-                  className="w-4 h-4 text-orange-600 rounded" />
-                <span className="text-sm text-gray-700 font-medium">Close Out Delivery (marks STO as Closed)</span>
+                <input
+                  type="checkbox"
+                  onChange={e =>
+                    setRecvForm(p => ({ ...p, delivery_closed_out: e.target.checked }))
+                  }
+                  className="w-4 h-4 text-orange-600 rounded"
+                />
+                <span className="text-sm text-gray-700 font-medium">
+                  Close Out Delivery (marks STO as Closed)
+                </span>
               </label>
               <button
                 onClick={() => doAction('receiving-logistics', recvForm)}
@@ -578,8 +869,14 @@ export function STODetail() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-xs text-gray-400 block">Receipt Date</span>{fmt(sto.actual_receipt_date)}</div>
-              <div><span className="text-xs text-gray-400 block">Delivery Closed Out</span>{sto.delivery_closed_out ? 'Yes' : '–'}</div>
+              <div>
+                <span className="text-xs text-gray-400 block">Receipt Date</span>
+                {fmt(sto.actual_receipt_date)}
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 block">Delivery Closed Out</span>
+                {sto.delivery_closed_out ? 'Yes' : '–'}
+              </div>
             </div>
           )}
         </Section>
@@ -609,12 +906,14 @@ export function STODetail() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {[
-                    { key: 'sto_number',                  label: 'STO Number' },
-                    { key: 'shipment_id',                 label: 'Shipment ID' },
+                    { key: 'sto_number', label: 'STO Number' },
+                    { key: 'shipment_id', label: 'Shipment ID' },
                     { key: 'corporate_sto_tracker_status', label: 'Corporate STO Tracker Status' },
                   ].map(f => (
                     <div key={f.key}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {f.label}
+                      </label>
                       <input
                         value={trackingForm[f.key] ?? ''}
                         onChange={e => setTrackingForm(p => ({ ...p, [f.key]: e.target.value }))}
@@ -635,9 +934,11 @@ export function STODetail() {
                         setEditTracking(false);
                         load();
                       } catch (err: unknown) {
-                        const msg = err && typeof err === 'object' && 'response' in err
-                          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-                          : 'Error';
+                        const msg =
+                          err && typeof err === 'object' && 'response' in err
+                            ? (err as { response?: { data?: { message?: string } } }).response?.data
+                                ?.message
+                            : 'Error';
                         setMessage({ text: msg || 'Error', ok: false });
                       } finally {
                         setActionLoading(false);
@@ -647,16 +948,28 @@ export function STODetail() {
                   >
                     Save
                   </button>
-                  <button onClick={() => setEditTracking(false)} className="text-gray-500 hover:text-gray-700 px-3 text-sm">
+                  <button
+                    onClick={() => setEditTracking(false)}
+                    className="text-gray-500 hover:text-gray-700 px-3 text-sm"
+                  >
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                <div><span className="text-xs text-gray-400 block">STO Number</span>{sto.sto_number || '–'}</div>
-                <div><span className="text-xs text-gray-400 block">Shipment ID</span>{sto.shipment_id || '–'}</div>
-                <div><span className="text-xs text-gray-400 block">Corporate Tracker Status</span>{sto.corporate_sto_tracker_status || '–'}</div>
+                <div>
+                  <span className="text-xs text-gray-400 block">STO Number</span>
+                  {sto.sto_number || '–'}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block">Shipment ID</span>
+                  {sto.shipment_id || '–'}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block">Corporate Tracker Status</span>
+                  {sto.corporate_sto_tracker_status || '–'}
+                </div>
               </div>
             )}
           </div>
@@ -668,17 +981,28 @@ export function STODetail() {
             <h3 className="font-semibold text-gray-800 mb-3">Activity Log</h3>
             <div className="space-y-2">
               {sto.audit_log.map(entry => (
-                <div key={entry.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                <div
+                  key={entry.id}
+                  className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0"
+                >
                   <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 shrink-0" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-gray-900">{entry.action.replace(/_/g, ' ')}</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {entry.action.replace(/_/g, ' ')}
+                      </span>
                       {entry.old_status && entry.new_status && (
-                        <span className="text-xs text-gray-400">{entry.old_status} → {entry.new_status}</span>
+                        <span className="text-xs text-gray-400">
+                          {entry.old_status} → {entry.new_status}
+                        </span>
                       )}
                     </div>
-                    <div className="text-xs text-gray-400">by {entry.performed_by_name} · {new Date(entry.performed_at).toLocaleString()}</div>
-                    {entry.notes && <div className="text-xs text-gray-600 mt-0.5">{entry.notes}</div>}
+                    <div className="text-xs text-gray-400">
+                      by {entry.performed_by_name} · {new Date(entry.performed_at).toLocaleString()}
+                    </div>
+                    {entry.notes && (
+                      <div className="text-xs text-gray-600 mt-0.5">{entry.notes}</div>
+                    )}
                   </div>
                 </div>
               ))}

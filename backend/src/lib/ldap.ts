@@ -1,10 +1,10 @@
 import { Client } from 'ldapts';
 import { Group, Grant } from '../types';
 
-const LDAP_URL       = process.env.LDAP_URL          || '';
-const LDAP_DOMAIN    = process.env.LDAP_DOMAIN        || '';
-const LDAP_BASE_DN   = process.env.LDAP_BASE_DN       || '';
-const LDAP_BIND_DN   = process.env.LDAP_BIND_DN       || '';
+const LDAP_URL = process.env.LDAP_URL || '';
+const LDAP_DOMAIN = process.env.LDAP_DOMAIN || '';
+const LDAP_BASE_DN = process.env.LDAP_BASE_DN || '';
+const LDAP_BIND_DN = process.env.LDAP_BIND_DN || '';
 const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
 
 // Explicit map of AD group CN → { app role, site }.
@@ -17,39 +17,41 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   // list is not site-scoped, so the `site` here is only a harmless default
   // (e.g. for pre-filling requesting_plant if an admin creates an STO).
   // Key is the exact AD group CN (matched case-insensitively).
-  'APP-STO_MANAGEMENT_ADMIN': { group: 'admin',         site: 'ABC' },
+  'APP-STO_MANAGEMENT_ADMIN': { group: 'admin', site: 'ABC' },
   // ── Site: ABC ─────────────────────────────────────────────────────────────
-  'ABC_ADMIN':          { group: 'admin',               site: 'ABC' },
-  'ABC_RECEIVING':      { group: 'receiving_site',      site: 'ABC' },
-  'ABC_PLANNING':       { group: 'shipping_planning',   site: 'ABC' },
-  'ABC_LOGISTICS':      { group: 'shipping_logistics',  site: 'ABC' },
-  'ABC_MANAGEMENT':     { group: 'management',          site: 'ABC' },
-  'ABC_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'ABC' },
+  ABC_ADMIN: { group: 'admin', site: 'ABC' },
+  ABC_RECEIVING: { group: 'receiving_site', site: 'ABC' },
+  ABC_PLANNING: { group: 'shipping_planning', site: 'ABC' },
+  ABC_LOGISTICS: { group: 'shipping_logistics', site: 'ABC' },
+  // Two distinct management groups per site: shipping-side vs receiving-side.
+  // A user in only the receiving group cannot act on shipping-mgmt steps.
+  ABC_SHIPPING_MANAGEMENT: { group: 'management', site: 'ABC' },
+  ABC_RECEIVING_MANAGEMENT: { group: 'receiving_management', site: 'ABC' },
+  ABC_RECV_LOGISTICS: { group: 'receiving_logistics', site: 'ABC' },
   // ── Site: XYZ ─────────────────────────────────────────────────────────────
-  'XYZ_ADMIN':          { group: 'admin',               site: 'XYZ' },
-  'XYZ_RECEIVING':      { group: 'receiving_site',      site: 'XYZ' },
-  'XYZ_PLANNING':       { group: 'shipping_planning',   site: 'XYZ' },
-  'XYZ_LOGISTICS':      { group: 'shipping_logistics',  site: 'XYZ' },
-  'XYZ_MANAGEMENT':     { group: 'management',          site: 'XYZ' },
-  'XYZ_RECV_LOGISTICS': { group: 'receiving_logistics', site: 'XYZ' },
+  XYZ_ADMIN: { group: 'admin', site: 'XYZ' },
+  XYZ_RECEIVING: { group: 'receiving_site', site: 'XYZ' },
+  XYZ_PLANNING: { group: 'shipping_planning', site: 'XYZ' },
+  XYZ_LOGISTICS: { group: 'shipping_logistics', site: 'XYZ' },
+  XYZ_SHIPPING_MANAGEMENT: { group: 'management', site: 'XYZ' },
+  XYZ_RECEIVING_MANAGEMENT: { group: 'receiving_management', site: 'XYZ' },
+  XYZ_RECV_LOGISTICS: { group: 'receiving_logistics', site: 'XYZ' },
 };
 
 export interface LdapAuthResult {
   displayName: string;
-  adUsername:  string;
-  email:       string;
-  grants:      Grant[];   // every role+site the user holds
-  group:       Group;     // derived primary role (admin if any, else first grant)
-  site:        string;    // derived primary site
-  sites:       string[];  // derived union of all grant sites
+  adUsername: string;
+  email: string;
+  grants: Grant[]; // every role+site the user holds
+  group: Group; // derived primary role (admin if any, else first grant)
+  site: string; // derived primary site
+  sites: string[]; // derived union of all grant sites
 }
 
 // Sanitise values before embedding them in LDAP filter strings.
 // Escapes: \ ( ) * and NUL per RFC 4515.
 function escapeLdap(value: string): string {
-  return value.replace(/[\\()*\x00]/g, ch =>
-    `\\${ch.charCodeAt(0).toString(16).padStart(2, '0')}`,
-  );
+  return value.replace(/[\\()*\x00]/g, ch => `\\${ch.charCodeAt(0).toString(16).padStart(2, '0')}`);
 }
 
 function extractCN(dn: string): string {
@@ -65,7 +67,7 @@ function toUPN(username: string): string {
 
 function toSAM(username: string): string {
   if (username.includes('\\')) return username.split('\\')[1];
-  if (username.includes('@'))  return username.split('@')[0];
+  if (username.includes('@')) return username.split('@')[0];
   return username;
 }
 
@@ -80,7 +82,12 @@ const CLIENT_OPTS = () => ({
 // Scans the user's AD group memberships and derives the app role (from the first
 // matching group) plus EVERY site the user has that same role at. This lets a
 // user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
-function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; site: string; sites: string[] } {
+function resolveGrants(memberOf: string[]): {
+  grants: Grant[];
+  group: Group;
+  site: string;
+  sites: string[];
+} {
   const cns = memberOf.map(extractCN);
   // Debug: log each raw memberOf DN and the CN extracted from it, quoted so any
   // stray whitespace / hidden characters are visible, plus whether each CN matched
@@ -90,7 +97,9 @@ function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; sit
   console.log('[AD auth] CNs:', cns.join(' | ') || '(none)');
   cns.forEach((cn, i) => {
     const matched = !!GROUP_MAP[cn.toUpperCase()];
-    console.log(`[AD auth]   [${i}] raw="${memberOf[i]}" cn="${cn}" upper="${cn.toUpperCase()}" match=${matched}`);
+    console.log(
+      `[AD auth]   [${i}] raw="${memberOf[i]}" cn="${cn}" upper="${cn.toUpperCase()}" match=${matched}`,
+    );
   });
   console.log('[AD auth] GROUP_MAP keys:', Object.keys(GROUP_MAP).join(', '));
   const matches = cns
@@ -101,7 +110,7 @@ function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; sit
     console.error('[AD auth] No CN matched GROUP_MAP keys:', Object.keys(GROUP_MAP).join(', '));
     throw new Error(
       'Your account is not in any STO application group. ' +
-      'Contact your administrator to be added to one of the configured AD groups.',
+        'Contact your administrator to be added to one of the configured AD groups.',
     );
   }
 
@@ -112,7 +121,10 @@ function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; sit
   const grants: Grant[] = [];
   for (const m of matches) {
     const key = `${m.group}@${m.site}`;
-    if (!seen.has(key)) { seen.add(key); grants.push({ group: m.group, site: m.site }); }
+    if (!seen.has(key)) {
+      seen.add(key);
+      grants.push({ group: m.group, site: m.site });
+    }
   }
 
   // Derived fields for display/back-compat. Primary role: admin if the user has
@@ -124,13 +136,13 @@ function resolveGrants(memberOf: string[]): { grants: Grant[]; group: Group; sit
 
 function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResult {
   const memberOf = entry.memberOf
-    ? (Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[]
+    ? ((Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[])
     : [];
   const { grants, group, site, sites } = resolveGrants(memberOf);
   return {
     displayName: (entry.displayName as string) || sam,
-    adUsername:  (entry.sAMAccountName as string) || sam,
-    email:       (entry.mail as string) || '',
+    adUsername: (entry.sAMAccountName as string) || sam,
+    email: (entry.mail as string) || '',
     grants,
     group,
     site,
@@ -138,7 +150,10 @@ function buildResult(entry: Record<string, unknown>, sam: string): LdapAuthResul
   };
 }
 
-export async function authenticateWithAD(username: string, password: string): Promise<LdapAuthResult> {
+export async function authenticateWithAD(
+  username: string,
+  password: string,
+): Promise<LdapAuthResult> {
   if (!LDAP_URL || !LDAP_DOMAIN || !LDAP_BASE_DN) {
     throw new Error('LDAP not configured — set LDAP_URL, LDAP_DOMAIN, and LDAP_BASE_DN in .env');
   }
@@ -185,7 +200,6 @@ export async function authenticateWithAD(username: string, password: string): Pr
       }
 
       return buildResult(entry, sam);
-
     } finally {
       await searchClient.unbind().catch(() => {});
     }
@@ -214,7 +228,6 @@ export async function authenticateWithAD(username: string, password: string): Pr
     }
 
     return buildResult(entries[0] as Record<string, unknown>, sam);
-
   } catch (err: any) {
     if (err?.code === 49 || err?.message?.includes('Invalid Credentials')) {
       throw new Error('Invalid username or password');

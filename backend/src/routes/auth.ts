@@ -25,24 +25,31 @@ const loginRateLimit = rateLimit({
 const DEV_BYPASS = process.env.DEV_BYPASS === 'true';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site:      'Receiving Site',
-  shipping_planning:   'Shipping Planning',
-  shipping_logistics:  'Shipping Logistics',
-  management:          'Management',
+  receiving_site: 'Receiving Site',
+  shipping_planning: 'Shipping Planning',
+  shipping_logistics: 'Shipping Logistics',
+  management: 'Shipping Management',
+  receiving_management: 'Receiving Management',
   receiving_logistics: 'Receiving Logistics',
-  admin:               'Admin',
+  admin: 'Admin',
 };
 
 function issueToken(
-  adUsername: string, displayName: string, grants: Grant[],
+  adUsername: string,
+  displayName: string,
+  grants: Grant[],
 ): { token: string; user: JwtPayload } {
   // Derived fields for display/back-compat. Primary role: admin if the user holds
   // any admin grant, else the first grant. Sites: union across all grants.
   const primary = grants.find(g => g.group === 'admin') ?? grants[0];
   const sites = Array.from(new Set(grants.map(g => g.site).filter(Boolean)));
   const payload: JwtPayload = {
-    adUsername, name: displayName, grants,
-    group: primary.group, site: primary.site, sites,
+    adUsername,
+    name: displayName,
+    grants,
+    group: primary.group,
+    site: primary.site,
+    sites,
   };
   const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '8h' });
   return { token, user: payload };
@@ -56,13 +63,19 @@ function issueToken(
 function parseDemoGrants(grants: string | null, groupKey: string, site: string): Grant[] {
   const parsed: Grant[] = [];
   if (grants && grants.trim()) {
-    for (const pair of grants.split(';').map(s => s.trim()).filter(Boolean)) {
+    for (const pair of grants
+      .split(';')
+      .map(s => s.trim())
+      .filter(Boolean)) {
       const [g, s] = pair.split('@').map(x => x.trim());
       if (g && s) parsed.push({ group: g as Group, site: s });
     }
   }
   if (parsed.length) return parsed;
-  const sites = site.split(',').map(s => s.trim()).filter(Boolean);
+  const sites = site
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
   return (sites.length ? sites : [site]).map(s => ({ group: groupKey as Group, site: s }));
 }
 
@@ -77,7 +90,13 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
   if (DEV_BYPASS) {
     // ── Dev mode: validate against demo_users; role + site are stored directly ──
     try {
-      interface DemoRow { password_hash: string; display_name: string; site: string; group_key: string; grants: string | null; }
+      interface DemoRow {
+        password_hash: string;
+        display_name: string;
+        site: string;
+        group_key: string;
+        grants: string | null;
+      }
       const demoUser = await dbQueryOne<DemoRow>(
         'SELECT password_hash, display_name, site, group_key, grants FROM demo_users WHERE username = @username',
         { username },
@@ -100,14 +119,17 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
   console.log(`[AD auth] Login attempt for: ${username}`);
   try {
     const { displayName, adUsername, grants } = await authenticateWithAD(username, password);
-    console.log(`[AD auth] Login succeeded: ${adUsername} → grants=${grants.map(g => `${g.group}@${g.site}`).join(', ')}`);
+    console.log(
+      `[AD auth] Login succeeded: ${adUsername} → grants=${grants.map(g => `${g.group}@${g.site}`).join(', ')}`,
+    );
     const { token, user } = issueToken(adUsername, displayName, grants);
     res.json({ token, user });
   } catch (err: any) {
     console.error(`[AD auth] Failed for ${username}:`, err.message);
-    const isAuthError = err.message?.includes('Invalid username')
-      || err.message?.includes('not in any STO')
-      || err.message?.includes('not found');
+    const isAuthError =
+      err.message?.includes('Invalid username') ||
+      err.message?.includes('not in any STO') ||
+      err.message?.includes('not found');
     res.status(isAuthError ? 401 : 500).json({
       message: isAuthError ? err.message : 'Authentication failed',
     });
@@ -116,22 +138,33 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response): Promi
 
 // GET /api/auth/demo-users — returns demo credentials for the hints panel (DEV_BYPASS only)
 router.get('/demo-users', async (_req: Request, res: Response): Promise<void> => {
-  if (!DEV_BYPASS) { res.json([]); return; }
+  if (!DEV_BYPASS) {
+    res.json([]);
+    return;
+  }
 
   try {
-    interface DemoUserListRow { username: string; display_name: string; site: string; group_key: string; grants: string | null; }
+    interface DemoUserListRow {
+      username: string;
+      display_name: string;
+      site: string;
+      group_key: string;
+      grants: string | null;
+    }
     const users = await dbQuery<DemoUserListRow>(
       'SELECT username, display_name, site, group_key, grants FROM demo_users ORDER BY site, group_key',
     );
-    res.json(users.map(u => ({
-      username: u.username,
-      password: 'Demo123!',
-      displayName: u.display_name,
-      site: u.site,
-      group: u.group_key,
-      groupLabel: GROUP_LABELS[u.group_key as Group] || u.group_key,
-      grants: u.grants || null,
-    })));
+    res.json(
+      users.map(u => ({
+        username: u.username,
+        password: 'Demo123!',
+        displayName: u.display_name,
+        site: u.site,
+        group: u.group_key,
+        groupLabel: GROUP_LABELS[u.group_key as Group] || u.group_key,
+        grants: u.grants || null,
+      })),
+    );
   } catch {
     res.json([]);
   }

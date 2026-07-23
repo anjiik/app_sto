@@ -41,19 +41,34 @@ function previousStep(current: STOStatus): STOStatus | null {
 router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
-    if (sto.status !== 'DRAFT') {
-      res.status(400).json({ message: 'Only DRAFT STOs can be submitted' }); return;
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
     }
-    await withTransaction(async (execute) => {
+    if (sto.status !== 'DRAFT') {
+      res.status(400).json({ message: 'Only DRAFT STOs can be submitted' });
+      return;
+    }
+    await withTransaction(async execute => {
       await execute(
         'UPDATE sto_requests SET status = @status, updated_at = GETDATE() WHERE id = @id',
         { id: sto.id, status: 'PLANNING_REVIEW' },
       );
-      await logAudit(sto.id as number, 'SUBMITTED', 'DRAFT', 'PLANNING_REVIEW', user.name, undefined, execute);
+      await logAudit(
+        sto.id as number,
+        'SUBMITTED',
+        'DRAFT',
+        'PLANNING_REVIEW',
+        user.name,
+        undefined,
+        execute,
+      );
     });
     res.json({ message: 'Submitted to Shipping Planning queue' });
   } catch (err) {
@@ -66,14 +81,21 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void
 router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!can(user, 'shipping_planning')) {
-    res.status(403).json({ message: 'Shipping Planning group required' }); return;
+    res.status(403).json({ message: 'Shipping Planning group required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   const { approved, decision, notes, mpn_number, batch_number, expiration_date } = req.body as {
     approved?: boolean;
     decision?: 'approve' | 'reject' | 'revise';
-    notes?: string; mpn_number?: string; batch_number?: string; expiration_date?: string;
+    notes?: string;
+    mpn_number?: string;
+    batch_number?: string;
+    expiration_date?: string;
   };
 
   // Resolve the outcome. `decision` is the new tri-state API; `approved` is kept
@@ -81,39 +103,54 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
   const outcome: 'approve' | 'reject' | 'revise' =
     decision ?? (approved === true ? 'approve' : approved === false ? 'reject' : 'reject');
   if (!['approve', 'reject', 'revise'].includes(outcome)) {
-    res.status(400).json({ message: 'decision must be approve, reject, or revise' }); return;
+    res.status(400).json({ message: 'decision must be approve, reject, or revise' });
+    return;
   }
   // Revise and reject both need a note explaining what to fix / why.
   if ((outcome === 'revise' || outcome === 'reject') && (!notes || !notes.trim())) {
-    res.status(400).json({ message: `A note is required to ${outcome} the request` }); return;
+    res.status(400).json({ message: `A note is required to ${outcome} the request` });
+    return;
   }
 
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
     if (sto.status !== 'PLANNING_REVIEW') {
-      res.status(400).json({ message: 'STO is not in Planning Review' }); return;
+      res.status(400).json({ message: 'STO is not in Planning Review' });
+      return;
     }
     // Planning is a shipping-site action: must hold shipping_planning at this STO's
     // shipping site (admins bypass).
     if (!hasRoleAtSite(user, 'shipping_planning', sto.shipping_site as string)) {
-      res.status(403).json({ message: 'Only Shipping Planning at this STO\'s shipping site can act here' }); return;
+      res
+        .status(403)
+        .json({ message: "Only Shipping Planning at this STO's shipping site can act here" });
+      return;
     }
     if (outcome === 'approve' && (!mpn_number || !batch_number || !expiration_date)) {
-      res.status(400).json({ message: 'MPN Number, Batch Number and Expiration Date are required to approve' }); return;
+      res
+        .status(400)
+        .json({ message: 'MPN Number, Batch Number and Expiration Date are required to approve' });
+      return;
     }
 
     // approve → Shipping Logistics; revise → back to the requestor as DRAFT;
     // reject → REJECTED (terminal).
     const newStatus: STOStatus =
-      outcome === 'approve' ? 'SHIPPING_LOGISTICS' :
-      outcome === 'revise'  ? 'DRAFT' : 'REJECTED';
+      outcome === 'approve' ? 'SHIPPING_LOGISTICS' : outcome === 'revise' ? 'DRAFT' : 'REJECTED';
     const action =
-      outcome === 'approve' ? 'PLANNING_APPROVED' :
-      outcome === 'revise'  ? 'PLANNING_REVISION_REQUESTED' : 'PLANNING_REJECTED';
+      outcome === 'approve'
+        ? 'PLANNING_APPROVED'
+        : outcome === 'revise'
+          ? 'PLANNING_REVISION_REQUESTED'
+          : 'PLANNING_REJECTED';
 
-    await withTransaction(async (execute) => {
-      await execute(`
+    await withTransaction(async execute => {
+      await execute(
+        `
         UPDATE sto_requests SET
           planning_approved = @planningApproved,
           planning_approved_by_user_id = @approvedBy,
@@ -126,27 +163,42 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
         WHERE id = @id
-      `, {
-        id: sto.id,
-        planningApproved: outcome === 'approve' ? 1 : 0,
-        approvedBy: null,
-        notes: notes || null,
-        mpn_number: mpn_number || null,
-        batch_number: batch_number || null,
-        expiration_date: expiration_date || null,
-        status: newStatus,
-        // For revise, surface the note to the requestor as the reason shown on
-        // the draft; for reject, the rejection reason; for approve, clear it.
-        rejectionReason:
-          outcome === 'approve' ? null :
-          outcome === 'revise'  ? `Revision requested by Shipping Planning: ${notes}` :
-                                  (notes || 'Rejected by Shipping Planning'),
-      });
-      await logAudit(sto.id as number, action, 'PLANNING_REVIEW', newStatus, user.name, notes, execute);
+      `,
+        {
+          id: sto.id,
+          planningApproved: outcome === 'approve' ? 1 : 0,
+          approvedBy: null,
+          notes: notes || null,
+          mpn_number: mpn_number || null,
+          batch_number: batch_number || null,
+          expiration_date: expiration_date || null,
+          status: newStatus,
+          // For revise, surface the note to the requestor as the reason shown on
+          // the draft; for reject, the rejection reason; for approve, clear it.
+          rejectionReason:
+            outcome === 'approve'
+              ? null
+              : outcome === 'revise'
+                ? `Revision requested by Shipping Planning: ${notes}`
+                : notes || 'Rejected by Shipping Planning',
+        },
+      );
+      await logAudit(
+        sto.id as number,
+        action,
+        'PLANNING_REVIEW',
+        newStatus,
+        user.name,
+        notes,
+        execute,
+      );
     });
     const msg =
-      outcome === 'approve' ? 'Approved — sent to Shipping Logistics' :
-      outcome === 'revise'  ? 'Revision requested — sent back to the requestor' : 'Rejected';
+      outcome === 'approve'
+        ? 'Approved — sent to Shipping Logistics'
+        : outcome === 'revise'
+          ? 'Revision requested — sent back to the requestor'
+          : 'Rejected';
     res.json({ message: msg, new_status: newStatus });
   } catch (err) {
     logger.error({ err }, 'planning error');
@@ -158,19 +210,30 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
 router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!can(user, 'shipping_logistics')) {
-    res.status(403).json({ message: 'Shipping Logistics group required' }); return;
+    res.status(403).json({ message: 'Shipping Logistics group required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
     if (sto.status !== 'SHIPPING_LOGISTICS') {
-      res.status(400).json({ message: 'STO is not in Shipping Logistics step' }); return;
+      res.status(400).json({ message: 'STO is not in Shipping Logistics step' });
+      return;
     }
     // Logistics is a shipping-site action.
     if (!hasRoleAtSite(user, 'shipping_logistics', sto.shipping_site as string)) {
-      res.status(403).json({ message: 'Only Shipping Logistics at this STO\'s shipping site can act here' }); return;
+      res
+        .status(403)
+        .json({ message: "Only Shipping Logistics at this STO's shipping site can act here" });
+      return;
     }
 
     const body = req.body;
@@ -178,7 +241,9 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const freightCost = parseFloat(rawFreightCost || '0');
     const materialValue = parseFloat(String(sto.material_value || '0'));
     const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000');
-    const freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000');
+    const freightThreshold = parseFloat(
+      process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000',
+    );
     const COLD_CONDITIONS = ['Cold 2-8C', 'Cold below 0', 'Frozen'];
     const isColdShipping = COLD_CONDITIONS.includes(String(sto.shipping_conditions || ''));
     const freightToValueRatio = materialValue > 0 ? freightCost / materialValue : 0;
@@ -187,13 +252,15 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     // Compared case-insensitively so free-text values stored from the "Other" option
     // still match if they happen to be FCA/DAP.
     const STANDARD_INCO_TERMS = ['FCA', 'DAP'];
-    const incoTerms = String(sto.inco_terms || '').trim().toUpperCase();
+    const incoTerms = String(sto.inco_terms || '')
+      .trim()
+      .toUpperCase();
     const isNonStandardInco = incoTerms !== '' && !STANDARD_INCO_TERMS.includes(incoTerms);
     const mgmtRequired =
       materialValue > matThreshold ||
       freightCost > freightThreshold ||
       isColdShipping ||
-      freightToValueRatio > 0.30 ||
+      freightToValueRatio > 0.3 ||
       isNonStandardInco;
 
     // Flow when management approval is required:
@@ -212,18 +279,19 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     // on to receiving logistics.
     if (alreadyConfirmed) {
       const missing: string[] = [];
-      if (!body.actual_ship_date)         missing.push('Actual Ship Date');
-      if (!body.estimated_delivery_date)  missing.push('Estimated Delivery Date');
-      if (!body.pgi_date)                 missing.push('PGI Date');
-      if (!body.ready_to_ship)            missing.push('Ready to Ship');
+      if (!body.actual_ship_date) missing.push('Actual Ship Date');
+      if (!body.estimated_delivery_date) missing.push('Estimated Delivery Date');
+      if (!body.pgi_date) missing.push('PGI Date');
+      if (!body.ready_to_ship) missing.push('Ready to Ship');
       if (missing.length) {
         res.status(400).json({ message: `Required before continuing: ${missing.join(', ')}` });
         return;
       }
     }
 
-    await withTransaction(async (execute) => {
-      await execute(`
+    await withTransaction(async execute => {
+      await execute(
+        `
         UPDATE sto_requests SET
           container_information = @container_information,
           freight_cost = @freight_cost,
@@ -238,32 +306,43 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           status = @status,
           updated_at = GETDATE()
         WHERE id = @id
-      `, {
-        id: sto.id,
-        container_information: body.container_information || null,
-        freight_cost: rawFreightCost != null && rawFreightCost !== '' ? freightCost : null,
-        ready_to_ship: body.ready_to_ship ? 1 : 0,
-        pgi_date: body.pgi_date || null,
-        sto_number: body.sto_number || null,
-        shipment_id: body.shipment_id || null,
-        expedited_estimated_ship_date: body.expedited_estimated_ship_date || null,
-        actual_ship_date: body.actual_ship_date || null,
-        estimated_delivery_date: body.estimated_delivery_date || null,
-        management_approval_required: mgmtRequired ? 1 : 0,
-        status: newStatus,
-      });
+      `,
+        {
+          id: sto.id,
+          container_information: body.container_information || null,
+          freight_cost: rawFreightCost != null && rawFreightCost !== '' ? freightCost : null,
+          ready_to_ship: body.ready_to_ship ? 1 : 0,
+          pgi_date: body.pgi_date || null,
+          sto_number: body.sto_number || null,
+          shipment_id: body.shipment_id || null,
+          expedited_estimated_ship_date: body.expedited_estimated_ship_date || null,
+          actual_ship_date: body.actual_ship_date || null,
+          estimated_delivery_date: body.estimated_delivery_date || null,
+          management_approval_required: mgmtRequired ? 1 : 0,
+          status: newStatus,
+        },
+      );
       const reasons = [
-        materialValue > matThreshold     && `material $${materialValue.toLocaleString()} > threshold`,
-        freightCost > freightThreshold    && `freight $${freightCost.toLocaleString()} > threshold`,
-        isColdShipping                    && `cold shipping (${sto.shipping_conditions})`,
-        freightToValueRatio > 0.30        && `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
-      ].filter(Boolean).join('; ');
+        materialValue > matThreshold && `material $${materialValue.toLocaleString()} > threshold`,
+        freightCost > freightThreshold && `freight $${freightCost.toLocaleString()} > threshold`,
+        isColdShipping && `cold shipping (${sto.shipping_conditions})`,
+        freightToValueRatio > 0.3 &&
+          `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
+      ]
+        .filter(Boolean)
+        .join('; ');
       const auditNote = alreadyConfirmed
         ? 'Logistics confirmed after management approval.'
         : `Freight: $${freightCost}. Mgmt approval ${mgmtRequired ? `required — ${reasons}` : 'not required'}.`;
-      await logAudit(sto.id as number,
+      await logAudit(
+        sto.id as number,
         alreadyConfirmed ? 'LOGISTICS_CONFIRMED' : 'LOGISTICS_SUBMITTED',
-        'SHIPPING_LOGISTICS', newStatus, user.name, auditNote, execute);
+        'SHIPPING_LOGISTICS',
+        newStatus,
+        user.name,
+        auditNote,
+        execute,
+      );
     });
     res.json({
       message: goToMgmt ? 'Sent to Management review' : 'Sent to Receiving Logistics',
@@ -279,31 +358,42 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
 router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!can(user, 'management')) {
-    res.status(403).json({ message: 'Management group required' }); return;
+    res.status(403).json({ message: 'Management group required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   const { approved, notes } = req.body as { approved: boolean; notes?: string };
   if (typeof approved !== 'boolean') {
-    res.status(400).json({ message: '`approved` must be a boolean' }); return;
+    res.status(400).json({ message: '`approved` must be a boolean' });
+    return;
   }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
     if (sto.status !== 'MANAGEMENT_REVIEW') {
-      res.status(400).json({ message: 'STO is not in Management Review' }); return;
+      res.status(400).json({ message: 'STO is not in Management Review' });
+      return;
     }
     // Must hold the management role AT the shipping site (same grant), not merely
     // management somewhere + membership of this site via an unrelated role.
     if (!hasRoleAtSite(user, 'management', sto.shipping_site as string)) {
-      res.status(403).json({ message: 'Only the shipping site management can approve this step' }); return;
+      res.status(403).json({ message: 'Only the shipping site management can approve this step' });
+      return;
     }
     // Shipping management approval hands off to the receiving-site management
     // review. The confirm pass at logistics only happens after BOTH managements
     // have approved (see the receiving-management route).
     const newStatus: STOStatus = approved ? 'RECEIVING_MGMT_REVIEW' : 'REJECTED';
-    await withTransaction(async (execute) => {
-      await execute(`
+    await withTransaction(async execute => {
+      await execute(
+        `
         UPDATE sto_requests SET
           management_approved = @managementApproved,
           management_approved_by_user_id = @approvedBy,
@@ -313,18 +403,32 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
         WHERE id = @id
-      `, {
-        id: sto.id,
-        managementApproved: approved ? 1 : 0,
-        approvedBy: null,
-        notes: notes || null,
-        status: newStatus,
-        rejectionReason: approved ? null : (notes || 'Rejected by Shipping Site Management'),
-      });
-      await logAudit(sto.id as number, approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
-        'MANAGEMENT_REVIEW', newStatus, user.name, notes, execute);
+      `,
+        {
+          id: sto.id,
+          managementApproved: approved ? 1 : 0,
+          approvedBy: null,
+          notes: notes || null,
+          status: newStatus,
+          rejectionReason: approved ? null : notes || 'Rejected by Shipping Site Management',
+        },
+      );
+      await logAudit(
+        sto.id as number,
+        approved ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REJECTED',
+        'MANAGEMENT_REVIEW',
+        newStatus,
+        user.name,
+        notes,
+        execute,
+      );
     });
-    res.json({ message: approved ? 'Shipping management approved — sent to Receiving Management' : 'Rejected', new_status: newStatus });
+    res.json({
+      message: approved
+        ? 'Shipping management approved — sent to Receiving Management'
+        : 'Rejected',
+      new_status: newStatus,
+    });
   } catch (err) {
     logger.error({ err }, 'management error');
     res.status(500).json({ message: 'Internal server error' });
@@ -334,30 +438,43 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
 // POST /api/sto/:id/receiving-management  — receiving-site management approval
 router.post('/:id/receiving-management', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
-  if (!can(user, 'management')) {
-    res.status(403).json({ message: 'Management group required' }); return;
+  // Distinct from shipping management: this step requires the receiving_management
+  // role (its own AD group), so a shipping-mgmt user cannot act here.
+  if (!can(user, 'receiving_management')) {
+    res.status(403).json({ message: 'Receiving Management group required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   const { approved, notes } = req.body as { approved: boolean; notes?: string };
   if (typeof approved !== 'boolean') {
-    res.status(400).json({ message: '`approved` must be a boolean' }); return;
+    res.status(400).json({ message: '`approved` must be a boolean' });
+    return;
   }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
-    if (sto.status !== 'RECEIVING_MGMT_REVIEW') {
-      res.status(400).json({ message: 'STO is not in Receiving Management Review' }); return;
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
     }
-    if (!hasRoleAtSite(user, 'management', sto.receiving_site as string)) {
-      res.status(403).json({ message: 'Only the receiving site management can approve this step' }); return;
+    if (sto.status !== 'RECEIVING_MGMT_REVIEW') {
+      res.status(400).json({ message: 'STO is not in Receiving Management Review' });
+      return;
+    }
+    if (!hasRoleAtSite(user, 'receiving_management', sto.receiving_site as string)) {
+      res.status(403).json({ message: 'Only the receiving site management can approve this step' });
+      return;
     }
     // Both managements have now approved. Return the STO to Shipping Logistics
     // for the confirm/edit pass (mgmt_confirmed = 1 tells logistics to advance
     // straight to Receiving Logistics rather than looping back to management).
     const newStatus: STOStatus = approved ? 'SHIPPING_LOGISTICS' : 'REJECTED';
-    await withTransaction(async (execute) => {
-      await execute(`
+    await withTransaction(async execute => {
+      await execute(
+        `
         UPDATE sto_requests SET
           receiving_mgmt_approved = @receivingMgmtApproved,
           receiving_mgmt_approved_by_user_id = @approvedBy,
@@ -368,19 +485,33 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
         WHERE id = @id
-      `, {
-        id: sto.id,
-        receivingMgmtApproved: approved ? 1 : 0,
-        approvedBy: null,
-        notes: notes || null,
-        mgmtConfirmed: approved ? 1 : 0,
-        status: newStatus,
-        rejectionReason: approved ? null : (notes || 'Rejected by Receiving Site Management'),
-      });
-      await logAudit(sto.id as number, approved ? 'RECEIVING_MGMT_APPROVED' : 'RECEIVING_MGMT_REJECTED',
-        'RECEIVING_MGMT_REVIEW', newStatus, user.name, notes, execute);
+      `,
+        {
+          id: sto.id,
+          receivingMgmtApproved: approved ? 1 : 0,
+          approvedBy: null,
+          notes: notes || null,
+          mgmtConfirmed: approved ? 1 : 0,
+          status: newStatus,
+          rejectionReason: approved ? null : notes || 'Rejected by Receiving Site Management',
+        },
+      );
+      await logAudit(
+        sto.id as number,
+        approved ? 'RECEIVING_MGMT_APPROVED' : 'RECEIVING_MGMT_REJECTED',
+        'RECEIVING_MGMT_REVIEW',
+        newStatus,
+        user.name,
+        notes,
+        execute,
+      );
     });
-    res.json({ message: approved ? 'Receiving management approved — returned to Shipping Logistics to confirm' : 'Rejected', new_status: newStatus });
+    res.json({
+      message: approved
+        ? 'Receiving management approved — returned to Shipping Logistics to confirm'
+        : 'Rejected',
+      new_status: newStatus,
+    });
   } catch (err) {
     logger.error({ err }, 'receiving-management error');
     res.status(500).json({ message: 'Internal server error' });
@@ -391,56 +522,77 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
 router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!can(user, 'receiving_logistics')) {
-    res.status(403).json({ message: 'Receiving Logistics group required' }); return;
+    res.status(403).json({ message: 'Receiving Logistics group required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
     if (sto.status !== 'RECEIVING_LOGISTICS') {
-      res.status(400).json({ message: 'STO is not in Receiving Logistics step' }); return;
+      res.status(400).json({ message: 'STO is not in Receiving Logistics step' });
+      return;
     }
     // Receiving is a receiving-site action.
     if (!hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site as string)) {
-      res.status(403).json({ message: 'Only Receiving Logistics at this STO\'s receiving site can act here' }); return;
+      res
+        .status(403)
+        .json({ message: "Only Receiving Logistics at this STO's receiving site can act here" });
+      return;
     }
 
     const body = req.body;
     const newStatus: STOStatus = body.delivery_closed_out ? 'CLOSED' : 'RECEIVING_LOGISTICS';
 
-    await withTransaction(async (execute) => {
-      await execute(`
+    await withTransaction(async execute => {
+      await execute(
+        `
         UPDATE sto_requests SET
           actual_receipt_date = @actual_receipt_date,
           delivery_closed_out = @delivery_closed_out,
           status = @status,
           updated_at = GETDATE()
         WHERE id = @id
-      `, {
-        id: sto.id,
-        actual_receipt_date: body.actual_receipt_date || null,
-        delivery_closed_out: body.delivery_closed_out ? 1 : 0,
-        status: newStatus,
-      });
-      await logAudit(sto.id as number,
+      `,
+        {
+          id: sto.id,
+          actual_receipt_date: body.actual_receipt_date || null,
+          delivery_closed_out: body.delivery_closed_out ? 1 : 0,
+          status: newStatus,
+        },
+      );
+      await logAudit(
+        sto.id as number,
         newStatus === 'CLOSED' ? 'DELIVERY_CLOSED' : 'RECEIPT_UPDATED',
-        'RECEIVING_LOGISTICS', newStatus, user.name,
+        'RECEIVING_LOGISTICS',
+        newStatus,
+        user.name,
         body.actual_receipt_date ? `Received: ${body.actual_receipt_date}` : undefined,
-        execute);
+        execute,
+      );
     });
     if (newStatus === 'CLOSED') {
       sendStoCompletedEmail({
-        sto_id:               sto.sto_id as string,
-        requestor_name:       sto.requestor_name as string,
-        requestor_email:      sto.requestor_email as string,
-        shipping_site:        sto.shipping_site as string | undefined,
-        receiving_site:       sto.receiving_site as string | undefined,
+        sto_id: sto.sto_id as string,
+        requestor_name: sto.requestor_name as string,
+        requestor_email: sto.requestor_email as string,
+        shipping_site: sto.shipping_site as string | undefined,
+        receiving_site: sto.receiving_site as string | undefined,
         material_description: sto.material_description as string | undefined,
-        material_sap:         sto.material_sap as string | undefined,
+        material_sap: sto.material_sap as string | undefined,
       });
     }
-    res.json({ message: newStatus === 'CLOSED' ? 'Delivery closed out' : 'Receipt updated', new_status: newStatus });
+    res.json({
+      message: newStatus === 'CLOSED' ? 'Delivery closed out' : 'Receipt updated',
+      new_status: newStatus,
+    });
   } catch (err) {
     logger.error({ err }, 'receiving-logistics error');
     res.status(500).json({ message: 'Internal server error' });
@@ -453,27 +605,42 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
 router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!isAdmin(user)) {
-    res.status(403).json({ message: 'Admin access required' }); return;
+    res.status(403).json({ message: 'Admin access required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
 
     const fromStatus = sto.status as STOStatus;
     const toStatus = previousStep(fromStatus);
     if (!toStatus) {
-      res.status(400).json({ message: 'Cannot revert — already at the first step' }); return;
+      res.status(400).json({ message: 'Cannot revert — already at the first step' });
+      return;
     }
 
-    await withTransaction(async (execute) => {
+    await withTransaction(async execute => {
       await execute(
         'UPDATE sto_requests SET status = @status, mgmt_confirmed = 0, rejection_reason = NULL, updated_at = GETDATE() WHERE id = @id',
         { id, status: toStatus },
       );
-      await logAudit(id, 'REVERTED', fromStatus, toStatus, user.name,
-        `Admin reverted from ${fromStatus} to ${toStatus}`, execute);
+      await logAudit(
+        id,
+        'REVERTED',
+        fromStatus,
+        toStatus,
+        user.name,
+        `Admin reverted from ${fromStatus} to ${toStatus}`,
+        execute,
+      );
     });
     res.json({ message: `Reverted to ${toStatus}`, new_status: toStatus });
   } catch (err) {
@@ -488,33 +655,49 @@ router.post('/:id/revert', async (req: AuthRequest, res: Response): Promise<void
 router.post('/:id/send-back', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user!;
   if (!isAdmin(user)) {
-    res.status(403).json({ message: 'Admin access required' }); return;
+    res.status(403).json({ message: 'Admin access required' });
+    return;
   }
   const id = parseInt(req.params.id, 10);
-  if (!id || id <= 0) { res.status(400).json({ message: 'Invalid STO id' }); return; }
+  if (!id || id <= 0) {
+    res.status(400).json({ message: 'Invalid STO id' });
+    return;
+  }
 
   const { reason } = req.body as { reason?: string };
   if (!reason || !reason.trim()) {
-    res.status(400).json({ message: 'A reason is required to send an STO back' }); return;
+    res.status(400).json({ message: 'A reason is required to send an STO back' });
+    return;
   }
 
   try {
     const sto = await getSto(id);
-    if (!sto) { res.status(404).json({ message: 'Not found' }); return; }
+    if (!sto) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
 
     const fromStatus = sto.status as STOStatus;
     const toStatus = previousStep(fromStatus);
     if (!toStatus) {
-      res.status(400).json({ message: 'Cannot send back — already at the first step' }); return;
+      res.status(400).json({ message: 'Cannot send back — already at the first step' });
+      return;
     }
 
-    await withTransaction(async (execute) => {
+    await withTransaction(async execute => {
       await execute(
         'UPDATE sto_requests SET status = @status, mgmt_confirmed = 0, rejection_reason = @reason, updated_at = GETDATE() WHERE id = @id',
         { id, status: toStatus, reason: reason.trim() },
       );
-      await logAudit(id, 'SENT_BACK', fromStatus, toStatus, user.name,
-        `Admin sent back from ${fromStatus} to ${toStatus}: ${reason.trim()}`, execute);
+      await logAudit(
+        id,
+        'SENT_BACK',
+        fromStatus,
+        toStatus,
+        user.name,
+        `Admin sent back from ${fromStatus} to ${toStatus}: ${reason.trim()}`,
+        execute,
+      );
     });
     res.json({ message: `Sent back to ${toStatus}`, new_status: toStatus });
   } catch (err) {
