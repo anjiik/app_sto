@@ -14,12 +14,12 @@ interface DemoUser {
 }
 
 const GROUP_COLORS: Record<Group, string> = {
-  receiving_site:      'bg-blue-100 text-blue-800',
-  shipping_planning:   'bg-amber-100 text-amber-800',
-  shipping_logistics:  'bg-teal-100 text-teal-800',
-  management:          'bg-purple-100 text-purple-800',
+  receiving_site: 'bg-blue-100 text-blue-800',
+  shipping_planning: 'bg-amber-100 text-amber-800',
+  shipping_logistics: 'bg-teal-100 text-teal-800',
+  management: 'bg-purple-100 text-purple-800',
   receiving_logistics: 'bg-orange-100 text-orange-800',
-  admin:               'bg-red-100 text-red-800',
+  admin: 'bg-red-100 text-red-800',
 };
 
 const SITE_COLORS: Record<string, string> = {
@@ -39,7 +39,10 @@ export function Login() {
   const [filterSite, setFilterSite] = useState<string>('ALL');
 
   useEffect(() => {
-    api.get('/auth/demo-users').then(r => setDemoUsers(r.data)).catch(() => {});
+    api
+      .get('/auth/demo-users')
+      .then(r => setDemoUsers(r.data))
+      .catch(() => {});
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -68,14 +71,22 @@ export function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-start justify-center p-6 pt-16">
       <div className="w-full max-w-5xl flex gap-6 items-start">
-
         {/* Login card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-80 flex-shrink-0">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-full mb-4">
-              <svg className="w-7 h-7 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <svg
+                className="w-7 h-7 text-blue-800"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">STO Management</h1>
@@ -126,6 +137,16 @@ export function Login() {
               ? 'Sign in with your Active Directory credentials'
               : 'Dev mode — click any account on the right to auto-fill'}
           </p>
+
+          <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-400">Implemented by Anj K — Digital System</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Questions?{' '}
+              <a href="mailto:tempemail@gmail.com" className="text-blue-600 hover:underline">
+                tempemail@gmail.com
+              </a>
+            </p>
+          </div>
         </div>
 
         {/* Demo accounts panel */}
@@ -159,14 +180,20 @@ export function Login() {
                   className="flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors text-left w-full"
                 >
                   {/* Site badge */}
-                  <span className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white ${SITE_COLORS[u.site] || 'bg-gray-600'}`}>
+                  <span
+                    className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white ${SITE_COLORS[u.site] || 'bg-gray-600'}`}
+                  >
                     {u.site}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{u.displayName}</div>
-                    <div className="text-xs text-blue-200 truncate">{u.username} / {u.password}</div>
+                    <div className="text-xs text-blue-200 truncate">
+                      {u.username} / {u.password}
+                    </div>
                   </div>
-                  <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${GROUP_COLORS[u.group]}`}>
+                  <span
+                    className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${GROUP_COLORS[u.group]}`}
+                  >
                     {u.groupLabel.split(' ').slice(-1)[0]}
                   </span>
                 </button>
@@ -174,7 +201,9 @@ export function Login() {
             </div>
 
             <p className="text-xs text-blue-300 mt-4">
-              All accounts use password <span className="font-mono bg-white/10 px-1.5 py-0.5 rounded">Demo123!</span> — click a row to auto-fill
+              All accounts use password{' '}
+              <span className="font-mono bg-white/10 px-1.5 py-0.5 rounded">Demo123!</span> — click
+              a row to auto-fill
             </p>
           </div>
         )}
