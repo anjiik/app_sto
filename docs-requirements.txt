@@ -1,0 +1,7 @@
+# Documentation toolchain (MkDocs). Not part of the app runtime — used only to
+# build/preview the docs site. Install into a virtualenv:
+#   python -m venv .venv && . .venv/bin/activate   (Windows: .venv\Scripts\activate)
+#   pip install -r docs-requirements.txt
+#   mkdocs serve            # live preview at http://localhost:8000
+#   mkdocs build            # generates the static site/ folder for deployment
+mkdocs-material==9.7.7

@@ -1,0 +1,104 @@
+site_name: STO Management Docs
+site_description: Documentation for the Stock Transfer Order (STO) Management System.
+# Served internally by IIS as a sub-path of the app, at <host>/sto/docs/. Set
+# site_url to the real internal host at deploy time; the path segment (/sto/docs/)
+# is what matters for asset/link resolution. All in-page links are relative, so the
+# site also works if the base path changes.
+site_url: https://internal.example.com/sto/docs/
+use_directory_urls: true
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Overview: user-guide/index.md
+      - Getting started: user-guide/getting-started.md
+      - Creating a request: user-guide/creating-a-request.md
+      - Planning review: user-guide/planning-review.md
+      - Shipping logistics: user-guide/shipping-logistics.md
+      - Management approval: user-guide/management-approval.md
+      - Receiving & closeout: user-guide/receiving-closeout.md
+      - Dashboard & queues: user-guide/dashboard.md
+      - Finding STOs: user-guide/finding-stos.md
+      - Reading an STO: user-guide/reading-an-sto.md
+      - Analytics: user-guide/analytics.md
+      - Admin tasks: user-guide/admin-tasks.md
+      - Multi-site access: user-guide/multi-site.md
+      - Troubleshooting: user-guide/troubleshooting.md
+  - Reference:
+      - Overview: reference/index.md
+      - Roles & access: reference/roles.md
+      - Approval workflow: reference/workflow.md
+      - Approval rules: reference/approval-rules.md
+      - AD group mapping: reference/ad-groups.md
+      - Demo users: reference/demo-users.md
+  - Administration:
+      - Overview: admin/index.md
+      - Prerequisites: admin/prerequisites.md
+      - Database & migrations: admin/database.md
+      - Active Directory groups: admin/active-directory.md
+      - Configuration (.env): admin/configuration.md
+      - Build & first run: admin/build-run.md
+      - PM2 Windows service: admin/pm2.md
+      - IIS reverse proxy: admin/iis.md
+      - Firewall: admin/firewall.md
+      - Go-live checklist: admin/go-live.md
+      - Troubleshooting: admin/troubleshooting.md
+  - Development:
+      - Overview: development/index.md
+      - Architecture: development/architecture.md
+      - Backend: development/backend.md
+      - Frontend: development/frontend.md
+      - Database: development/database.md
+      - Conventions: development/conventions.md
