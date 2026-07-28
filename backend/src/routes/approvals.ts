@@ -256,12 +256,15 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
       .trim()
       .toUpperCase();
     const isNonStandardInco = incoTerms !== '' && !STANDARD_INCO_TERMS.includes(incoTerms);
+    // Controlled shipping always requires management sign-off from both sites.
+    const isControlledShipping = Boolean(sto.controlled_shipping_required);
     const mgmtRequired =
       materialValue > matThreshold ||
       freightCost > freightThreshold ||
       isColdShipping ||
       freightToValueRatio > 0.3 ||
-      isNonStandardInco;
+      isNonStandardInco ||
+      isControlledShipping;
 
     // Flow when management approval is required:
     //   SHIPPING_LOGISTICS → MANAGEMENT_REVIEW → RECEIVING_MGMT_REVIEW
@@ -328,6 +331,8 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         isColdShipping && `cold shipping (${sto.shipping_conditions})`,
         freightToValueRatio > 0.3 &&
           `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
+        isControlledShipping && 'controlled shipping',
+        isNonStandardInco && `non-standard INCO term (${sto.inco_terms})`,
       ]
         .filter(Boolean)
         .join('; ');

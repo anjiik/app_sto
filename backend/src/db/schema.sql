@@ -18,6 +18,8 @@ CREATE TABLE sto_requests (
     shipping_site                   VARCHAR(100),
     receiving_site                  VARCHAR(100),
     toll_mfg                        BIT DEFAULT 0,
+    distressed_inventory            BIT DEFAULT 0,
+    di_value                        DECIMAL(18,2),
 
     requestor_user_id               INT NOT NULL,
     requestor_name                  VARCHAR(200),

@@ -85,6 +85,7 @@ export function STOForm() {
   const incoTerms = watch('inco_terms') as string | undefined;
   const materialValue = watch('material_value');
   const controlledShipping = watch('controlled_shipping_required');
+  const distressedInventory = watch('distressed_inventory');
   const needByDate = watch('receiving_site_need_by_date') as string | undefined;
   const estShipDate = watch('standard_estimated_ship_date') as string | undefined;
   const [shiftedToMonday, setShiftedToMonday] = useState(false);
@@ -92,17 +93,13 @@ export function STOForm() {
   // date — i.e. the standard timeline can't meet it, so rush was auto-selected.
   const [autoRush, setAutoRush] = useState(false);
 
-  // Auto-populate standard estimated ship date from priority. The field is only
-  // editable when Rush is checked; otherwise it stays locked to the priority-based
-  // date, so we re-derive it whenever priority changes and rush is off.
+  // Auto-populate standard estimated ship date from priority. This field is
+  // always read-only, so it stays locked to the priority-based date and we
+  // re-derive it whenever priority changes (regardless of rush).
   // If the computed date falls on a weekend it is pushed to the following Monday
   // (addDays handles the shift) and we flag it so the form can show a note.
   useEffect(() => {
     if (isEdit) return;
-    if (rushRequest) {
-      setShiftedToMonday(false);
-      return;
-    }
     const p = String(priority || '3');
     const days = p === '1' ? 15 : p === '2' ? 30 : 45;
     // Determine whether the un-shifted date would have been a weekend.
@@ -110,13 +107,14 @@ export function STOForm() {
     raw.setDate(raw.getDate() + days);
     setShiftedToMonday(raw.getDay() === 0 || raw.getDay() === 6);
     setValue('standard_estimated_ship_date', addDays(days));
-  }, [priority, rushRequest, setValue, isEdit]);
+  }, [priority, setValue, isEdit]);
 
-  // Auto-select rush when the receiving site needs the material BEFORE the
-  // standard estimated ship date — the normal timeline can't meet the need-by,
-  // so it must be a rush (which then requires the requestor to give a reason).
-  // We only auto-turn it ON; the requestor stays free to uncheck it, and once
-  // rush is on the ship-date field unlocks so they can align the two dates.
+  // Tie the rush flag to the need-by vs. estimated ship date:
+  //  • need-by BEFORE the estimated ship date → the standard timeline can't meet
+  //    it, so auto-select Rush (which then requires a rush reason).
+  //  • need-by ON or AFTER the ship date → the timeline is fine, so erase the
+  //    auto-selected Rush again (e.g. the requestor pushed the need-by date out).
+  // We only manage the flag when both dates are present.
   useEffect(() => {
     if (!needByDate || !estShipDate) {
       setAutoRush(false);
@@ -126,6 +124,10 @@ export function STOForm() {
     setAutoRush(missesTimeline);
     if (missesTimeline && !rushRequest) {
       setValue('rush_request', true);
+    } else if (!missesTimeline && rushRequest) {
+      // Need-by now met by the standard timeline — clear the rush and its reason.
+      setValue('rush_request', false);
+      setValue('rush_reason', '');
     }
   }, [needByDate, estShipDate, rushRequest, setValue]);
 
@@ -159,6 +161,8 @@ export function STOForm() {
           rush_request: Boolean(s.rush_request),
           public_holiday: Boolean(s.public_holiday),
           toll_mfg: Boolean(s.toll_mfg),
+          distressed_inventory: Boolean(s.distressed_inventory),
+          di_value: s.di_value ?? '',
           rush_reason: s.rush_reason ?? '',
           material_sap: s.material_sap ?? '',
           material_description: s.material_description ?? '',
@@ -344,19 +348,15 @@ export function STOForm() {
               </Field>
               <Field
                 label="Standard Estimated Ship Date"
-                hint={
-                  rushRequest
-                    ? 'Rush selected — you can adjust this date.'
-                    : 'Auto-calculated from priority (P1=15d, P2=30d, P3=45d)'
-                }
+                hint="Auto-calculated from priority (P1=15d, P2=30d, P3=45d) — read only"
               >
                 <input
                   type="date"
                   {...register('standard_estimated_ship_date')}
-                  readOnly={!rushRequest}
-                  className={rushRequest ? INPUT : `${INPUT} bg-gray-50 cursor-not-allowed`}
+                  readOnly
+                  className={`${INPUT} bg-gray-50 cursor-not-allowed`}
                 />
-                {!rushRequest && shiftedToMonday && (
+                {shiftedToMonday && (
                   <p className="text-blue-600 text-xs mt-1">
                     ℹ The calculated date fell on a weekend, so it was pushed to the following
                     Monday.
@@ -383,6 +383,7 @@ export function STOForm() {
                 { name: 'rush_request', label: 'Rush Request' },
                 { name: 'public_holiday', label: 'Public Holiday at Shipping/Receiving Site' },
                 { name: 'toll_mfg', label: 'Toll MFG (Contract Manufacturing)' },
+                { name: 'distressed_inventory', label: 'Distressed Inventory (DI)' },
               ].map(cb => (
                 <label key={cb.name} className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -394,6 +395,30 @@ export function STOForm() {
                 </label>
               ))}
             </div>
+
+            {distressedInventory && (
+              <Field
+                label="DI Value (USD)"
+                hint="Estimated distressed-inventory saving. Can be entered by the requestor, shipping planning, or shipping logistics."
+              >
+                <div className="relative max-w-xs">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('di_value', { min: { value: 0, message: 'Must be 0 or greater' } })}
+                    className={`${INPUT} pl-7`}
+                    placeholder="0.00"
+                  />
+                </div>
+                {errors.di_value && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.di_value.message)}</p>
+                )}
+              </Field>
+            )}
 
             {rushRequest && (
               <Field label="Rush Reason" required hint="Required for rush requests">
@@ -591,6 +616,12 @@ export function STOForm() {
                 <span className="text-sm text-gray-700">Controlled Shipping Required</span>
               </label>
             </div>
+            {controlledShipping && (
+              <p className="text-orange-600 text-xs -mt-1 font-medium">
+                ⚠ Controlled shipping requires management approval from both the shipping and
+                receiving sites — this STO will be routed for management review.
+              </p>
+            )}
             {controlledShipping && (
               <Field
                 label="Controlled Shipping Comment"

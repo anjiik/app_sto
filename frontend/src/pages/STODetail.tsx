@@ -473,6 +473,13 @@ export function STODetail() {
               {sto.rush_reason && <Row label="Rush Reason" value={sto.rush_reason} />}
               <Row label="Public Holiday" value={sto.public_holiday} />
               <Row label="Toll MFG" value={sto.toll_mfg} />
+              <Row label="Distressed Inventory" value={sto.distressed_inventory} />
+              {sto.distressed_inventory && (
+                <Row
+                  label="DI Value"
+                  value={sto.di_value != null ? `$${Number(sto.di_value).toLocaleString()}` : '–'}
+                />
+              )}
               <Row label="Controlled Shipping" value={sto.controlled_shipping_required} />
               {sto.controlled_shipping_required && (
                 <Row label="Controlled Shipping Notes" value={sto.controlled_shipping_notes} />

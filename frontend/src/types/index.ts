@@ -48,6 +48,8 @@ export interface STORequest {
   shipping_site?: string;
   receiving_site?: string;
   toll_mfg: boolean;
+  distressed_inventory?: boolean;
+  di_value?: number | null;
   requestor_name: string;
   requestor_email: string;
   material_sap?: string;
