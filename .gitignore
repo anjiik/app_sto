@@ -9,6 +9,10 @@ dist/
 logs/
 *.log
 
+# Python virtualenv (docs toolchain)
+.venv/
+venv/
+
 # MkDocs build output
 site/
 
