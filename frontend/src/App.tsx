@@ -29,18 +29,64 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <Login />}
-      />
+      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
 
-      <Route path="/dashboard"  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/analytics"  element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-      <Route path="/sto"        element={<ProtectedRoute><STOList /></ProtectedRoute>} />
-      <Route path="/sto/new"      element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
-      <Route path="/sto/:id/edit" element={<ProtectedRoute><STOForm /></ProtectedRoute>} />
-      <Route path="/sto/:id"      element={<ProtectedRoute><STODetail /></ProtectedRoute>} />
-      <Route path="/app-info"     element={<ProtectedRoute><AppInfo /></ProtectedRoute>} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sto"
+        element={
+          <ProtectedRoute>
+            <STOList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sto/new"
+        element={
+          <ProtectedRoute>
+            <STOForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sto/:id/edit"
+        element={
+          <ProtectedRoute>
+            <STOForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sto/:id"
+        element={
+          <ProtectedRoute>
+            <STODetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app-info"
+        element={
+          <ProtectedRoute>
+            <AppInfo />
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

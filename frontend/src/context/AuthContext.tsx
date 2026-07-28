@@ -21,17 +21,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Determine auth mode once on mount — controls login page hint text
   useEffect(() => {
-    api.get('/auth/ping-login-url')
-      .then(r => { setLdapMode(r.data.ldapMode === true); })
+    api
+      .get('/auth/ping-login-url')
+      .then(r => {
+        setLdapMode(r.data.ldapMode === true);
+      })
       .catch(() => {});
   }, []);
 
   // Validate existing token or finish loading
   useEffect(() => {
     if (token) {
-      api.get('/auth/me')
+      api
+        .get('/auth/me')
         .then(r => setUser(r.data))
-        .catch(() => { localStorage.removeItem('sto_token'); setToken(null); })
+        .catch(() => {
+          localStorage.removeItem('sto_token');
+          setToken(null);
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);

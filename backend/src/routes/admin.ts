@@ -11,7 +11,8 @@ const ARCHIVE_YEARS = 5;
 // GET /api/admin/archive/preview — how many records would be archived
 router.get('/archive/preview', async (req: AuthRequest, res: Response): Promise<void> => {
   if (!isAdmin(req.user!)) {
-    res.status(403).json({ message: 'Admin access required' }); return;
+    res.status(403).json({ message: 'Admin access required' });
+    return;
   }
   try {
     const row = await dbQueryOne<{ eligible: number }>(
@@ -31,7 +32,8 @@ router.get('/archive/preview', async (req: AuthRequest, res: Response): Promise<
 // POST /api/admin/archive/run — mark eligible records as archived
 router.post('/archive/run', async (req: AuthRequest, res: Response): Promise<void> => {
   if (!isAdmin(req.user!)) {
-    res.status(403).json({ message: 'Admin access required' }); return;
+    res.status(403).json({ message: 'Admin access required' });
+    return;
   }
   try {
     const before = await dbQueryOne<{ eligible: number }>(

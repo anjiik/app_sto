@@ -10,7 +10,11 @@ const ACCESS_REQUEST_URL = 'https://your-company/access-request?app=STO-Manageme
 // copied verbatim into the build under the app base path.
 const USER_GUIDE_URL = `${import.meta.env.BASE_URL}sto-user-guide.pdf`;
 
-interface AdminContact { name: string; email: string; site: string; }
+interface AdminContact {
+  name: string;
+  email: string;
+  site: string;
+}
 
 export function AppInfo() {
   const [admins, setAdmins] = useState<AdminContact[]>([]);
@@ -18,9 +22,12 @@ export function AppInfo() {
   useEffect(() => {
     // In dev-bypass mode /auth/demo-users lists the demo accounts; pull the admins
     // out of it so testers know who to contact. Returns [] in production (LDAP).
-    api.get('/auth/demo-users')
+    api
+      .get('/auth/demo-users')
       .then(r => {
-        const list = (r.data as { displayName: string; group: string; site: string; username: string }[])
+        const list = (
+          r.data as { displayName: string; group: string; site: string; username: string }[]
+        )
           .filter(u => u.group === 'admin')
           .map(u => ({ name: u.displayName, email: `${u.username}@demo.local`, site: u.site }));
         setAdmins(list);
@@ -37,9 +44,9 @@ export function AppInfo() {
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="font-semibold text-gray-800 mb-2">User Guide</h2>
           <p className="text-sm text-gray-600 mb-4">
-            A complete, role-by-role guide to the app — the STO lifecycle, creating and
-            submitting requests, every approval step, dashboards and queues, filters and
-            export, analytics, multi-site access, and admin tasks.
+            A complete, role-by-role guide to the app — the STO lifecycle, creating and submitting
+            requests, every approval step, dashboards and queues, filters and export, analytics,
+            multi-site access, and admin tasks.
           </p>
           <a
             href={USER_GUIDE_URL}
@@ -55,9 +62,9 @@ export function AppInfo() {
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="font-semibold text-gray-800 mb-2">Requesting Access</h2>
           <p className="text-sm text-gray-600 mb-3">
-            Access is granted through Active Directory group membership for your site and role
-            (e.g. <code className="bg-gray-100 px-1 rounded">ABC_LOGISTICS</code>). Submit a request
-            using the link below and include your site(s) and the role you need.
+            Access is granted through Active Directory group membership for your site and role (e.g.{' '}
+            <code className="bg-gray-100 px-1 rounded">ABC_LOGISTICS</code>). Submit a request using
+            the link below and include your site(s) and the role you need.
           </p>
           <a
             href={ACCESS_REQUEST_URL}
@@ -84,7 +91,12 @@ export function AppInfo() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {['Name', 'Email', 'Site'].map(h => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -93,7 +105,9 @@ export function AppInfo() {
                   <tr key={a.email}>
                     <td className="px-3 py-2 text-gray-900">{a.name}</td>
                     <td className="px-3 py-2">
-                      <a href={`mailto:${a.email}`} className="text-blue-600 hover:text-blue-800">{a.email}</a>
+                      <a href={`mailto:${a.email}`} className="text-blue-600 hover:text-blue-800">
+                        {a.email}
+                      </a>
                     </td>
                     <td className="px-3 py-2 text-gray-600">{a.site}</td>
                   </tr>

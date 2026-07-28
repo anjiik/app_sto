@@ -26,7 +26,9 @@ function validateEnv(): void {
     process.exit(1);
   }
   if (process.env.JWT_SECRET === 'change-this-to-a-long-random-secret-in-production') {
-    console.error('[startup] JWT_SECRET is set to the example placeholder. Set a strong random value before deploying.');
+    console.error(
+      '[startup] JWT_SECRET is set to the example placeholder. Set a strong random value before deploying.',
+    );
     process.exit(1);
   }
   if (process.env.DEV_BYPASS !== 'true') {
@@ -71,7 +73,10 @@ app.get('/api/health', async (_req, res) => {
 });
 
 const server = app.listen(PORT, () => {
-  logger.info({ port: PORT, cors: FRONTEND_ORIGIN, db: process.env.DB_SERVER }, 'STO backend started');
+  logger.info(
+    { port: PORT, cors: FRONTEND_ORIGIN, db: process.env.DB_SERVER },
+    'STO backend started',
+  );
 });
 
 function shutdown() {

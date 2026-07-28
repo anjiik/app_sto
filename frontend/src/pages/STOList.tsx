@@ -31,20 +31,50 @@ function downloadRowsCSV(
 
 function downloadCSV(rows: Record<string, unknown>[]): void {
   const headers = [
-    'STO ID', 'Status', 'Request Date', 'Requestor', 'Requestor Email',
-    'Shipping Site', 'Receiving Site', 'Requesting Plant',
-    'Material SAP', 'Material Description', 'Quantity', 'UOM',
-    'Priority', 'Rush', 'Material Value',
-    'Need-By Date', 'Est. Ship Date', 'STO Number', 'Tracking ID',
-    'Created At', 'Updated At',
+    'STO ID',
+    'Status',
+    'Request Date',
+    'Requestor',
+    'Requestor Email',
+    'Shipping Site',
+    'Receiving Site',
+    'Requesting Plant',
+    'Material SAP',
+    'Material Description',
+    'Quantity',
+    'UOM',
+    'Priority',
+    'Rush',
+    'Material Value',
+    'Need-By Date',
+    'Est. Ship Date',
+    'STO Number',
+    'Tracking ID',
+    'Created At',
+    'Updated At',
   ];
-  const fields: (keyof typeof rows[0])[] = [
-    'sto_id', 'status', 'request_date', 'requestor_name', 'requestor_email',
-    'shipping_site', 'receiving_site', 'requesting_plant',
-    'material_sap', 'material_description', 'quantity', 'uom',
-    'priority', 'rush_request', 'material_value',
-    'receiving_site_need_by_date', 'estimated_ship_by_date', 'sto_number', 'tracking_id',
-    'created_at', 'updated_at',
+  const fields: (keyof (typeof rows)[0])[] = [
+    'sto_id',
+    'status',
+    'request_date',
+    'requestor_name',
+    'requestor_email',
+    'shipping_site',
+    'receiving_site',
+    'requesting_plant',
+    'material_sap',
+    'material_description',
+    'quantity',
+    'uom',
+    'priority',
+    'rush_request',
+    'material_value',
+    'receiving_site_need_by_date',
+    'estimated_ship_by_date',
+    'sto_number',
+    'tracking_id',
+    'created_at',
+    'updated_at',
   ];
   const lines = rows.map(r => fields.map(f => escape(r[f])).join(','));
   const csv = [headers.map(h => escape(h)).join(','), ...lines].join('\r\n');
@@ -58,25 +88,34 @@ function downloadCSV(rows: Record<string, unknown>[]): void {
 }
 
 const ALL_STATUSES: STOStatus[] = [
-  'DRAFT', 'PLANNING_REVIEW', 'SHIPPING_LOGISTICS',
-  'MANAGEMENT_REVIEW', 'RECEIVING_MGMT_REVIEW', 'RECEIVING_LOGISTICS', 'CLOSED', 'REJECTED',
+  'DRAFT',
+  'PLANNING_REVIEW',
+  'SHIPPING_LOGISTICS',
+  'MANAGEMENT_REVIEW',
+  'RECEIVING_MGMT_REVIEW',
+  'RECEIVING_LOGISTICS',
+  'CLOSED',
+  'REJECTED',
 ];
 
 const STATUS_LABELS: Record<STOStatus, string> = {
-  DRAFT:               'Draft',
-  PLANNING_REVIEW:     'Planning Review',
-  SHIPPING_LOGISTICS:  'Shipping Logistics',
-  MANAGEMENT_REVIEW:    'Ship. Mgmt Review',
-  RECEIVING_MGMT_REVIEW:'Recv. Mgmt Review',
-  RECEIVING_LOGISTICS:  'Receiving Logistics',
-  CLOSED:              'Closed',
-  REJECTED:            'Rejected',
+  DRAFT: 'Draft',
+  PLANNING_REVIEW: 'Planning Review',
+  SHIPPING_LOGISTICS: 'Shipping Logistics',
+  MANAGEMENT_REVIEW: 'Ship. Mgmt Review',
+  RECEIVING_MGMT_REVIEW: 'Recv. Mgmt Review',
+  RECEIVING_LOGISTICS: 'Receiving Logistics',
+  CLOSED: 'Closed',
+  REJECTED: 'Rejected',
 };
 
 const PAGE_SIZE = 50;
 const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'];
 
-interface Route { shipping_site: string; receiving_site: string; }
+interface Route {
+  shipping_site: string;
+  receiving_site: string;
+}
 const routeKey = (r: Route) => `${r.shipping_site}→${r.receiving_site}`;
 
 export function STOList() {
@@ -85,54 +124,57 @@ export function STOList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [auditLoading, setAuditLoading] = useState(false);
 
-  const [stos,          setStos]          = useState<STORequest[]>([]);
-  const [total,         setTotal]         = useState(0);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState<string | null>(null);
-  const [search,        setSearch]        = useState('');
+  const [stos, setStos] = useState<STORequest[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
-  const [requestors,    setRequestors]    = useState<string[]>([]);
-  const [routes,        setRoutes]        = useState<Route[]>([]);
+  const [requestors, setRequestors] = useState<string[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
 
-  const statusFilter    = searchParams.get('status')        || '';
-  const priorityFilter  = searchParams.get('priority')      || '';
-  const shippingSite    = searchParams.get('shipping_site') || '';
-  const receivingSite   = searchParams.get('receiving_site')|| '';
-  const requestorFilter = searchParams.get('requestor')     || '';
-  const routeFilter     = searchParams.get('route')         || '';
-  const needByFrom      = searchParams.get('need_by_from')  || '';
-  const needByTo        = searchParams.get('need_by_to')    || '';
-  const page            = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-  const totalPages      = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const statusFilter = searchParams.get('status') || '';
+  const priorityFilter = searchParams.get('priority') || '';
+  const shippingSite = searchParams.get('shipping_site') || '';
+  const receivingSite = searchParams.get('receiving_site') || '';
+  const requestorFilter = searchParams.get('requestor') || '';
+  const routeFilter = searchParams.get('route') || '';
+  const needByFrom = searchParams.get('need_by_from') || '';
+  const needByTo = searchParams.get('need_by_to') || '';
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // A selected route overrides the individual site filters (it IS a site pair).
   const [routeShip, routeRecv] = routeFilter ? routeFilter.split('→') : ['', ''];
 
   // Distinct requestors + routes for the dropdowns — fetched once.
   useEffect(() => {
-    api.get('/sto/filter-options')
+    api
+      .get('/sto/filter-options')
       .then(r => {
         setRequestors(r.data.requestors || []);
         setRoutes(r.data.routes || []);
       })
-      .catch(() => { /* non-fatal: dropdowns just stay empty */ });
+      .catch(() => {
+        /* non-fatal: dropdowns just stay empty */
+      });
   }, []);
 
   // Build the query params shared by the list + export requests.
   function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
-    if (statusFilter)    params.set('status',    statusFilter);
-    if (priorityFilter)  params.set('priority',  priorityFilter);
-    if (search)          params.set('search',    search);
+    if (statusFilter) params.set('status', statusFilter);
+    if (priorityFilter) params.set('priority', priorityFilter);
+    if (search) params.set('search', search);
     if (requestorFilter) params.set('requestor', requestorFilter);
-    if (needByFrom)      params.set('need_by_from', needByFrom);
-    if (needByTo)        params.set('need_by_to',   needByTo);
+    if (needByFrom) params.set('need_by_from', needByFrom);
+    if (needByTo) params.set('need_by_to', needByTo);
     // Route wins over the standalone site dropdowns when set.
     if (routeFilter) {
-      if (routeShip) params.set('shipping_site',  routeShip);
+      if (routeShip) params.set('shipping_site', routeShip);
       if (routeRecv) params.set('receiving_site', routeRecv);
     } else {
-      if (shippingSite)  params.set('shipping_site',  shippingSite);
+      if (shippingSite) params.set('shipping_site', shippingSite);
       if (receivingSite) params.set('receiving_site', receivingSite);
     }
     return params;
@@ -142,10 +184,11 @@ export function STOList() {
     setLoading(true);
     setError(null);
     const params = buildParams();
-    params.set('page',  String(page));
+    params.set('page', String(page));
     params.set('limit', String(PAGE_SIZE));
 
-    api.get(`/sto?${params}`)
+    api
+      .get(`/sto?${params}`)
       .then(r => {
         setStos(r.data.data);
         setTotal(r.data.pagination.total);
@@ -153,7 +196,18 @@ export function STOList() {
       .catch(err => setError(err.response?.data?.message || 'Failed to load STOs'))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, priorityFilter, search, shippingSite, receivingSite, requestorFilter, routeFilter, needByFrom, needByTo, page]);
+  }, [
+    statusFilter,
+    priorityFilter,
+    search,
+    shippingSite,
+    receivingSite,
+    requestorFilter,
+    routeFilter,
+    needByFrom,
+    needByTo,
+    page,
+  ]);
 
   async function handleExport() {
     setExportLoading(true);
@@ -174,8 +228,26 @@ export function STOList() {
       const r = await api.get('/sto/audit-log/export');
       downloadRowsCSV(
         r.data,
-        ['Audit ID', 'STO ID', 'Action', 'From Status', 'To Status', 'Performed By', 'Notes', 'Performed At'],
-        ['id', 'sto_id', 'action', 'old_status', 'new_status', 'performed_by_name', 'notes', 'performed_at'],
+        [
+          'Audit ID',
+          'STO ID',
+          'Action',
+          'From Status',
+          'To Status',
+          'Performed By',
+          'Notes',
+          'Performed At',
+        ],
+        [
+          'id',
+          'sto_id',
+          'action',
+          'old_status',
+          'new_status',
+          'performed_by_name',
+          'notes',
+          'performed_at',
+        ],
         `sto-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`,
       );
     } catch {
@@ -187,9 +259,13 @@ export function STOList() {
 
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
-    if (value) next.set(key, value); else next.delete(key);
+    if (value) next.set(key, value);
+    else next.delete(key);
     // Route and the individual site dropdowns are mutually exclusive.
-    if (key === 'route' && value) { next.delete('shipping_site'); next.delete('receiving_site'); }
+    if (key === 'route' && value) {
+      next.delete('shipping_site');
+      next.delete('receiving_site');
+    }
     if ((key === 'shipping_site' || key === 'receiving_site') && value) next.delete('route');
     next.delete('page'); // reset to page 1 when filter changes
     setSearchParams(next);
@@ -234,7 +310,10 @@ export function STOList() {
                 Export Audit Trail
               </button>
             )}
-            <Link to="/sto/new" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 font-medium text-sm">
+            <Link
+              to="/sto/new"
+              className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 font-medium text-sm"
+            >
               + New Request
             </Link>
           </div>
@@ -255,7 +334,11 @@ export function STOList() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Statuses</option>
-              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              {ALL_STATUSES.map(s => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
             </select>
             <select
               value={priorityFilter}
@@ -280,7 +363,11 @@ export function STOList() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
               >
                 <option value="">All</option>
-                {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+                {SITES.map(s => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-xs text-gray-500">
@@ -292,7 +379,11 @@ export function STOList() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
               >
                 <option value="">All</option>
-                {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+                {SITES.map(s => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-xs text-gray-500">
@@ -318,7 +409,11 @@ export function STOList() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Requestors</option>
-                {requestors.map(r => <option key={r} value={r}>{r}</option>)}
+                {requestors.map(r => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-xs text-gray-500">
@@ -339,12 +434,24 @@ export function STOList() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </label>
-            {(shippingSite || receivingSite || routeFilter || requestorFilter || needByFrom || needByTo) && (
+            {(shippingSite ||
+              receivingSite ||
+              routeFilter ||
+              requestorFilter ||
+              needByFrom ||
+              needByTo) && (
               <button
                 onClick={() => {
                   const next = new URLSearchParams(searchParams);
-                  ['shipping_site', 'receiving_site', 'route', 'requestor', 'need_by_from', 'need_by_to', 'page']
-                    .forEach(k => next.delete(k));
+                  [
+                    'shipping_site',
+                    'receiving_site',
+                    'route',
+                    'requestor',
+                    'need_by_from',
+                    'need_by_to',
+                    'page',
+                  ].forEach(k => next.delete(k));
                   setSearchParams(next);
                 }}
                 className="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -368,8 +475,22 @@ export function STOList() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {['STO ID', 'Material', 'Requestor', 'Route', 'Priority', 'Status', 'Need By', 'Updated'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                      {[
+                        'STO ID',
+                        'Material',
+                        'Requestor',
+                        'Route',
+                        'Priority',
+                        'Status',
+                        'Need By',
+                        'Updated',
+                      ].map(h => (
+                        <th
+                          key={h}
+                          className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                        >
+                          {h}
+                        </th>
                       ))}
                       <th className="px-4 py-3"></th>
                     </tr>
@@ -377,9 +498,13 @@ export function STOList() {
                   <tbody className="divide-y divide-gray-100">
                     {stos.map(sto => (
                       <tr key={sto.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 font-mono font-semibold text-blue-700">{sto.sto_id}</td>
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-700">
+                          {sto.sto_id}
+                        </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 truncate max-w-48">{sto.material_description || '–'}</div>
+                          <div className="font-medium text-gray-900 truncate max-w-48">
+                            {sto.material_description || '–'}
+                          </div>
                           <div className="text-xs text-gray-400">{sto.material_sap || ''}</div>
                         </td>
                         <td className="px-4 py-3">
@@ -389,16 +514,27 @@ export function STOList() {
                         <td className="px-4 py-3 text-xs text-gray-500">
                           {sto.shipping_site || '–'} → {sto.receiving_site || '–'}
                         </td>
-                        <td className="px-4 py-3"><PriorityBadge priority={sto.priority} /></td>
-                        <td className="px-4 py-3"><StatusBadge status={sto.status} /></td>
+                        <td className="px-4 py-3">
+                          <PriorityBadge priority={sto.priority} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={sto.status} />
+                        </td>
                         <td className="px-4 py-3 text-xs text-gray-500">
-                          {sto.receiving_site_need_by_date ? new Date(sto.receiving_site_need_by_date).toLocaleDateString() : '–'}
+                          {sto.receiving_site_need_by_date
+                            ? new Date(sto.receiving_site_need_by_date).toLocaleDateString()
+                            : '–'}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400">
                           {new Date(sto.updated_at).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3">
-                          <Link to={`/sto/${sto.id}`} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View →</Link>
+                          <Link
+                            to={`/sto/${sto.id}`}
+                            className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                          >
+                            View →
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -409,10 +545,13 @@ export function STOList() {
               {/* Pagination controls */}
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                 <p className="text-sm text-gray-500">
-                  {total === 0 ? '0 results' : (
+                  {total === 0 ? (
+                    '0 results'
+                  ) : (
                     <>
                       Showing {((page - 1) * PAGE_SIZE + 1).toLocaleString()}–
-                      {Math.min(page * PAGE_SIZE, total).toLocaleString()} of {total.toLocaleString()}
+                      {Math.min(page * PAGE_SIZE, total).toLocaleString()} of{' '}
+                      {total.toLocaleString()}
                     </>
                   )}
                 </p>

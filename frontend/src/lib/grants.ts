@@ -23,7 +23,11 @@ export function hasRole(user: User | null | undefined, role: Group): boolean {
 }
 
 // True if the user holds `role` AT the given site (same grant). Admins pass.
-export function hasRoleAtSite(user: User | null | undefined, role: Group, site: string | null | undefined): boolean {
+export function hasRoleAtSite(
+  user: User | null | undefined,
+  role: Group,
+  site: string | null | undefined,
+): boolean {
   if (isAdmin(user)) return true;
   if (!site) return false;
   return userGrants(user).some(g => g.group === role && g.site === site);
@@ -31,13 +35,25 @@ export function hasRoleAtSite(user: User | null | undefined, role: Group, site: 
 
 // Every site the user can act on, across all grants (union).
 export function userSites(user: User | null | undefined): string[] {
-  return Array.from(new Set(userGrants(user).map(g => g.site).filter(Boolean)));
+  return Array.from(
+    new Set(
+      userGrants(user)
+        .map(g => g.site)
+        .filter(Boolean),
+    ),
+  );
 }
 
 // Sites where the user holds a specific role (used to scope role queues).
 export function sitesForRole(user: User | null | undefined, role: Group): string[] {
   if (isAdmin(user)) return userSites(user);
-  return Array.from(new Set(userGrants(user).filter(g => g.group === role).map(g => g.site)));
+  return Array.from(
+    new Set(
+      userGrants(user)
+        .filter(g => g.group === role)
+        .map(g => g.site),
+    ),
+  );
 }
 
 // The distinct roles the user holds (admin collapses to just 'admin').

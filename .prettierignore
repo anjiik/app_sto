@@ -1,0 +1,13 @@
+# Build output and dependencies
+node_modules/
+dist/
+site/
+backend/dist/
+frontend/dist/
+
+# Generated / vendored
+*.min.js
+package-lock.json
+
+# Docs build tool output
+frontend/public/*.pdf
