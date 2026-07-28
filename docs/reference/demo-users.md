@@ -17,7 +17,8 @@ uses the `abl.*` prefix and XYZ uses `xyz.*`.
 | `abc.recv` | Alice Carter | ABC | receiving_site (requestor) |
 | `abc.plan` | Brian Scott | ABC | shipping_planning |
 | `abc.slog` | Carol White | ABC | shipping_logistics |
-| `abc.mgmt` | Daniel Ross | ABC | management |
+| `abc.mgmt` | Daniel Ross | ABC | management (shipping side) |
+| `abc.rmgmt` | Emma Hayes | ABC | receiving_management |
 | `abc.rlog` | Frank Lopez | ABC | receiving_logistics |
 
 ## Admin
@@ -36,6 +37,7 @@ These accounts exercise the [grants model](roles.md):
 | `multi.log` | Priya Nair | shipping_logistics + receiving_logistics @ ABC | two roles, same site |
 | `multi.plan` | Tom Becker | shipping_planning @ ABC + ABL | same role, two sites |
 | `multi.mix` | Dana Fox | shipping_logistics @ ABC + management @ ABL | mixed roles across sites |
+| `abc.mgmt.both` | Gina Park | management + receiving_management @ ABC | both management sides, one site |
 
 ## The `grants` column
 

@@ -6,10 +6,7 @@ For developers working on the codebase.
 - [Backend](backend.md) — routes, auth, and the grant-aware access helpers
 - [Frontend](frontend.md) — pages, routing, and UI access checks
 - [Database](database.md) — schema, migrations, and tables
-
-!!! note
-    A longer, file-by-file walkthrough also lives in `CODEBASE_GUIDE.md` at the repo
-    root.
+- [Conventions](conventions.md) — code style and consistency rules
 
 ## Stack
 

@@ -37,6 +37,7 @@ Run each file in `backend\src\db\migrations\` **in order**, against `sto_managem
 | 010 | `010_reset_sto_sequence.sql` | Reset the STO-number sequence |
 | 011 | `011_form_overhaul.sql` | Form/workflow overhaul columns |
 | 012 | `012_demo_user_grants.sql` | Multi-role demo users (`grants` column) |
+| 013 | `013_distressed_inventory.sql` | Distressed Inventory flag + value (`distressed_inventory`, `di_value`) |
 
 !!! tip "Fresh vs existing database"
     On a **brand-new** database, run all of them in order — each is safe. On an

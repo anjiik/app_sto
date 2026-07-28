@@ -7,6 +7,9 @@ planning.
 
 - **Summary KPIs** — totals for all, active, closed, and rejected STOs, plus total
   value and rush count.
+- **Distressed Inventory (DI) savings** — two figures for STOs flagged as DI:
+  **DI Savings (Realized)** from completed (closed) STOs, and **Potential DI Savings**
+  from ongoing (not-yet-closed) STOs.
 - **Status distribution** — how STOs are spread across the workflow.
 - **Monthly trends** — volume and value over time.
 - **Site flows** — how many STOs move from each site to each other site.

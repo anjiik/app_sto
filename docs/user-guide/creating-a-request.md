@@ -25,17 +25,24 @@ submit.
 |-------|-------|
 | Shipping site & receiving site *(required)* | Where it ships from and to. |
 | Shipping conditions *(required)* | Ambient, Cold 2–8 °C, Cold below 0, Frozen, or *Other* (free text). Cold-chain choices trigger management approval later. |
-| Controlled shipping | Check if controlled; add notes if needed. |
+| Controlled shipping | Check if controlled; add notes if needed. **Ticking this requires management approval** and the form says so. |
 | INCO terms | **FCA** or **DAP** are standard; choosing *Other* flags the STO for management approval. |
+| Toll MFG / Distressed Inventory (DI) | Tick as applicable. Ticking **DI** reveals a **DI Value** field (estimated saving) that you, planning, or logistics can fill in. |
 
 ### Dates & urgency
 
 | Field | Notes |
 |-------|-------|
 | Priority *(required)* | Priority 1, 2, or 3 — sets the standard estimated ship date automatically. |
-| Rush request | Check to flag as rush. A **rush reason is then required**. |
-| Standard estimated ship date | Auto-calculated (see below). Editable on rush. |
-| Receiving site need-by date | Optional but recommended — drives "due soon" and "overdue" flags on dashboards. |
+| Standard estimated ship date | Auto-calculated from priority (see below) and **always read-only**. |
+| Receiving site need-by date *(required)* | When the receiving site needs the goods. Drives "due soon" and "overdue" flags on dashboards. |
+| Rush request | Set automatically from the dates (see below); a **rush reason is required** while it is on. |
+
+!!! note "Rush is driven by the dates"
+    If the **need-by date is earlier than the standard estimated ship date**, the
+    standard timeline can't meet it, so the form **auto-ticks Rush** and asks for a
+    reason. If you later push the need-by date to on or after the ship date, the Rush
+    flag is **cleared** again automatically.
 
 ### Financial
 

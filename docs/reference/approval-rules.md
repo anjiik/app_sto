@@ -14,6 +14,7 @@ to `RECEIVING_LOGISTICS`.
 | Freight is large relative to value | freight ÷ value greater than **30%** |
 | Cold-chain shipping conditions | Cold 2–8 °C, Cold below 0, or Frozen |
 | Non-standard INCO term | anything other than **FCA** or **DAP** |
+| Controlled shipping required | the **Controlled Shipping Required** box is ticked on the request |
 
 If none apply, both management steps are skipped.
 
@@ -22,8 +23,14 @@ If none apply, both management steps are skipped.
 - The two **dollar thresholds** are environment-configurable via
   `MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD` and `MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD`.
   When unset, they default to **$100,000** and **$20,000**.
-- The **freight-to-value ratio (30%)**, the **cold-chain** conditions, and the
-  **INCO-term** rule are fixed in the application.
+- The **freight-to-value ratio (30%)**, the **cold-chain** conditions, the
+  **INCO-term** rule, and the **controlled-shipping** rule are fixed in the
+  application.
+
+!!! note "Controlled shipping is flagged early"
+    When the requestor ticks **Controlled Shipping Required** on the form, the form
+    warns that management approval will be needed. The requirement itself is applied
+    when shipping logistics submits, alongside the other rules above.
 
 ## INCO terms
 

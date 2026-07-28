@@ -10,8 +10,9 @@ to.
   shown as a separate section per role.
 - On the STOs list, the shipping-site and receiving-site filters accept **multiple
   sites at once**.
-- Management users can act on both the shipping-site and receiving-site approval steps
-  for their assigned sites.
+- Shipping management (`management`) acts on the shipping-site approval step, and
+  receiving management (`receiving_management`) on the receiving-site step, each at
+  their assigned sites. To cover both sides, a user needs both roles.
 
 ## Holding several roles
 

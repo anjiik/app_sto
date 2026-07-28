@@ -1,21 +1,28 @@
 # Roles & access
 
-## The six roles
+## The seven roles
 
 | Role | Responsibility |
 |------|----------------|
 | `receiving_site` | Creates and submits STO requests (the requestor) |
 | `shipping_planning` | Reviews requests; approves, revises, or rejects |
 | `shipping_logistics` | Adds freight & shipping details; routes for approval |
-| `management` | Approves high-value / cold-chain / non-standard shipments |
+| `management` | Shipping-site management sign-off (high-value / cold-chain / controlled / non-standard shipments) |
+| `receiving_management` | Receiving-site management sign-off on the same shipments |
 | `receiving_logistics` | Confirms receipt and closes out delivery |
 | `admin` | Fixes mistakes (revert / send-back), archiving, oversight |
 
-There is no `finance` role — management is the only approval role beyond planning.
+There is no `finance` role — management is the only approval tier beyond planning.
+
+!!! note "Shipping vs receiving management are distinct roles"
+    A management-flagged STO needs sign-off from **both** sides. The shipping-site
+    step requires the `management` role; the receiving-site step requires the
+    separate `receiving_management` role. They are backed by different AD groups, so
+    a user in only one cannot act on the other's step.
 
 ## Per-site vs company-wide
 
-- **The five non-admin roles are per-site.** A `shipping_planning` grant at ABC
+- **The six non-admin roles are per-site.** A `shipping_planning` grant at ABC
   lets you plan for ABC only. To act at another site you need a grant for that site.
 - **`admin` is company-wide.** A single admin grant confers access across every
   site — admins bypass all per-site checks.

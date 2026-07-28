@@ -15,7 +15,7 @@ the same page) or your IT service desk.
 | Planning Review | Shipping Planning | Approve → Shipping Logistics |
 | Shipping Logistics | Shipping Logistics | Submit → Management or Receiving Logistics |
 | Management Review | Management (shipping) | Approve → Receiving Mgmt Review |
-| Receiving Mgmt Review | Management (receiving) | Approve → Shipping Logistics (confirm) |
+| Receiving Mgmt Review | Receiving Management (receiving) | Approve → Shipping Logistics (confirm) |
 | Receiving Logistics | Receiving Logistics | Close out → Closed |
 | Closed / Rejected | — | Terminal |
 

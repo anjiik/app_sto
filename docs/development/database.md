@@ -7,7 +7,7 @@ changes live under `backend/src/db`.
 
 - **`schema.sql`** — full schema for a fresh database (tables, indexes, the
   STO-number sequence, and initial `sites`).
-- **`migrations/`** — numbered, incremental changes (001–012). Apply in order; see
+- **`migrations/`** — numbered, incremental changes (001–013). Apply in order; see
   [Admin → Database & migrations](../admin/database.md).
 - **`seed.ts`** — demo users + sample STOs for dev (`npm run seed`). Not used in
   production.
@@ -43,7 +43,7 @@ changes live under `backend/src/db`.
 
 ## Making a schema change
 
-1. Add a new numbered file in `migrations/` (e.g. `013_*.sql`), written to be safe to
+1. Add a new numbered file in `migrations/` (e.g. `014_*.sql`), written to be safe to
    run once on an existing database.
 2. Update `schema.sql` so fresh installs get the same result.
 3. If it affects seeding, update `seed.ts`.

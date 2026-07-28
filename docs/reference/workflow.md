@@ -11,7 +11,7 @@ are inserted only when [management approval is required](approval-rules.md).
 | `PLANNING_REVIEW` | Submitted; under feasibility review | `shipping_planning` |
 | `SHIPPING_LOGISTICS` | Freight & shipping details being added | `shipping_logistics` |
 | `MANAGEMENT_REVIEW` | Awaiting shipping-site management sign-off | `management` (shipping site) |
-| `RECEIVING_MGMT_REVIEW` | Awaiting receiving-site management sign-off | `management` (receiving site) |
+| `RECEIVING_MGMT_REVIEW` | Awaiting receiving-site management sign-off | `receiving_management` (receiving site) |
 | `RECEIVING_LOGISTICS` | Shipped; awaiting receipt & closeout | `receiving_logistics` |
 | `CLOSED` | Delivered and closed | — (terminal) |
 | `REJECTED` | Declined at an approval step | — (terminal) |
@@ -32,9 +32,9 @@ SHIPPING_LOGISTICS
   │                                                        │
   └─ management required                                   │
        ▼                                                   │
-     MANAGEMENT_REVIEW        (shipping-site management)   │
+     MANAGEMENT_REVIEW        (management, shipping site)  │
        ▼                                                   │
-     RECEIVING_MGMT_REVIEW    (receiving-site management)  │
+     RECEIVING_MGMT_REVIEW    (receiving_management)       │
        ▼                                                   │
      SHIPPING_LOGISTICS       (confirm pass)               │
        │                                                   │

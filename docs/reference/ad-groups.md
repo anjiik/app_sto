@@ -26,10 +26,17 @@ plus a single company-wide admin group.
 | `ABC_RECEIVING` | receiving_site | ABC |
 | `ABC_PLANNING` | shipping_planning | ABC |
 | `ABC_LOGISTICS` | shipping_logistics | ABC |
-| `ABC_MANAGEMENT` | management | ABC |
+| `ABC_SHIPPING_MANAGEMENT` | management | ABC |
+| `ABC_RECEIVING_MANAGEMENT` | receiving_management | ABC |
 | `ABC_RECV_LOGISTICS` | receiving_logistics | ABC |
 
-The same six-per-site pattern repeats for each additional site (e.g. `XYZ_*`).
+The same seven-per-site pattern repeats for each additional site (e.g. `XYZ_*`).
+
+!!! important "Two management groups per site"
+    Shipping-side and receiving-side management are **separate** roles backed by
+    separate groups (`{SITE}_SHIPPING_MANAGEMENT` and `{SITE}_RECEIVING_MANAGEMENT`).
+    Add a user to whichever side they approve for; a user in only one cannot act on
+    the other side's step.
 
 !!! note "Real vs placeholder names"
     `APP-STO_MANAGEMENT_ADMIN` is the real admin group CN. The `{SITE}_*` entries

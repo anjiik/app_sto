@@ -14,10 +14,11 @@ Groups follow **`{SITE}_{ROLE}`**, plus a single company-wide admin group.
 | `ABC_RECEIVING` | ABC | Receiving Site — creates STOs |
 | `ABC_PLANNING` | ABC | Shipping Planning — reviews and approves |
 | `ABC_LOGISTICS` | ABC | Shipping Logistics — shipping details |
-| `ABC_MANAGEMENT` | ABC | Management — approval (shipping & receiving side) |
+| `ABC_SHIPPING_MANAGEMENT` | ABC | Management — shipping-site approval |
+| `ABC_RECEIVING_MANAGEMENT` | ABC | Receiving Management — receiving-site approval |
 | `ABC_RECV_LOGISTICS` | ABC | Receiving Logistics — closes out deliveries |
 
-Repeat the six per-site groups for each site (e.g. `ABL_*`). The **site prefix must
+Repeat the seven per-site groups for each site (e.g. `ABL_*`). The **site prefix must
 match a code in your `sites` table**.
 
 !!! important "These are examples"
@@ -27,10 +28,10 @@ match a code in your `sites` table**.
 
 ## Site scoping rules
 
-- `PLANNING` and `LOGISTICS` act on STOs where **shipping_site = their site**.
-- `RECEIVING` and `RECV_LOGISTICS` act on STOs where **receiving_site = their site**.
-- `MANAGEMENT` acts on both the shipping-site and receiving-site approval steps for
-  its site.
+- `PLANNING`, `LOGISTICS`, and `SHIPPING_MANAGEMENT` act on STOs where
+  **shipping_site = their site**.
+- `RECEIVING`, `RECEIVING_MANAGEMENT`, and `RECV_LOGISTICS` act on STOs where
+  **receiving_site = their site**.
 - `admin` is company-wide and bypasses site scoping.
 
 ## Multi-site & multi-role
@@ -53,6 +54,6 @@ See [Troubleshooting](troubleshooting.md) for diagnosing that message.
 ## Ask IT to create the groups
 
 Provide your directory team with the full list of group names (the admin group plus
-six per site) and ask them to create the groups and add the appropriate users. Then
+seven per site) and ask them to create the groups and add the appropriate users. Then
 enter each real group name into `GROUP_MAP` and
 [rebuild/restart](build-run.md).

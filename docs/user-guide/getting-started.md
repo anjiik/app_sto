@@ -15,14 +15,15 @@ If you can't sign in, see [Troubleshooting](troubleshooting.md#requesting-access
 
 The app is role-aware: your dashboard, queues, and available actions all depend on
 your role. You may hold **more than one role** or cover **more than one site**. The
-six roles are:
+seven roles are:
 
 | Role | What you do |
 |------|-------------|
 | Requestor (`receiving_site`) | Create and submit new STO requests; track your own drafts. |
 | Shipping Planning (`shipping_planning`) | Review requests; add planning details; approve, revise, or reject. |
 | Shipping Logistics (`shipping_logistics`) | Add freight & shipping details; route for management approval when required. |
-| Management (`management`) | Approve high-value or cold-chain shipments at the shipping *and* receiving site. |
+| Shipping Management (`management`) | Approve flagged shipments at the **shipping** site. |
+| Receiving Management (`receiving_management`) | Approve flagged shipments at the **receiving** site. |
 | Receiving Logistics (`receiving_logistics`) | Confirm receipt and close out the delivery. |
 | Admin (`admin`) | Fix mistakes (revert / send back), manage archiving, oversee all sites. |
 

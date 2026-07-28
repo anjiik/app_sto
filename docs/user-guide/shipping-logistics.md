@@ -28,11 +28,13 @@ The rules, in brief:
 - Freight-to-value ratio over 30%
 - Cold-chain shipping conditions (Cold 2–8 °C, Cold below 0, Frozen)
 - A non-standard INCO term (anything other than FCA or DAP)
+- Controlled shipping is required
 
 !!! note
     The dollar thresholds are configured by your administrators and may differ at
     your organisation. The behaviour is always the same: high value / high freight /
-    high ratio / cold-chain / non-standard INCO → management approval.
+    high ratio / cold-chain / controlled shipping / non-standard INCO → management
+    approval.
 
 ## The confirm pass
 
