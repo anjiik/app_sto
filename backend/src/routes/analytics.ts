@@ -41,7 +41,7 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
     const where = toWhere(conds);
     const closedWhere = toWhere([...conds, "status = 'CLOSED'"]);
 
-    const [counts, value, rush, avgClose, di] = await Promise.all([
+    const [counts, value, rush, avgClose, di, onTime] = await Promise.all([
       dbQuery<{ status: string; cnt: number }>(
         `
         SELECT status, COUNT(*) AS cnt FROM sto_requests ${where} GROUP BY status
@@ -82,7 +82,27 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
       `,
         params,
       ),
+      // On-time delivery: of CLOSED STOs that had both a need-by date and an
+      // actual receipt date, how many were received on or before the need-by.
+      dbQueryOne<{ measured: number; on_time: number }>(
+        `
+        SELECT
+          COUNT(*) AS measured,
+          SUM(CASE WHEN actual_receipt_date <= receiving_site_need_by_date THEN 1 ELSE 0 END) AS on_time
+        FROM sto_requests
+        ${toWhere([
+          ...conds,
+          "status = 'CLOSED'",
+          'receiving_site_need_by_date IS NOT NULL',
+          'actual_receipt_date IS NOT NULL',
+        ])}
+      `,
+        params,
+      ),
     ]);
+
+    const measured = Number(onTime?.measured ?? 0);
+    const onTimeCount = Number(onTime?.on_time ?? 0);
 
     const statusMap = Object.fromEntries(counts.map(r => [r.status, Number(r.cnt)]));
     res.json({
@@ -99,6 +119,10 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
       avgCloseDays: Math.round(Number(avgClose?.avg_days ?? 0)),
       diSavings: Number(di?.realized ?? 0),
       diPotential: Number(di?.potential ?? 0),
+      // On-time delivery %: null when no closed STOs had both dates to measure.
+      onTimePct: measured > 0 ? Math.round((onTimeCount / measured) * 100) : null,
+      onTimeMeasured: measured,
+      onTimeCount,
     });
   } catch (err) {
     logger.error({ err }, 'analytics/summary error');
@@ -293,6 +317,148 @@ router.get('/raw-data', async (req: AuthRequest, res: Response): Promise<void> =
     });
   } catch (err) {
     logger.error({ err }, 'analytics/raw-data error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /api/analytics/cycle-time — average days spent in each workflow stage.
+// Derived from the audit log: each transition's timestamp minus the previous
+// transition's timestamp gives how long the STO sat in the previous stage.
+router.get('/cycle-time', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { conds, params } = buildFilters(req.query as Record<string, string>);
+    // Only include STOs the filters select. The audit log is joined so we can
+    // measure real dwell time between status changes.
+    const rows = await dbQuery<{ stage: string; avg_days: number; cnt: number }>(
+      `
+      WITH transitions AS (
+        SELECT
+          l.sto_request_id,
+          l.new_status AS stage,
+          l.performed_at AS entered_at,
+          LEAD(l.performed_at) OVER (
+            PARTITION BY l.sto_request_id ORDER BY l.performed_at
+          ) AS left_at
+        FROM sto_audit_log l
+        JOIN sto_requests r ON r.id = l.sto_request_id
+        ${toWhere(conds)}
+        AND l.new_status IS NOT NULL
+      )
+      SELECT stage,
+             AVG(CAST(DATEDIFF(hour, entered_at, left_at) AS FLOAT) / 24.0) AS avg_days,
+             COUNT(*) AS cnt
+      FROM transitions
+      WHERE left_at IS NOT NULL
+        AND stage IN ('PLANNING_REVIEW','SHIPPING_LOGISTICS','MANAGEMENT_REVIEW',
+                      'RECEIVING_MGMT_REVIEW','RECEIVING_LOGISTICS')
+      GROUP BY stage
+    `,
+      params,
+    );
+    res.json(
+      rows.map(r => ({
+        stage: r.stage,
+        avgDays: Math.round(Number(r.avg_days) * 10) / 10,
+        count: Number(r.cnt),
+      })),
+    );
+  } catch (err) {
+    logger.error({ err }, 'analytics/cycle-time error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /api/analytics/aging — active STOs stuck in their current stage, bucketed
+// by how long since their last update. Returns bucket counts plus the oldest few.
+router.get('/aging', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { conds, params } = buildFilters(req.query as Record<string, string>);
+    const activeConds = [...conds, "status NOT IN ('CLOSED', 'REJECTED')"];
+    const where = toWhere(activeConds);
+
+    const [buckets, oldest] = await Promise.all([
+      dbQueryOne<{ b0: number; b3: number; b7: number; b14: number }>(
+        `
+        SELECT
+          SUM(CASE WHEN DATEDIFF(day, updated_at, GETDATE()) < 3 THEN 1 ELSE 0 END) AS b0,
+          SUM(CASE WHEN DATEDIFF(day, updated_at, GETDATE()) BETWEEN 3 AND 6 THEN 1 ELSE 0 END) AS b3,
+          SUM(CASE WHEN DATEDIFF(day, updated_at, GETDATE()) BETWEEN 7 AND 13 THEN 1 ELSE 0 END) AS b7,
+          SUM(CASE WHEN DATEDIFF(day, updated_at, GETDATE()) >= 14 THEN 1 ELSE 0 END) AS b14
+        FROM sto_requests ${where}
+      `,
+        params,
+      ),
+      dbQuery<Record<string, unknown>>(
+        `
+        SELECT TOP 10 id, sto_id, status, shipping_site, receiving_site,
+               material_description, updated_at,
+               DATEDIFF(day, updated_at, GETDATE()) AS days_in_stage
+        FROM sto_requests ${where}
+        ORDER BY updated_at ASC
+      `,
+        params,
+      ),
+    ]);
+
+    res.json({
+      buckets: {
+        under3: Number(buckets?.b0 ?? 0),
+        d3to6: Number(buckets?.b3 ?? 0),
+        d7to13: Number(buckets?.b7 ?? 0),
+        d14plus: Number(buckets?.b14 ?? 0),
+      },
+      oldest: oldest.map(r => ({ ...r, days_in_stage: Number(r.days_in_stage) })),
+    });
+  } catch (err) {
+    logger.error({ err }, 'analytics/aging error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /api/analytics/rejections — rejection & revision counts by stage, from the
+// audit log. Rejections are terminal; revisions send a request back to the
+// requestor. Also returns the most recent rejected/revised STOs with reasons.
+router.get('/rejections', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { conds, params } = buildFilters(req.query as Record<string, string>);
+    const [byStage, recent] = await Promise.all([
+      dbQuery<{ action: string; cnt: number }>(
+        `
+        SELECT l.action, COUNT(*) AS cnt
+        FROM sto_audit_log l
+        JOIN sto_requests r ON r.id = l.sto_request_id
+        ${toWhere(conds)}
+        AND l.action IN ('PLANNING_REJECTED','MANAGEMENT_REJECTED',
+                         'RECEIVING_MGMT_REJECTED','PLANNING_REVISION_REQUESTED')
+        GROUP BY l.action
+      `,
+        params,
+      ),
+      dbQuery<Record<string, unknown>>(
+        `
+        SELECT TOP 10 r.id, r.sto_id, l.action, l.notes, l.performed_by_name, l.performed_at
+        FROM sto_audit_log l
+        JOIN sto_requests r ON r.id = l.sto_request_id
+        ${toWhere(conds)}
+        AND l.action IN ('PLANNING_REJECTED','MANAGEMENT_REJECTED',
+                         'RECEIVING_MGMT_REJECTED','PLANNING_REVISION_REQUESTED')
+        ORDER BY l.performed_at DESC
+      `,
+        params,
+      ),
+    ]);
+    const map = Object.fromEntries(byStage.map(r => [r.action, Number(r.cnt)]));
+    res.json({
+      byStage: {
+        planningRejected: map['PLANNING_REJECTED'] ?? 0,
+        managementRejected: map['MANAGEMENT_REJECTED'] ?? 0,
+        receivingMgmtRejected: map['RECEIVING_MGMT_REJECTED'] ?? 0,
+        planningRevised: map['PLANNING_REVISION_REQUESTED'] ?? 0,
+      },
+      recent,
+    });
+  } catch (err) {
+    logger.error({ err }, 'analytics/rejections error');
     res.status(500).json({ message: 'Internal server error' });
   }
 });

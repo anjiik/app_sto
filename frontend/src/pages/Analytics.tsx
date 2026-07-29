@@ -32,6 +32,42 @@ interface Summary {
   avgCloseDays: number;
   diSavings: number;
   diPotential: number;
+  onTimePct: number | null;
+  onTimeMeasured: number;
+  onTimeCount: number;
+}
+interface CycleTime {
+  stage: string;
+  avgDays: number;
+  count: number;
+}
+interface Aging {
+  buckets: { under3: number; d3to6: number; d7to13: number; d14plus: number };
+  oldest: {
+    id: number;
+    sto_id: string;
+    status: string;
+    shipping_site: string | null;
+    receiving_site: string | null;
+    material_description: string | null;
+    days_in_stage: number;
+  }[];
+}
+interface Rejections {
+  byStage: {
+    planningRejected: number;
+    managementRejected: number;
+    receivingMgmtRejected: number;
+    planningRevised: number;
+  };
+  recent: {
+    id: number;
+    sto_id: string;
+    action: string;
+    notes: string | null;
+    performed_by_name: string;
+    performed_at: string;
+  }[];
 }
 interface ByStatus {
   status: string;
@@ -243,6 +279,9 @@ export function Analytics() {
   );
   const [siteFlow, setSiteFlow] = useState<SiteFlow[]>([]);
   const [rushSplit, setRushSplit] = useState<RushSplit[]>([]);
+  const [cycleTime, setCycleTime] = useState<CycleTime[]>([]);
+  const [aging, setAging] = useState<Aging | null>(null);
+  const [rejections, setRejections] = useState<Rejections | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [rawData, setRawData] = useState<RawRow[]>([]);
@@ -297,14 +336,20 @@ export function Analytics() {
       api.get(`/analytics/by-site?${q}`),
       api.get(`/analytics/site-flow?${q}`),
       api.get(`/analytics/rush-split?${q}`),
+      api.get(`/analytics/cycle-time?${q}`),
+      api.get(`/analytics/aging?${q}`),
+      api.get(`/analytics/rejections?${q}`),
     ])
-      .then(([s, st, m, si, sf, rs]) => {
+      .then(([s, st, m, si, sf, rs, ct, ag, rj]) => {
         setSummary(s.data);
         setByStatus(st.data);
         setByMonth(m.data);
         setBySite(si.data);
         setSiteFlow(sf.data);
         setRushSplit(rs.data);
+        setCycleTime(ct.data);
+        setAging(ag.data);
+        setRejections(rj.data);
       })
       .catch(err => {
         setError(err.response?.data?.message || 'Failed to load analytics data');
@@ -514,9 +559,9 @@ export function Analytics() {
           </div>
         )}
 
-        {/* ── Distressed Inventory savings ─────────────────────────────────────── */}
+        {/* ── DI savings + on-time delivery ────────────────────────────────────── */}
         {summary && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <KPI
               label="DI Savings (Realized)"
               value={fmt$(summary.diSavings)}
@@ -528,6 +573,16 @@ export function Analytics() {
               value={fmt$(summary.diPotential)}
               sub="From ongoing (not yet closed) distressed-inventory STOs"
               color="border-teal-500"
+            />
+            <KPI
+              label="On-Time Delivery"
+              value={summary.onTimePct != null ? `${summary.onTimePct}%` : '—'}
+              sub={
+                summary.onTimeMeasured > 0
+                  ? `${summary.onTimeCount} of ${summary.onTimeMeasured} closed met need-by`
+                  : 'No closed STOs with a need-by date yet'
+              }
+              color="border-sky-500"
             />
           </div>
         )}
@@ -776,6 +831,155 @@ export function Analytics() {
             </BarChart>
           </ResponsiveContainer>
         </Section>
+
+        {/* ── Row 4: Cycle time by stage + Aging buckets ───────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Section title="Avg Days in Each Stage" sub="cycle time">
+            {cycleTime.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-8">
+                Not enough workflow history yet
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={cycleTime.map(c => ({
+                    name: STATUS_LABELS[c.stage] ?? c.stage,
+                    days: c.avgDays,
+                  }))}
+                  layout="vertical"
+                  margin={{ top: 0, right: 24, left: 30, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                  <Tooltip formatter={(v: any) => [`${v} days`, 'Avg time in stage']} />
+                  <Bar dataKey="days" name="Avg days" radius={[0, 4, 4, 0]}>
+                    {cycleTime.map((_, i) => (
+                      <Cell key={i} fill={SITE_COLORS[i % SITE_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Section>
+
+          <Section title="Aging — Active STOs by Time in Stage">
+            {!aging ? (
+              <p className="text-gray-400 text-sm text-center py-8">No active STOs</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {[
+                    { label: '< 3d', value: aging.buckets.under3, color: 'text-gray-600' },
+                    { label: '3–6d', value: aging.buckets.d3to6, color: 'text-yellow-600' },
+                    { label: '7–13d', value: aging.buckets.d7to13, color: 'text-orange-600' },
+                    { label: '14d+', value: aging.buckets.d14plus, color: 'text-red-600' },
+                  ].map(b => (
+                    <div key={b.label} className="bg-gray-50 rounded-lg p-3 text-center">
+                      <div className={`text-2xl font-bold ${b.color}`}>{b.value}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{b.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {aging.oldest.length > 0 && (
+                  <div className="overflow-hidden rounded-lg border border-gray-100">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
+                          <th className="px-3 py-2 text-left font-medium">STO</th>
+                          <th className="px-3 py-2 text-left font-medium">Stage</th>
+                          <th className="px-3 py-2 text-right font-medium">Days</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {aging.oldest.slice(0, 5).map(r => (
+                          <tr
+                            key={r.id}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/sto/${r.id}`)}
+                          >
+                            <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-600">
+                              {r.sto_id}
+                            </td>
+                            <td className="px-3 py-2">
+                              <StatusBadge status={r.status} />
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold text-gray-800">
+                              {r.days_in_stage}d
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </Section>
+        </div>
+
+        {/* ── Rejections & revisions ───────────────────────────────────────────── */}
+        {rejections && (
+          <Section title="Rejections & Revisions">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              {[
+                { label: 'Planning Rejected', value: rejections.byStage.planningRejected },
+                { label: 'Ship. Mgmt Rejected', value: rejections.byStage.managementRejected },
+                { label: 'Recv. Mgmt Rejected', value: rejections.byStage.receivingMgmtRejected },
+                { label: 'Sent Back to Revise', value: rejections.byStage.planningRevised },
+              ].map(b => (
+                <div key={b.label} className="bg-red-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-red-600">{b.value}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{b.label}</div>
+                </div>
+              ))}
+            </div>
+            {rejections.recent.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-4">
+                No rejections or revisions in range
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <th className="px-4 py-2 text-left font-medium">STO</th>
+                      <th className="px-4 py-2 text-left font-medium">Action</th>
+                      <th className="px-4 py-2 text-left font-medium">Reason</th>
+                      <th className="px-4 py-2 text-left font-medium">By</th>
+                      <th className="px-4 py-2 text-left font-medium">When</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rejections.recent.map((r, i) => (
+                      <tr
+                        key={i}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => navigate(`/sto/${r.id}`)}
+                      >
+                        <td className="px-4 py-2 font-mono text-xs font-semibold text-blue-600">
+                          {r.sto_id}
+                        </td>
+                        <td className="px-4 py-2 text-gray-700">
+                          {r.action.replace(/_/g, ' ').toLowerCase()}
+                        </td>
+                        <td className="px-4 py-2 text-gray-600 max-w-[280px]">
+                          <span className="truncate block" title={r.notes ?? ''}>
+                            {r.notes || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-gray-500">{r.performed_by_name}</td>
+                        <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+                          {fmtDate(r.performed_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        )}
 
         {/* ── Raw data table ────────────────────────────────────────────────────── */}
         <Section title={`Raw Data — ${rawTotal.toLocaleString()} STOs`}>
