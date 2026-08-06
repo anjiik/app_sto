@@ -73,6 +73,7 @@ CREATE TABLE sto_requests (
     actual_receipt_date             DATE,
     delivery_closed_out             BIT DEFAULT 0,
     corporate_sto_tracker_status    VARCHAR(100),
+    sto_number_requested_at         DATETIME,
 
     inco_terms                      VARCHAR(100),
     estimated_delivery_date         DATE,
@@ -101,6 +102,25 @@ CREATE TABLE sto_config (
     config_value    VARCHAR(500) NOT NULL,
     updated_at      DATETIME DEFAULT GETDATE()
 );
+
+-- Attachments (e.g. Certificate of Analysis) — any signed-in user may add one to
+-- any STO at any point in the workflow. File bytes are stored in the row.
+CREATE TABLE sto_attachments (
+    id              INT PRIMARY KEY IDENTITY(1,1),
+    sto_request_id  INT NOT NULL,
+    file_name       VARCHAR(255) NOT NULL,
+    content_type    VARCHAR(100) NOT NULL,
+    file_size       INT NOT NULL,
+    category        VARCHAR(50) NOT NULL DEFAULT 'Other',
+    file_data       VARBINARY(MAX) NOT NULL,
+    uploaded_by     VARCHAR(200) NOT NULL,
+    uploaded_at     DATETIME DEFAULT GETDATE(),
+    CONSTRAINT FK_sto_attachments_sto FOREIGN KEY (sto_request_id)
+        REFERENCES sto_requests(id)
+);
+
+CREATE NONCLUSTERED INDEX IX_sto_attachments_sto
+  ON sto_attachments (sto_request_id, uploaded_at DESC);
 
 INSERT INTO sto_config (config_key, config_value) VALUES
     ('management_approval_material_threshold', '10000'),

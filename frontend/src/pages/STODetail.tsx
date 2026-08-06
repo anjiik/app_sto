@@ -218,6 +218,165 @@ function Section({
   );
 }
 
+// ── Attachments (e.g. Certificate of Analysis) ───────────────────────────────
+// Any signed-in user can attach a file to the STO at any point in the workflow.
+interface Attachment {
+  id: number;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  category: string;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
+const ATTACHMENT_CATEGORIES = ['Certificate of Analysis', 'Other'] as const;
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Attachments({ stoId }: { stoId: string }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
+  const [items, setItems] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [category, setCategory] = useState<string>(ATTACHMENT_CATEGORIES[0]);
+  const [error, setError] = useState('');
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/sto/${stoId}/attachments`)
+      .then(r => setItems(r.data))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stoId]);
+
+  async function handleFile(file: File) {
+    setError('');
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('category', category);
+    try {
+      await api.post(`/sto/${stoId}/attachments`, form);
+      load();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : 'Upload failed';
+      setError(msg || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDelete(a: Attachment) {
+    if (!window.confirm(`Remove "${a.file_name}"?`)) return;
+    try {
+      await api.delete(`/sto/${stoId}/attachments/${a.id}`);
+      load();
+    } catch {
+      setError('Failed to remove attachment');
+    }
+  }
+
+  // The download endpoint requires the auth header, so a plain <a href> would
+  // fail — fetch as a blob (axios attaches the token) and open it via an
+  // object URL instead.
+  async function handleOpen(a: Attachment) {
+    try {
+      const r = await api.get(`/sto/${stoId}/attachments/${a.id}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setError('Failed to open attachment');
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h3 className="font-semibold text-gray-800">Attachments</h3>
+        <div className="flex items-center gap-2">
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {ATTACHMENT_CATEGORIES.map(c => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <label className="bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-800 cursor-pointer disabled:opacity-50">
+            {uploading ? 'Uploading…' : '+ Add File'}
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              disabled={uploading}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        PDF, JPG, or PNG — max 10MB. Anyone can add a Certificate of Analysis or other document at
+        any point.
+      </p>
+      {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
+      {loading ? (
+        <p className="text-gray-400 text-sm">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-gray-400 text-sm">No attachments yet.</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {items.map(a => (
+            <div key={a.id} className="flex items-center justify-between py-2 gap-3">
+              <div className="min-w-0">
+                <button
+                  onClick={() => handleOpen(a)}
+                  className="text-sm font-medium text-blue-600 hover:underline truncate block text-left"
+                >
+                  {a.file_name}
+                </button>
+                <div className="text-xs text-gray-400">
+                  {a.category} · {fmtBytes(a.file_size)} · {a.uploaded_by} ·{' '}
+                  {new Date(a.uploaded_at).toLocaleString()}
+                </div>
+              </div>
+              {(a.uploaded_by === user?.name || admin) && (
+                <button
+                  onClick={() => handleDelete(a)}
+                  className="text-gray-400 hover:text-red-600 text-xs shrink-0"
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export function STODetail() {
   const { id } = useParams<{ id: string }>();
@@ -232,6 +391,14 @@ export function STODetail() {
   const [recvForm, setRecvForm] = useState<Record<string, string | boolean>>({});
   const [trackingForm, setTrackingForm] = useState<Record<string, string>>({});
   const [editTracking, setEditTracking] = useState(false);
+  interface ApprovalThresholds {
+    materialValueThreshold: number;
+    freightCostThreshold: number;
+    freightToValueRatioThreshold: number;
+    coldChainConditions: string[];
+    standardIncoTerms: string[];
+  }
+  const [thresholds, setThresholds] = useState<ApprovalThresholds | null>(null);
 
   function load() {
     setLoading(true);
@@ -243,6 +410,15 @@ export function STODetail() {
   useEffect(() => {
     load();
   }, [id]);
+
+  // Fetched once — used to live-preview whether the in-progress logistics
+  // submission will require management approval (see the Ready to Ship gate).
+  useEffect(() => {
+    api
+      .get('/sto/approval-thresholds')
+      .then(r => setThresholds(r.data))
+      .catch(() => {});
+  }, []);
 
   async function doAction(endpoint: string, body: object) {
     setActionLoading(true);
@@ -621,12 +797,6 @@ export function STODetail() {
                     prefill: sto.container_information,
                   },
                   {
-                    key: 'sto_number',
-                    label: 'STO Number',
-                    placeholder: 'e.g. STO-2026-00001',
-                    prefill: sto.sto_number,
-                  },
-                  {
                     key: 'shipment_id',
                     label: 'Shipment ID',
                     placeholder: 'e.g. SHP-20001',
@@ -647,6 +817,37 @@ export function STODetail() {
                 ))}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    STO Number
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="e.g. STO-2026-00001"
+                      defaultValue={sto.sto_number ?? ''}
+                      onChange={e => setLogisticsForm(p => ({ ...p, sto_number: e.target.value }))}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => doAction('request-sto-number', {})}
+                      disabled={actionLoading || !!sto.sto_number}
+                      title={
+                        sto.sto_number
+                          ? 'STO# is already populated'
+                          : 'Remind the requestor to add the SAP STO# on the tracker'
+                      }
+                      className="shrink-0 px-3 py-2 text-xs font-medium rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Request STO#
+                    </button>
+                  </div>
+                  {sto.sto_number_requested_at && !sto.sto_number && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Reminder sent {fmt(sto.sto_number_requested_at)} — awaiting the requestor.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Freight Cost (USD) <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -662,12 +863,6 @@ export function STODetail() {
                   </p>
                 </div>
                 {[
-                  {
-                    key: 'expedited_estimated_ship_date',
-                    label: 'Expedited Estimated Ship Date',
-                    prefill: sto.expedited_estimated_ship_date,
-                    req: false,
-                  },
                   {
                     key: 'pgi_date',
                     label: 'PGI Date (Goods Issued from SAP)',
@@ -700,17 +895,61 @@ export function STODetail() {
                   </div>
                 ))}
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  defaultChecked={Boolean(sto.ready_to_ship)}
-                  onChange={e => setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))}
-                  className="w-4 h-4 text-teal-600 rounded"
-                />
-                <span className="text-sm text-gray-700 font-medium">
-                  Ready to Ship {sto.mgmt_confirmed && <span className="text-red-500">*</span>}
-                </span>
-              </label>
+              {(() => {
+                // Live-preview whether THIS submission will require management
+                // approval, using the same rules the backend applies at submit
+                // time — so "Ready to Ship" can't be checked off for a shipment
+                // that's about to be routed to management review. Only relevant
+                // on the first pass; once mgmt_confirmed, approval already happened.
+                const freightStr = (logisticsForm.freight_cost as string) ?? sto.freight_cost;
+                const freightCost = parseFloat(String(freightStr || '0')) || 0;
+                const materialValue = parseFloat(String(sto.material_value || '0')) || 0;
+                const freightToValueRatio = materialValue > 0 ? freightCost / materialValue : 0;
+                const incoTerm = String(sto.inco_terms || '')
+                  .trim()
+                  .toUpperCase();
+                const previewMgmtRequired =
+                  !sto.mgmt_confirmed &&
+                  !!thresholds &&
+                  (materialValue > thresholds.materialValueThreshold ||
+                    freightCost > thresholds.freightCostThreshold ||
+                    freightToValueRatio > thresholds.freightToValueRatioThreshold ||
+                    thresholds.coldChainConditions.includes(String(sto.shipping_conditions || '')) ||
+                    Boolean(sto.controlled_shipping_required) ||
+                    (incoTerm !== '' && !thresholds.standardIncoTerms.includes(incoTerm)));
+
+                return (
+                  <>
+                    <label
+                      className={`flex items-center gap-2 ${previewMgmtRequired ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          previewMgmtRequired
+                            ? false
+                            : ((logisticsForm.ready_to_ship as boolean | undefined) ??
+                              Boolean(sto.ready_to_ship))
+                        }
+                        disabled={previewMgmtRequired}
+                        onChange={e =>
+                          setLogisticsForm(p => ({ ...p, ready_to_ship: e.target.checked }))
+                        }
+                        className="w-4 h-4 text-teal-600 rounded disabled:cursor-not-allowed"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">
+                        Ready to Ship {sto.mgmt_confirmed && <span className="text-red-500">*</span>}
+                      </span>
+                    </label>
+                    {previewMgmtRequired && (
+                      <p className="text-orange-600 text-xs font-medium">
+                        ⚠ This shipment will require management approval — Ready to Ship can't be
+                        checked off until both management approvals are complete.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
               {sto.mgmt_confirmed && (
                 <p className="text-xs text-gray-500">
                   Actual ship date, estimated delivery date, PGI date and Ready to Ship are required
@@ -759,10 +998,6 @@ export function STODetail() {
               <div>
                 <span className="text-xs text-gray-400 block">Ready to Ship</span>
                 {sto.ready_to_ship ? 'Yes' : '–'}
-              </div>
-              <div>
-                <span className="text-xs text-gray-400 block">Expedited Ship Date</span>
-                {fmt(sto.expedited_estimated_ship_date)}
               </div>
               <div>
                 <span className="text-xs text-gray-400 block">PGI Date</span>
@@ -887,6 +1122,22 @@ export function STODetail() {
             </div>
           )}
         </Section>
+
+        {/* ── Attachments (e.g. Certificate of Analysis) — visible to everyone ── */}
+        <Attachments stoId={id!} />
+
+        {/* ── STO# reminder banner (requestor only) ── */}
+        {isRequestor && sto.sto_number_requested_at && !sto.sto_number && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm flex items-center justify-between gap-4">
+            <span>
+              ⏰ Shipping Logistics is waiting on the SAP STO# — please add it below once it's
+              generated by Receiving Site Planning.
+            </span>
+            <span className="text-xs text-amber-600 whitespace-nowrap">
+              Requested {fmt(sto.sto_number_requested_at)}
+            </span>
+          </div>
+        )}
 
         {/* ── Tracking Reference (editable by requestor or admin) ── */}
         {(isRequestor || admin) && (

@@ -79,6 +79,7 @@ export interface STORequest {
   receiving_mgmt_approved?: boolean;
   receiving_mgmt_notes?: string;
   sto_number?: string;
+  sto_number_requested_at?: string | null;
   shipment_id?: string;
   ready_to_ship?: boolean;
   pgi_date?: string;

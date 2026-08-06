@@ -435,6 +435,27 @@ router.get('/filter-options', async (_req: AuthRequest, res: Response): Promise<
   }
 });
 
+// ── GET /api/sto/approval-thresholds ──────────────────────────────────────────
+// Exposes the live (env-configurable) management-approval thresholds so the
+// frontend can preview whether an in-progress logistics submission will require
+// management approval, without duplicating/hardcoding the values client-side.
+router.get(
+  '/approval-thresholds',
+  async (_req: AuthRequest, res: Response): Promise<void> => {
+    res.json({
+      materialValueThreshold: parseFloat(
+        process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000',
+      ),
+      freightCostThreshold: parseFloat(
+        process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000',
+      ),
+      freightToValueRatioThreshold: 0.3,
+      coldChainConditions: ['Cold 2-8C', 'Cold below 0', 'Frozen'],
+      standardIncoTerms: ['FCA', 'DAP'],
+    });
+  },
+);
+
 // ── GET /api/sto/:id ──────────────────────────────────────────────────────────
 
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -726,6 +747,8 @@ router.patch(
         sto_number = @sto_number,
         shipment_id = @shipment_id,
         corporate_sto_tracker_status = @corporate_sto_tracker_status,
+        -- Filling in the STO# fulfils any outstanding request for it.
+        sto_number_requested_at = CASE WHEN @sto_number IS NOT NULL THEN NULL ELSE sto_number_requested_at END,
         updated_at = GETDATE()
       WHERE id = @id`,
         {

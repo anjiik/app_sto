@@ -14,6 +14,7 @@ import approvalRoutes from './routes/approvals';
 import analyticsRoutes from './routes/analytics';
 import siteRoutes from './routes/sites';
 import adminRoutes from './routes/admin';
+import attachmentRoutes from './routes/attachments';
 
 // ── Startup env validation ────────────────────────────────────────────────────
 // Fail fast rather than silently misbehaving at runtime.
@@ -58,6 +59,7 @@ app.use('/api/', apiLimit);
 app.use('/api/auth', authRoutes);
 app.use('/api/sto', stoRoutes);
 app.use('/api/sto', approvalRoutes);
+app.use('/api/sto', attachmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 app.use('/api/sites', siteRoutes);
