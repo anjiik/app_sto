@@ -289,14 +289,15 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     }
 
     // On the post-management confirm pass, actual ship date, estimated delivery
-    // date, PGI date and ready-to-ship become mandatory before the STO can move
-    // on to receiving logistics.
+    // date, PGI date, ready-to-ship, and the SAP STO# become mandatory before
+    // the STO can move on to receiving logistics (i.e. before it ships).
     if (alreadyConfirmed) {
       const missing: string[] = [];
       if (!body.actual_ship_date) missing.push('Actual Ship Date');
       if (!body.estimated_delivery_date) missing.push('Estimated Delivery Date');
       if (!body.pgi_date) missing.push('PGI Date');
       if (!body.ready_to_ship) missing.push('Ready to Ship');
+      if (!body.sto_number && !sto.sto_number) missing.push('STO Number');
       if (missing.length) {
         res.status(400).json({ message: `Required before continuing: ${missing.join(', ')}` });
         return;

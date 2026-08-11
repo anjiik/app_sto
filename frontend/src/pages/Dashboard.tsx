@@ -262,6 +262,9 @@ export function Dashboard() {
   // Drafts the current user created — shown regardless of role or site.
   // Split into reverted (sent back for revision) vs never-submitted.
   const [myDrafts, setMyDrafts] = useState<STORequest[]>([]);
+  // STOs the current user requested where Shipping Logistics has asked for the
+  // SAP STO# to be populated on the tracker, and it's still blank.
+  const [stoNumberReminders, setStoNumberReminders] = useState<STORequest[]>([]);
   const [kpis, setKpis] = useState<Kpis>({ rushActive: 0, dueSoon: 0, overdue: 0 });
   const [rushAlertItems, setRushAlertItems] = useState<STORequest[]>([]);
   const [needByItems, setNeedByItems] = useState<STORequest[]>([]);
@@ -338,23 +341,33 @@ export function Dashboard() {
       api.get('/sto/audit-log'),
       // 7. Drafts the current user created — by requestor name, any site/role.
       api.get(`/sto?status=DRAFT&requestor=${encodeURIComponent(user.name)}&limit=50`),
+      // 8. This user's active STOs — filtered client-side for an outstanding
+      // STO# request (there's no dedicated server-side filter for this yet).
+      api.get(`/sto?active_only=1&requestor=${encodeURIComponent(user.name)}&limit=100`),
     ])
-      .then(([byStatusRes, sections, kpisRes, rushRes, needByRes, auditRes, myDraftsRes]) => {
-        const counts: Partial<Record<STOStatus, number>> = {};
-        (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
-          counts[r.status] = r.count;
-        });
-        setStageCounts(counts);
-        setQueueSections(sections);
-        setMyQueueTotal(
-          sections.reduce((n, s) => n + s.total, 0) + (myDraftsRes.data.pagination?.total ?? 0),
-        );
-        setKpis(kpisRes.data);
-        setRushAlertItems(rushRes.data.data);
-        setNeedByItems(needByRes.data.data);
-        setAudit(auditRes.data);
-        setMyDrafts(myDraftsRes.data.data);
-      })
+      .then(
+        ([byStatusRes, sections, kpisRes, rushRes, needByRes, auditRes, myDraftsRes, myActiveRes]) => {
+          const counts: Partial<Record<STOStatus, number>> = {};
+          (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
+            counts[r.status] = r.count;
+          });
+          setStageCounts(counts);
+          setQueueSections(sections);
+          setMyQueueTotal(
+            sections.reduce((n, s) => n + s.total, 0) + (myDraftsRes.data.pagination?.total ?? 0),
+          );
+          setKpis(kpisRes.data);
+          setRushAlertItems(rushRes.data.data);
+          setNeedByItems(needByRes.data.data);
+          setAudit(auditRes.data);
+          setMyDrafts(myDraftsRes.data.data);
+          setStoNumberReminders(
+            (myActiveRes.data.data as STORequest[]).filter(
+              s => s.sto_number_requested_at && !s.sto_number,
+            ),
+          );
+        },
+      )
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -479,6 +492,42 @@ export function Dashboard() {
             color="rose"
           />
         </div>
+
+        {/* ── STO# needed — Shipping Logistics is waiting on the tracker number ── */}
+        {!loading && stoNumberReminders.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-center gap-2 px-6 py-4 border-b border-amber-100">
+              <h2 className="font-semibold text-amber-800">⏰ STO# Needed</h2>
+              <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {stoNumberReminders.length}
+              </span>
+            </div>
+            <div className="divide-y divide-amber-100">
+              {stoNumberReminders.map(sto => (
+                <Link
+                  key={sto.id}
+                  to={`/sto/${sto.id}`}
+                  className="flex items-center justify-between gap-4 px-6 py-3 hover:bg-amber-100/50 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-medium text-gray-900 text-sm">
+                        {sto.sto_id}
+                      </span>
+                      <StatusBadge status={sto.status} />
+                    </div>
+                    <div className="text-xs text-gray-500 truncate max-w-[420px]">
+                      {sto.material_description || sto.material_sap || '—'}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-amber-700">
+                    Add STO# →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── My Drafts — STOs I created that are back with me ── */}
         {!loading && myDrafts.length > 0 && (

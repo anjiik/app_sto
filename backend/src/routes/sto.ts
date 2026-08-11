@@ -215,7 +215,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
              receiving_site_need_by_date, estimated_ship_by_date,
              management_approval_required, planning_approved, management_approved,
              receiving_mgmt_approved, ready_to_ship, tracking_id, corporate_sto_tracker_status,
-             rejection_reason, created_at, updated_at
+             rejection_reason, sto_number, sto_number_requested_at, created_at, updated_at
       FROM sto_requests${where}
       ${orderBy}
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY

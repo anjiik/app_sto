@@ -617,6 +617,39 @@ const DEMO_USERS: DemoUser[] = [
     group_key: 'receiving_logistics',
   },
 
+  // ── Site MBM ──────────────────────────────────────────────────────────────
+  {
+    username: 'mbm.recv',
+    display_name: 'Olivia Bennett',
+    site: 'MBM',
+    group_key: 'receiving_site',
+  },
+  {
+    username: 'mbm.plan',
+    display_name: 'Marcus Ellery',
+    site: 'MBM',
+    group_key: 'shipping_planning',
+  },
+  {
+    username: 'mbm.slog',
+    display_name: 'Priya Deshmukh',
+    site: 'MBM',
+    group_key: 'shipping_logistics',
+  },
+  { username: 'mbm.mgmt', display_name: 'Derek Holloway', site: 'MBM', group_key: 'management' },
+  {
+    username: 'mbm.rmgmt',
+    display_name: 'Naomi Castillo',
+    site: 'MBM',
+    group_key: 'receiving_management',
+  },
+  {
+    username: 'mbm.rlog',
+    display_name: 'Felix Andersson',
+    site: 'MBM',
+    group_key: 'receiving_logistics',
+  },
+
   // ── Site XYZ ──────────────────────────────────────────────────────────────
   { username: 'xyz.recv', display_name: 'Maria Evans', site: 'XYZ', group_key: 'receiving_site' },
   {
@@ -714,7 +747,8 @@ async function seedSites(): Promise<void> {
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABC', 'Site ABC')`);
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABL', 'Site ABL')`);
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('XYZ', 'Site XYZ')`);
-  console.log('✓ Seeded 3 sites (ABC, ABL, XYZ).');
+  await dbExecute(`INSERT INTO sites (code, name) VALUES ('MBM', 'Site MBM')`);
+  console.log('✓ Seeded 4 sites (ABC, ABL, XYZ, MBM).');
 }
 
 async function seedAppUsers(): Promise<void> {

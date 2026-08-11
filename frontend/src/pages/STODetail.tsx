@@ -817,7 +817,7 @@ export function STODetail() {
                 ))}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    STO Number
+                    STO Number {sto.mgmt_confirmed && <span className="text-red-500">*</span>}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -952,8 +952,8 @@ export function STODetail() {
               })()}
               {sto.mgmt_confirmed && (
                 <p className="text-xs text-gray-500">
-                  Actual ship date, estimated delivery date, PGI date and Ready to Ship are required
-                  before continuing.
+                  Actual ship date, estimated delivery date, PGI date, STO Number, and Ready to
+                  Ship are required before continuing.
                 </p>
               )}
               <button
@@ -969,6 +969,7 @@ export function STODetail() {
                       missing.push('Estimated Delivery Date');
                     if (!f.pgi_date && !sto.pgi_date) missing.push('PGI Date');
                     if (!f.ready_to_ship && !sto.ready_to_ship) missing.push('Ready to Ship');
+                    if (!f.sto_number && !sto.sto_number) missing.push('STO Number');
                     if (missing.length) {
                       setMessage({
                         text: `Required before continuing: ${missing.join(', ')}`,
