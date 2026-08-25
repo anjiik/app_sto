@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supply Chain Systems Consolidation — Recommendation</title>
+<style>
+  :root {
+    --ink: #1a2029;
+    --ink-soft: #4a5364;
+    --paper: #f6f4ee;
+    --paper-raised: #fcfbf7;
+    --line: #d8d3c5;
+    --line-soft: #e6e2d5;
+    --accent: #2f5d8a;
+    --accent-soft: #e4edf5;
+    --accent-ink: #1f4266;
+    --warn: #b5542a;
+    --warn-soft: #f6e8de;
+    --warn-ink: #8a3f1d;
+    --good: #3f6b4f;
+    --good-soft: #e5edE6;
+    --good-ink: #2c4d38;
+    --mono-tag-bg: #eeece2;
+    --shadow: 0 1px 2px rgba(26,32,41,0.06), 0 6px 20px -8px rgba(26,32,41,0.12);
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #e9e6dc;
+    --ink-soft: #a8aebb;
+    --paper: #14171d;
+    --paper-raised: #1b1f27;
+    --line: #33394a;
+    --line-soft: #262b37;
+    --accent: #7fb2e5;
+    --accent-soft: #1c2c3d;
+    --accent-ink: #bcdcfb;
+    --warn: #e2905f;
+    --warn-soft: #3a2417;
+    --warn-ink: #f0b790;
+    --good: #8fc19f;
+    --good-soft: #1c2c22;
+    --good-ink: #b7ddc2;
+    --mono-tag-bg: #232833;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e9e6dc;
+      --ink-soft: #a8aebb;
+      --paper: #14171d;
+      --paper-raised: #1b1f27;
+      --line: #33394a;
+      --line-soft: #262b37;
+      --accent: #7fb2e5;
+      --accent-soft: #1c2c3d;
+      --accent-ink: #bcdcfb;
+      --warn: #e2905f;
+      --warn-soft: #3a2417;
+      --warn-ink: #f0b790;
+      --good: #8fc19f;
+      --good-soft: #1c2c22;
+      --good-ink: #b7ddc2;
+      --mono-tag-bg: #232833;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 4.5rem 2rem 6rem;
+  }
+
+  h1, h2, h3, .display {
+    font-family: Fraunces, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-weight: 600;
+    color: var(--ink);
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .mono, .tag, .count, code {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Masthead ───────────────────────────────────────────── */
+
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding-bottom: 2.5rem;
+    margin-bottom: 3rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .kicker::before {
+    content: "";
+    width: 22px;
+    height: 1px;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 4.4vw, 2.85rem);
+    line-height: 1.08;
+    margin: 0;
+  }
+
+  .subtitle {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    line-height: 1.55;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.6rem;
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+
+  .meta-row span b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* ── Prose sections ─────────────────────────────────────── */
+
+  section { margin-bottom: 3.2rem; }
+
+  .section-head {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 0.9rem;
+    align-items: baseline;
+    margin-bottom: 1.3rem;
+  }
+
+  .section-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    border-right: 1px solid var(--line);
+    padding-right: 0.9rem;
+    line-height: 1;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .lede {
+    grid-column: 2;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    max-width: 68ch;
+    margin-top: 0.35rem;
+  }
+
+  .prose {
+    max-width: 68ch;
+    padding-left: calc(2.6rem + 0.9rem);
+  }
+
+  .prose p { margin: 0 0 1rem; }
+  .prose p:last-child { margin-bottom: 0; }
+  .prose strong { color: var(--ink); font-weight: 600; }
+
+  .prose ul, .prose ol {
+    margin: 0 0 1rem;
+    padding-left: 1.3rem;
+  }
+  .prose li { margin-bottom: 0.45rem; }
+  .prose li:last-child { margin-bottom: 0; }
+
+  .body-block {
+    padding-left: calc(2.6rem + 0.9rem);
+  }
+
+  /* ── Callout ────────────────────────────────────────────── */
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 1rem 1.2rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.92rem;
+    color: var(--accent-ink);
+    max-width: 68ch;
+    margin: 1.2rem 0;
+  }
+  .callout b { font-weight: 700; }
+
+  /* ── System inventory table ────────────────────────────── */
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    min-width: 760px;
+  }
+
+  thead th {
+    text-align: left;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  .sys-name {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .platform-tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    background: var(--mono-tag-bg);
+    color: var(--ink-soft);
+    padding: 0.16rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .phase-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .phase-chip.p1 { background: var(--accent-soft); color: var(--accent-ink); }
+  .phase-chip.p2 { background: var(--good-soft); color: var(--good-ink); }
+  .phase-chip.p3 { background: var(--mono-tag-bg); color: var(--ink-soft); }
+  .phase-chip.hold { background: var(--warn-soft); color: var(--warn-ink); }
+
+  .note-cell {
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    max-width: 26ch;
+  }
+
+  /* ── Roadmap phases ─────────────────────────────────────── */
+
+  .roadmap {
+    padding-left: calc(2.6rem + 0.9rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .phase-card {
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    border-radius: 10px;
+    padding: 1.3rem 1.5rem;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+
+  .phase-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 10px 0 0 10px;
+  }
+  .phase-card.p1::before { background: var(--accent); }
+  .phase-card.p2::before { background: var(--good); }
+  .phase-card.p3::before { background: var(--ink-soft); opacity: 0.5; }
+
+  .phase-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+  }
+
+  .phase-title {
+    font-family: Fraunces, serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+  }
+
+  .phase-window {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+  }
+
+  .phase-systems {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.7rem 0;
+  }
+
+  .phase-desc {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    max-width: 64ch;
+  }
+
+  /* ── Risk / pain grid ───────────────────────────────────── */
+
+  .pain-grid {
+    padding-left: calc(2.6rem + 0.9rem);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.9rem;
+  }
+
+  @media (max-width: 640px) {
+    .pain-grid { grid-template-columns: 1fr; }
+  }
+
+  .pain-card {
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+  }
+
+  .pain-quote {
+    font-style: italic;
+    color: var(--warn-ink);
+    font-size: 0.88rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .pain-source {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Principles list ────────────────────────────────────── */
+
+  .principles {
+    padding-left: calc(2.6rem + 0.9rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .principle {
+    display: grid;
+    grid-template-columns: 1.6rem 1fr;
+    gap: 0.9rem;
+    padding: 0.95rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .principle:last-child { border-bottom: none; }
+
+  .principle-mark {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--accent);
+    font-size: 0.9rem;
+  }
+
+  .principle b {
+    display: block;
+    font-size: 0.94rem;
+    margin-bottom: 0.2rem;
+    color: var(--ink);
+  }
+  .principle span {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  /* ── Footer ─────────────────────────────────────────────── */
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  a { color: var(--accent); }
+
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="kicker">Recommendation — Supply Chain Systems Program</div>
+    <h1>Nineteen systems, one supply chain: a consolidation roadmap</h1>
+    <p class="subtitle">
+      Your team's own data-structure audit surfaced 19 overlapping tools spanning PowerApps,
+      SharePoint, Smartsheet, and Excel. This memo reads that audit back, names the cluster
+      worth building first, and proposes a phased path that doesn't require replacing
+      everything at once.
+    </p>
+    <div class="meta-row">
+      <span>Source: <b>Supply Chain Data Structure</b> audit (Sheet1 / Process&nbsp;Map)</span>
+      <span>Systems catalogued: <b>19</b></span>
+      <span>Status: <b>Draft for review</b></span>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>What the audit actually shows</h2>
+    </div>
+    <div class="prose">
+      <p>
+        The spreadsheet you put together is more valuable than a typical systems list because
+        it captures four things most audits skip: <strong>what platform each tool runs on</strong>,
+        <strong>which systems share or duplicate data</strong>, <strong>who approves what</strong>, and
+        — in the "Feedback on current functionality" column — <strong>what's actually broken</strong>,
+        in your team's own words.
+      </p>
+      <p>
+        Read together, three findings stand out.
+      </p>
+      <ul>
+        <li>
+          <strong>A tightly-coupled core already exists.</strong> The Process Map sheet draws it
+          out: Material&nbsp;Request, Firm&nbsp;Zone, Ship&nbsp;Ticket, IRQ, and STO&nbsp;Request&nbsp;(Corporate)
+          reference each other's records directly — a shipment on Ship Ticket can originate
+          from a Material Request or a Firm Zone remake, and IRQ tracks the same delivery an
+          STO created. These five aren't candidates for integration later; they're already one
+          workflow, just split across a PowerApp, two SharePoint lists, and a standalone React
+          app.
+        </li>
+        <li>
+          <strong>The platform itself is the bottleneck, not the people.</strong> "Clunky and buggy,"
+          "duplicate work," "today: N/A automation," "doesn't really have a tool" — these
+          aren't complaints about process design, they're complaints about tools that can't do
+          what the process needs. PowerApps and Smartsheet are form builders; none of them
+          were built to run a multi-step approval with role-based routing, which is exactly
+          what six of these nineteen rows are actually trying to do.
+        </li>
+        <li>
+          <strong>Some rows aren't systems at all — they're a gap with a name.</strong> Aging
+          Inventory is listed with the note <em>"doesn't really have a tool."</em> Distressed
+          inventory has no flag anywhere in the current landscape. These cost nothing to build
+          wrong and everything to leave unbuilt, because right now they're nobody's job to
+          maintain.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>The 19 systems, reclassified</h2>
+    </div>
+    <p class="lede" style="padding-left:0; margin-bottom:1.2rem;">
+      Same rows as your audit, sorted by where each one sits in the process map rather than
+      alphabetically — the core movement workflow first, then the satellite trackers, then the
+      files nobody quite owns.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>Platform</th>
+            <th>Role in the process</th>
+            <th>Recommended phase</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="sys-name">STO Request</td>
+            <td><span class="platform-tag">React · SQL</span></td>
+            <td class="note-cell">Corporate transfer orders — the most mature system in the landscape; multi-step approval already works</td>
+            <td><span class="phase-chip p1">● Phase 1 · foundation</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Ship Ticket</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">Shipment / appointment / misc-work requests — the hub the process map routes through</td>
+            <td><span class="phase-chip p1">● Phase 1 · core</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">IRQ</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">Incoming delivery tracking; duplicates Delivery Schedule data today</td>
+            <td><span class="phase-chip p1">● Phase 1 · core</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Material Request</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">Warehouse/raw material requests; feeds Firm Zone and rush timelines</td>
+            <td><span class="phase-chip p1">● Phase 1 · core</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Firm Zone</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">Schedule remakes / late-shipping requests inside the 2–5 week lock window</td>
+            <td><span class="phase-chip p1">● Phase 1 · core</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Delivery Schedule</td>
+            <td><span class="platform-tag">Excel · Control Tower</span></td>
+            <td class="note-cell">PO tracking, delay escalation — already flagged for retirement into IRQ</td>
+            <td><span class="phase-chip p1">● Phase 1 · fold in</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">DNCM</td>
+            <td><span class="platform-tag">PowerApp · SQL/SharePoint</span></td>
+            <td class="note-cell">Non-conforming material decisioning — feeds a distinct approval tree off Material Request</td>
+            <td><span class="phase-chip p2">● Phase 2</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Vial Transfer Database</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">Cell bank issuance approvals, gated by SC manager + QA</td>
+            <td><span class="phase-chip p2">● Phase 2</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">SLED</td>
+            <td><span class="platform-tag">Excel · SAP/Control Tower</span></td>
+            <td class="note-cell">Expiring-materials reference list; "semi-automated in Excel" today</td>
+            <td><span class="phase-chip p2">● Phase 2</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Aging Inventory</td>
+            <td><span class="platform-tag">— none —</span></td>
+            <td class="note-cell">No tool exists. Distressed-inventory flag and savings tracking has nowhere to live</td>
+            <td><span class="phase-chip p2">● Phase 2 · new</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">DSP Request</td>
+            <td><span class="platform-tag">PowerApp · SharePoint</span></td>
+            <td class="note-cell">New-material setup / onboarding, routed to Eng, Planning, QA, Finance</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Used Resin & TFF Membranes</td>
+            <td><span class="platform-tag">PowerApp</span></td>
+            <td class="note-cell">Per-transfer inventory that "doesn't get stored in SAP after cycles" — tracking gap</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Calibration Scheduling Tool</td>
+            <td><span class="platform-tag">Smartsheet</span></td>
+            <td class="note-cell">Cal requests off Ship Ticket assets — "duplicate work" per team feedback</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Cycle Count / Kitting</td>
+            <td><span class="platform-tag">Smartsheet</span></td>
+            <td class="note-cell">Inventory counts and reconciliation against SAP</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Label Tracker</td>
+            <td><span class="platform-tag">Smartsheet</span></td>
+            <td class="note-cell">Per-label-packet tracking to Tobin; candidate to feed IRQ directly</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">PSP Ship App</td>
+            <td><span class="platform-tag">PowerApp</span></td>
+            <td class="note-cell">Batch-level shipment planning and labeling activity log</td>
+            <td><span class="phase-chip p3">○ Phase 3</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">Freezer Directory</td>
+            <td><span class="platform-tag">SharePoint</span></td>
+            <td class="note-cell">Reference directory; low change-frequency, low urgency</td>
+            <td><span class="phase-chip hold">◌ Hold</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">eMDO</td>
+            <td><span class="platform-tag">—</span></td>
+            <td class="note-cell">Feeds DNCM and SLED file; scope unclear from the audit — needs a working session</td>
+            <td><span class="phase-chip hold">◌ Hold · clarify</span></td>
+          </tr>
+          <tr>
+            <td class="sys-name">PO Release / Wrap-up / Planning files</td>
+            <td><span class="platform-tag">Excel</span></td>
+            <td class="note-cell">Ungoverned working files; fold into whichever phase touches their source data</td>
+            <td><span class="phase-chip hold">◌ Hold</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Why start with the core six, not everything</h2>
+    </div>
+    <div class="prose">
+      <p>
+        Nineteen systems can't move at once — not for budget reasons, for <strong>correctness</strong>
+        reasons. Ship Ticket, IRQ, Material Request, Firm Zone, and Delivery Schedule already
+        share overlapping records; migrating any one of them without the others just relocates
+        the duplicate-entry problem instead of solving it. STO Request belongs in this same
+        first phase for a different reason: it's the one system in the audit that already
+        proves the architecture works — role-based approval routing, multi-site scoping, and
+        an audit trail, running in production today.
+      </p>
+      <p>
+        Phase 1 is deliberately the smallest slice that removes a real duplicate-entry problem
+        end to end, rather than the largest slice that looks impressive on a roadmap slide.
+      </p>
+    </div>
+    <div class="callout">
+      <b>Working definition of "done" for Phase 1:</b> a shipment can move from Material
+      Request through Firm Zone, Ship Ticket, IRQ, and an STO record, touching each piece of
+      data exactly once — no re-keying between systems, one audit trail end to end.
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>Proposed phasing</h2>
+    </div>
+    <div class="roadmap">
+
+      <div class="phase-card p1">
+        <div class="phase-top">
+          <span class="phase-title">Phase 1 — Core movement platform</span>
+          <span class="phase-window">Foundation build</span>
+        </div>
+        <div class="phase-systems">
+          <span class="platform-tag">STO Request</span>
+          <span class="platform-tag">Ship Ticket</span>
+          <span class="platform-tag">IRQ</span>
+          <span class="platform-tag">Material Request</span>
+          <span class="platform-tag">Firm Zone</span>
+          <span class="platform-tag">Delivery Schedule</span>
+        </div>
+        <p class="phase-desc">
+          One data model for "something needs to move" — request, approval, shipment,
+          delivery, in a single database instead of five. This is the system of record the
+          rest of the program builds on, so it gets the real engineering investment: proper
+          auth and role/site scoping, a real audit trail, and a workflow engine that can
+          express each of these five approval paths without a fresh PowerApp per exception.
+        </p>
+      </div>
+
+      <div class="phase-card p2">
+        <div class="phase-top">
+          <span class="phase-title">Phase 2 — Attach the adjacent trackers</span>
+          <span class="phase-window">Extend the platform</span>
+        </div>
+        <div class="phase-systems">
+          <span class="platform-tag">DNCM</span>
+          <span class="platform-tag">Vial Transfer Database</span>
+          <span class="platform-tag">SLED</span>
+          <span class="platform-tag">Aging Inventory <em style="font-style:normal;opacity:.65;">(new)</em></span>
+        </div>
+        <p class="phase-desc">
+          Each of these already references Phase 1 data (Material Request, STO, SLED all
+          overlap) but runs its own approval logic — non-conforming-material decisioning,
+          cell-bank issuance sign-off, expiring-material review. Once the core platform
+          exists, each is a new record type and workflow on the same foundation, not a new
+          system. Aging Inventory is the one true green-field build in this phase: it has no
+          existing tool to migrate, only a gap to fill.
+        </p>
+      </div>
+
+      <div class="phase-card p3">
+        <div class="phase-top">
+          <span class="phase-title">Phase 3 — Satellite tools, case by case</span>
+          <span class="phase-window">Evaluate individually</span>
+        </div>
+        <div class="phase-systems">
+          <span class="platform-tag">DSP Request</span>
+          <span class="platform-tag">Calibration Scheduling</span>
+          <span class="platform-tag">Cycle Count / Kitting</span>
+          <span class="platform-tag">Used Resin &amp; TFF</span>
+          <span class="platform-tag">Label Tracker</span>
+          <span class="platform-tag">PSP Ship App</span>
+        </div>
+        <p class="phase-desc">
+          These touch the core workflow but don't block it — Calibration Scheduling and Label
+          Tracker could plausibly become record types on the platform; Cycle Count and DSP
+          Request may be better served staying on Smartsheet/PowerApps with a data sync back
+          to the core rather than a full migration. Decide each on its own after Phase 1 ships
+          and the pattern is proven, not up front.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <h2>What the audit's own feedback is telling you</h2>
+    </div>
+    <p class="lede" style="padding-left:0; margin-bottom:1.1rem;">
+      Pulled directly from the "Feedback on current functionality" column — the strongest
+      signal in the whole spreadsheet, because it's not a guess about pain, it's a report of it.
+    </p>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <p class="pain-quote">"Clunky and buggy."</p>
+        <p class="pain-source">MATERIAL REQUEST — the busiest system in the core cluster</p>
+      </div>
+      <div class="pain-card">
+        <p class="pain-quote">"Duplicate work — could the metrology scheduler go directly into ship ticket request form?"</p>
+        <p class="pain-source">CALIBRATION SCHEDULING TOOL</p>
+      </div>
+      <div class="pain-card">
+        <p class="pain-quote">"Doesn't really have a tool."</p>
+        <p class="pain-source">AGING INVENTORY — zero coverage today</p>
+      </div>
+      <div class="pain-card">
+        <p class="pain-quote">"Want more milestone tracking for inbound shipments."</p>
+        <p class="pain-source">IRQ — information duplicated from Delivery Schedule</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <h2>Operating principles for the build</h2>
+    </div>
+    <div class="principles">
+      <div class="principle">
+        <span class="principle-mark">→</span>
+        <div>
+          <b>One workflow engine, many record types.</b>
+          <span>Don't hand-build a bespoke approval flow per system the way the current PowerApps do. Model "request → review → approval → fulfillment" once, and let Ship Ticket, DNCM, and Vial Transfer each configure their own steps and roles against it.</span>
+        </div>
+      </div>
+      <div class="principle">
+        <span class="principle-mark">→</span>
+        <div>
+          <b>Migrate data once, not per phase.</b>
+          <span>Where two rows already share data today (IRQ / Delivery Schedule, Material Request / Firm Zone), bring both into the platform in the same phase, even if one is more urgent — otherwise the sync problem you're trying to kill just moves into the new system.</span>
+        </div>
+      </div>
+      <div class="principle">
+        <span class="principle-mark">→</span>
+        <div>
+          <b>Keep Smartsheet/Excel where migration isn't worth it.</b>
+          <span>Freezer Directory and the working Excel files don't need a rebuild — they need a clear owner and, if useful, a read-only feed into the platform. Not every row in the audit is a build.</span>
+        </div>
+      </div>
+      <div class="principle">
+        <span class="principle-mark">→</span>
+        <div>
+          <b>Resolve eMDO before Phase 2 starts.</b>
+          <span>It's the one system in the audit without a platform, UI, or clear owner listed, yet it feeds both DNCM and the SLED file. A short working session to scope it now is cheaper than discovering the gap mid-build.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Prepared from the team's Supply Chain Data Structure audit — Sheet1, Process Map Input, and Process Map tabs.</span>
+    <span>Draft for review — not yet scoped or estimated.</span>
+  </footer>
+
+</div>
+</body>
+</html>

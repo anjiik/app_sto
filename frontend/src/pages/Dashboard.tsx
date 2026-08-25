@@ -250,6 +250,127 @@ function DraftSection({
   );
 }
 
+// Non-terminal pipeline order, used to compute how far a request has
+// progressed for the mini progress bar. REJECTED is handled separately since
+// it can happen from several different stages, not a fixed position.
+const PROGRESS_STAGES: STOStatus[] = [
+  'DRAFT',
+  'PLANNING_REVIEW',
+  'SHIPPING_LOGISTICS',
+  'MANAGEMENT_REVIEW',
+  'RECEIVING_MGMT_REVIEW',
+  'RECEIVING_LOGISTICS',
+  'CLOSED',
+];
+
+// A compact segmented bar showing how far a request has progressed through
+// the workflow. Rejected requests show a filled red bar instead of segments,
+// since rejection can occur from any stage.
+function MiniProgress({ status }: { status: STOStatus }) {
+  if (status === 'REJECTED') {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="h-1.5 flex-1 rounded-full bg-red-400" />
+        <span className="text-xs text-red-600 font-medium shrink-0">Rejected</span>
+      </div>
+    );
+  }
+  const idx = PROGRESS_STAGES.indexOf(status);
+  const step = idx === -1 ? 0 : idx;
+  return (
+    <div className="flex items-center gap-0.5">
+      {PROGRESS_STAGES.map((s, i) => (
+        <div
+          key={s}
+          className={`h-1.5 flex-1 rounded-full ${
+            i <= step ? (status === 'CLOSED' ? 'bg-green-500' : 'bg-blue-500') : 'bg-gray-150'
+          }`}
+          style={i > step ? { backgroundColor: '#e5e7eb' } : undefined}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Every STO the current user has ever requested, any status — lets a
+// requestor see at a glance where each of their submissions currently sits,
+// and flags anything that just reached a terminal state (CLOSED/REJECTED).
+function MyRequestsSection({ requests }: { requests: STORequest[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (requests.length === 0) return null;
+  const visible = expanded ? requests : requests.slice(0, 6);
+
+  // "Just completed" = reached CLOSED or REJECTED within the last 3 days —
+  // computed from updated_at, since there's no separate notification log.
+  const isJustCompleted = (s: STORequest) =>
+    (s.status === 'CLOSED' || s.status === 'REJECTED') && daysSince(s.updated_at) <= 3;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-gray-900">My Requests</h2>
+          <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+            {requests.length}
+          </span>
+        </div>
+        <Link to="/sto/new" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+          + New STO →
+        </Link>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {visible.map(sto => {
+          const justDone = isJustCompleted(sto);
+          return (
+            <Link
+              key={sto.id}
+              to={`/sto/${sto.id}`}
+              className={`flex items-center gap-4 px-6 py-3 transition-colors ${
+                justDone ? 'bg-green-50/60 hover:bg-green-50' : 'hover:bg-gray-50'
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-medium text-gray-900 text-sm">
+                    {sto.sto_id}
+                  </span>
+                  {sto.rush_request && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                      RUSH
+                    </span>
+                  )}
+                  {justDone && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                      ✓ Just completed
+                    </span>
+                  )}
+                  <StatusBadge status={sto.status} />
+                </div>
+                <div className="text-xs text-gray-500 truncate max-w-[420px] mt-0.5">
+                  {sto.material_description || sto.material_sap || '—'}
+                </div>
+                <div className="mt-2 max-w-xs">
+                  <MiniProgress status={sto.status} />
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+      {requests.length > 6 && (
+        <div className="px-6 py-3 border-t border-gray-100 text-center">
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          >
+            {expanded ? 'Show less' : `Show all ${requests.length} →`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 export function Dashboard() {
   const { user } = useAuth();
@@ -265,6 +386,8 @@ export function Dashboard() {
   // STOs the current user requested where Shipping Logistics has asked for the
   // SAP STO# to be populated on the tracker, and it's still blank.
   const [stoNumberReminders, setStoNumberReminders] = useState<STORequest[]>([]);
+  // Every STO the current user has ever requested, any status — "My Requests".
+  const [myRequests, setMyRequests] = useState<STORequest[]>([]);
   const [kpis, setKpis] = useState<Kpis>({ rushActive: 0, dueSoon: 0, overdue: 0 });
   const [rushAlertItems, setRushAlertItems] = useState<STORequest[]>([]);
   const [needByItems, setNeedByItems] = useState<STORequest[]>([]);
@@ -344,9 +467,21 @@ export function Dashboard() {
       // 8. This user's active STOs — filtered client-side for an outstanding
       // STO# request (there's no dedicated server-side filter for this yet).
       api.get(`/sto?active_only=1&requestor=${encodeURIComponent(user.name)}&limit=100`),
+      // 9. Every STO this user has ever requested, any status — "My Requests".
+      api.get(`/sto?requestor=${encodeURIComponent(user.name)}&limit=100`),
     ])
       .then(
-        ([byStatusRes, sections, kpisRes, rushRes, needByRes, auditRes, myDraftsRes, myActiveRes]) => {
+        ([
+          byStatusRes,
+          sections,
+          kpisRes,
+          rushRes,
+          needByRes,
+          auditRes,
+          myDraftsRes,
+          myActiveRes,
+          myRequestsRes,
+        ]) => {
           const counts: Partial<Record<STOStatus, number>> = {};
           (byStatusRes.data as { status: STOStatus; count: number }[]).forEach(r => {
             counts[r.status] = r.count;
@@ -366,6 +501,7 @@ export function Dashboard() {
               s => s.sto_number_requested_at && !s.sto_number,
             ),
           );
+          setMyRequests(myRequestsRes.data.data);
         },
       )
       .finally(() => setLoading(false));
@@ -528,6 +664,9 @@ export function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* ── My Requests — every STO I've submitted, wherever it is now ── */}
+        {!loading && <MyRequestsSection requests={myRequests} />}
 
         {/* ── My Drafts — STOs I created that are back with me ── */}
         {!loading && myDrafts.length > 0 && (

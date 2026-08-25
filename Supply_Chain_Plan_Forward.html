@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Forward — Supply Chain Systems Consolidation</title>
+<style>
+  :root {
+    --ink: #1a2029;
+    --ink-soft: #4a5364;
+    --paper: #f6f4ee;
+    --paper-raised: #fcfbf7;
+    --line: #d8d3c5;
+    --line-soft: #e6e2d5;
+    --accent: #2f5d8a;
+    --accent-soft: #e4edf5;
+    --accent-ink: #1f4266;
+    --warn: #b5542a;
+    --warn-soft: #f6e8de;
+    --warn-ink: #8a3f1d;
+    --good: #3f6b4f;
+    --good-soft: #e5ede6;
+    --good-ink: #2c4d38;
+    --mono-tag-bg: #eeece2;
+    --hero-ink: #f6f4ee;
+    --shadow: 0 1px 2px rgba(26,32,41,0.06), 0 6px 20px -8px rgba(26,32,41,0.12);
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #e9e6dc;
+    --ink-soft: #a8aebb;
+    --paper: #14171d;
+    --paper-raised: #1b1f27;
+    --line: #33394a;
+    --line-soft: #262b37;
+    --accent: #7fb2e5;
+    --accent-soft: #1c2c3d;
+    --accent-ink: #bcdcfb;
+    --warn: #e2905f;
+    --warn-soft: #3a2417;
+    --warn-ink: #f0b790;
+    --good: #8fc19f;
+    --good-soft: #1c2c22;
+    --good-ink: #b7ddc2;
+    --mono-tag-bg: #232833;
+    --hero-ink: #eef1f5;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e9e6dc;
+      --ink-soft: #a8aebb;
+      --paper: #14171d;
+      --paper-raised: #1b1f27;
+      --line: #33394a;
+      --line-soft: #262b37;
+      --accent: #7fb2e5;
+      --accent-soft: #1c2c3d;
+      --accent-ink: #bcdcfb;
+      --warn: #e2905f;
+      --warn-soft: #3a2417;
+      --warn-ink: #f0b790;
+      --good: #8fc19f;
+      --good-soft: #1c2c22;
+      --good-ink: #b7ddc2;
+      --mono-tag-bg: #232833;
+      --hero-ink: #eef1f5;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--paper); color: var(--ink); }
+
+  body {
+    font-family: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, .display {
+    font-family: Fraunces, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  a { color: var(--accent); }
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* ── Hero ───────────────────────────────────────────────── */
+
+  .hero {
+    background: linear-gradient(180deg, #212a38 0%, #1a2029 100%);
+    color: var(--hero-ink);
+    padding: 5rem 2rem 4.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  :root[data-theme="dark"] .hero { background: linear-gradient(180deg, #0e1116 0%, #0a0c10 100%); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hero { background: linear-gradient(180deg, #0e1116 0%, #0a0c10 100%); }
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(127,178,229,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(127,178,229,0.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black 40%, transparent 90%);
+  }
+
+  .hero-inner {
+    max-width: 920px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .hero-kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #8fb6dd;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.3rem;
+  }
+  .hero-kicker::before { content: ""; width: 26px; height: 1px; background: #8fb6dd; }
+
+  .hero h1 {
+    font-size: clamp(2.1rem, 5vw, 3.2rem);
+    line-height: 1.06;
+    margin: 0 0 1.1rem;
+    color: #fbfaf6;
+  }
+
+  .hero p {
+    font-size: 1.12rem;
+    color: #c3c9d4;
+    max-width: 58ch;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .hero-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.4rem;
+    margin-top: 2.6rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .hero-stat .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #fbfaf6;
+    line-height: 1;
+  }
+  .hero-stat .num span { color: #8fb6dd; }
+  .hero-stat .label {
+    font-size: 0.8rem;
+    color: #9aa2b1;
+    margin-top: 0.4rem;
+    max-width: 16ch;
+  }
+
+  /* ── Page body ──────────────────────────────────────────── */
+
+  .page { max-width: 920px; margin: 0 auto; padding: 4rem 2rem 6rem; }
+
+  section { margin-bottom: 3.4rem; }
+  section:last-of-type { margin-bottom: 0; }
+
+  .section-head {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 0.9rem;
+    align-items: baseline;
+    margin-bottom: 1.4rem;
+  }
+  .section-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    border-right: 1px solid var(--line);
+    padding-right: 0.9rem;
+  }
+  h2 { font-size: 1.55rem; margin: 0; color: var(--ink); }
+  .lede {
+    grid-column: 2;
+    font-size: 0.96rem;
+    color: var(--ink-soft);
+    max-width: 66ch;
+    margin-top: 0.4rem;
+  }
+  .indent { padding-left: calc(2.6rem + 0.9rem); }
+
+  /* ── The ask ────────────────────────────────────────────── */
+
+  .ask-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1.4rem;
+    align-items: flex-start;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 1.6rem 1.8rem;
+    margin-top: 0.4rem;
+  }
+  .ask-mark {
+    font-family: Fraunces, serif;
+    font-size: 2.4rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .ask-card h3 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+    color: var(--accent-ink);
+  }
+  .ask-card p { margin: 0; font-size: 0.94rem; color: var(--accent-ink); max-width: 60ch; line-height: 1.55; }
+
+  /* ── Why-now trio ───────────────────────────────────────── */
+
+  .why-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  @media (max-width: 760px) { .why-grid { grid-template-columns: 1fr; } }
+
+  .why-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.3rem 1.4rem;
+    box-shadow: var(--shadow);
+  }
+  .why-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    margin-bottom: 0.6rem;
+  }
+  .why-card h3 { font-size: 1.02rem; margin: 0 0 0.5rem; }
+  .why-card p { font-size: 0.87rem; color: var(--ink-soft); margin: 0; line-height: 1.55; }
+
+  /* ── Diagram ────────────────────────────────────────────── */
+
+  figure.diagram {
+    margin: 1.6rem 0 0;
+    padding: 1.6rem 1.7rem 1.3rem;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  figure.diagram svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    color: var(--ink);
+  }
+  figure.diagram .accent-stroke { color: var(--accent); }
+  figure.diagram .warn-stroke { color: var(--warn); }
+  figure.diagram figcaption {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--line);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    max-width: 66ch;
+  }
+  figure.diagram figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* ── Timeline / phases ──────────────────────────────────── */
+
+  .timeline {
+    position: relative;
+    padding-left: 1.9rem;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.42rem;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 2px;
+    background: var(--line);
+  }
+
+  .tl-item { position: relative; padding-bottom: 2.1rem; }
+  .tl-item:last-child { padding-bottom: 0; }
+
+  .tl-dot {
+    position: absolute;
+    left: -1.9rem;
+    top: 0.28rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid var(--accent);
+  }
+  .tl-item.p2 .tl-dot { border-color: var(--good); }
+  .tl-item.p3 .tl-dot { border-color: var(--ink-soft); opacity: 0.7; }
+
+  .tl-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.3rem 1.5rem;
+    box-shadow: var(--shadow);
+  }
+
+  .tl-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+  }
+  .tl-title { font-family: Fraunces, serif; font-weight: 600; font-size: 1.2rem; }
+  .tl-when {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .tl-item.p1 .tl-when { background: var(--accent-soft); color: var(--accent-ink); }
+  .tl-item.p2 .tl-when { background: var(--good-soft); color: var(--good-ink); }
+  .tl-item.p3 .tl-when { background: var(--mono-tag-bg); color: var(--ink-soft); }
+
+  .tl-systems { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.8rem; }
+  .tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    background: var(--mono-tag-bg);
+    color: var(--ink-soft);
+    padding: 0.16rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .tl-card p.desc { font-size: 0.9rem; color: var(--ink-soft); margin: 0; max-width: 62ch; }
+
+  .tl-goal {
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--line);
+    font-size: 0.85rem;
+    color: var(--ink);
+  }
+  .tl-goal b { color: var(--accent-ink); font-weight: 600; }
+
+  /* ── Metrics proof strip ────────────────────────────────── */
+
+  .metrics-note {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    max-width: 68ch;
+    margin: 0 0 1.2rem;
+    line-height: 1.6;
+  }
+  .metrics-note b { color: var(--ink); font-weight: 600; }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.8rem;
+    margin-bottom: 1.1rem;
+  }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .metric-tile {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 0.95rem 1.05rem;
+    box-shadow: var(--shadow);
+  }
+  .metric-tile .m-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 0.35rem;
+  }
+  .metric-tile .m-value {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+  .metric-tile .m-sub {
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+    margin-top: 0.3rem;
+  }
+
+  .metrics-scale {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    background: var(--good-soft);
+    border: 1px solid var(--good);
+    border-radius: 10px;
+    padding: 0.9rem 1.2rem;
+    font-size: 0.87rem;
+    color: var(--good-ink);
+  }
+  .metrics-scale b { font-weight: 700; }
+
+  /* ── Evidence strip ─────────────────────────────────────── */
+
+  .evidence {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.9rem;
+  }
+  @media (max-width: 640px) { .evidence { grid-template-columns: 1fr; } }
+  .ev-card {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.15rem;
+  }
+  .ev-quote { font-style: italic; color: var(--warn-ink); font-size: 0.9rem; margin: 0 0 0.45rem; line-height: 1.5; }
+  .ev-source { font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; color: var(--ink-soft); letter-spacing: 0.02em; }
+
+  /* ── Risks table ────────────────────────────────────────── */
+
+  .risk-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .risk-table th {
+    text-align: left;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .risk-table td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .risk-table td.what { color: var(--ink); font-weight: 600; font-size: 0.86rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-raised); box-shadow: var(--shadow); }
+  .risk-table { min-width: 640px; }
+
+  /* ── Next steps ─────────────────────────────────────────── */
+
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 1rem;
+    padding: 1.1rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.95rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .step b { display: block; font-size: 0.96rem; margin-bottom: 0.2rem; }
+  .step span { font-size: 0.87rem; color: var(--ink-soft); }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="hero-kicker">Plan forward — supply chain systems</div>
+    <h1>Nineteen tools are running one supply chain. Let's build it one platform at a time.</h1>
+    <p>
+      Our own systems audit mapped every database, PowerApp, and spreadsheet the team
+      depends on — and where they quietly duplicate each other. This is the path from
+      there to a single platform, phased so we never stop shipping to rebuild.
+    </p>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="num">19</div>
+        <div class="label">systems in the current landscape</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num"><span>6</span></div>
+        <div class="label">form the core movement workflow</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num mono">3</div>
+        <div class="label">phases to full consolidation</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>The ask</h2>
+    </div>
+    <div class="indent">
+      <div class="ask-card">
+        <span class="ask-mark">→</span>
+        <div>
+          <h3>Build one platform for the core shipment workflow first — not all 19 systems at once.</h3>
+          <p>
+            Material Request, Firm Zone, Ship Ticket, IRQ, Delivery Schedule, and STO Request
+            already share the same records across five different tools. Give them one data
+            model and one workflow engine, prove it on a real shipment, then extend it outward
+            to the rest of the landscape in two further phases.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>Why this, why now</h2>
+      <p class="lede">Three things the audit made undeniable.</p>
+    </div>
+    <div class="indent">
+      <div class="why-grid">
+        <div class="why-card">
+          <div class="why-num">FINDING 01</div>
+          <h3>The core is already one workflow</h3>
+          <p>The process map shows it plainly: a shipment moves through five systems and re-enters its own data at every hop. That's not five workflows — it's one, wearing five different interfaces.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-num">FINDING 02</div>
+          <h3>The tools can't do the job</h3>
+          <p>"Clunky and buggy." "Duplicate work." PowerApps and Smartsheet are form builders — six of our nineteen systems are actually trying to run multi-step approvals, which is a different job entirely.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-num">FINDING 03</div>
+          <h3>Some gaps have no owner</h3>
+          <p>Aging Inventory: "doesn't really have a tool." Distressed inventory has no flag anywhere today. That's not a UX complaint — it's money we can't currently see.</p>
+        </div>
+      </div>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 850 300" role="img" aria-label="Today, a shipment record passes through six separate systems — Material Request, Firm Zone, Ship Ticket, IRQ, Delivery Schedule, and STO Request — re-entering its data by hand at every hop, with IRQ and Delivery Schedule independently duplicating the same delivery data. With one platform, the same six become record types inside a single system, and the shipment's data is entered once.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+            </marker>
+            <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="accent-stroke" fill="currentColor"></path>
+            </marker>
+          </defs>
+
+          <!-- lane labels -->
+          <text x="0" y="26" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" fill="currentColor" opacity="0.55">TODAY — SIX TOOLS, SIX RE-ENTRIES</text>
+          <text x="0" y="196" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" class="accent-stroke" fill="currentColor">PHASE 1 — ONE PLATFORM, ONE ENTRY</text>
+
+          <!-- ── TOP LANE: today's relay ── -->
+          <g font-family="IBM Plex Sans, sans-serif" font-size="12">
+            <!-- boxes -->
+            <g stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.85">
+              <rect x="0"   y="42" width="122" height="46" rx="6"></rect>
+              <rect x="146" y="42" width="110" height="46" rx="6"></rect>
+              <rect x="280" y="42" width="110" height="46" rx="6"></rect>
+              <rect x="414" y="42" width="96"  height="46" rx="6"></rect>
+              <rect x="534" y="42" width="132" height="46" rx="6"></rect>
+              <rect x="690" y="42" width="150" height="46" rx="6"></rect>
+            </g>
+            <g text-anchor="middle" fill="currentColor">
+              <text x="61"  y="61">Material</text>
+              <text x="61"  y="75">Request</text>
+              <text x="201" y="68">Firm Zone</text>
+              <text x="335" y="68">Ship Ticket</text>
+              <text x="462" y="68">IRQ</text>
+              <text x="600" y="61">Delivery</text>
+              <text x="600" y="75">Schedule</text>
+              <text x="765" y="61">STO Request</text>
+              <text x="765" y="75">(Corporate)</text>
+            </g>
+            <!-- connecting arrows, each hop = a manual re-entry -->
+            <g stroke="currentColor" stroke-width="1.2" opacity="0.8">
+              <line x1="122" y1="65" x2="144" y2="65" marker-end="url(#arrow)"></line>
+              <line x1="256" y1="65" x2="278" y2="65" marker-end="url(#arrow)"></line>
+              <line x1="390" y1="65" x2="412" y2="65" marker-end="url(#arrow)"></line>
+              <line x1="510" y1="65" x2="532" y2="65" marker-end="url(#arrow)"></line>
+              <line x1="666" y1="65" x2="688" y2="65" marker-end="url(#arrow)"></line>
+            </g>
+            <g text-anchor="middle" class="warn-stroke" fill="currentColor" font-family="IBM Plex Mono, monospace" font-size="9.5">
+              <text x="133" y="58">re-enter</text>
+              <text x="267" y="58">re-enter</text>
+              <text x="401" y="58">re-enter</text>
+              <text x="521" y="58">re-enter</text>
+              <text x="677" y="58">re-enter</text>
+            </g>
+            <!-- duplicate-data flag between IRQ and Delivery Schedule -->
+            <path d="M462,88 C462,112 600,112 600,88" fill="none" class="warn-stroke" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#arrow)"></path>
+            <text x="531" y="126" text-anchor="middle" class="warn-stroke" fill="currentColor" font-family="IBM Plex Mono, monospace" font-size="9.5">duplicates the same delivery data</text>
+          </g>
+
+          <!-- divider -->
+          <line x1="0" y1="164" x2="840" y2="164" stroke="currentColor" stroke-width="1" opacity="0.15"></line>
+
+          <!-- ── BOTTOM LANE: one platform ── -->
+          <g font-family="IBM Plex Sans, sans-serif" font-size="12">
+            <rect x="0" y="212" width="840" height="64" rx="10" class="accent-stroke" stroke="currentColor" stroke-width="1.4" fill="none"></rect>
+            <text x="20" y="234" class="accent-stroke" fill="currentColor" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600">Core Movement Platform</text>
+            <text x="20" y="252" fill="currentColor" opacity="0.6" font-size="10.5">one request, one approval trail, one record — from origin to delivery</text>
+
+            <text x="820" y="240" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="currentColor" opacity="0.7">6 tools →</text>
+            <text x="820" y="254" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="currentColor" opacity="0.7">1 record type each</text>
+          </g>
+
+          <!-- single flow arrow entering the platform -->
+          <line x1="55" y1="182" x2="55" y2="210" class="accent-stroke" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrowAccent)"></line>
+          <text x="70" y="196" class="accent-stroke" fill="currentColor" font-family="IBM Plex Mono, monospace" font-size="9.5">entered once</text>
+        </svg>
+        <figcaption>
+          <b>What collapses in Phase 1:</b> today, a shipment's data is keyed in six times across
+          six tools, and IRQ independently duplicates what Delivery Schedule already tracks.
+          On the platform, all six become record types sharing one entry — the re-entry steps
+          and the duplicate delivery data both disappear, not just move.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>The phased path</h2>
+      <p class="lede">Each phase ships something real before the next one starts.</p>
+    </div>
+    <div class="indent">
+      <div class="timeline">
+
+        <div class="tl-item p1">
+          <div class="tl-dot"></div>
+          <div class="tl-card">
+            <div class="tl-top">
+              <span class="tl-title">Phase 1 — Core movement platform</span>
+              <span class="tl-when">Foundation</span>
+            </div>
+            <div class="tl-systems">
+              <span class="tag">STO Request</span>
+              <span class="tag">Ship Ticket</span>
+              <span class="tag">IRQ</span>
+              <span class="tag">Material Request</span>
+              <span class="tag">Firm Zone</span>
+              <span class="tag">Delivery Schedule</span>
+            </div>
+            <p class="desc">
+              One data model for "something needs to move" — request, approval, shipment,
+              delivery — replacing five overlapping tools with one system of record. This is
+              where the real engineering investment goes: role/site-scoped auth, a full audit
+              trail, and a workflow engine that expresses every approval path without a new
+              PowerApp per exception.
+            </p>
+            <div class="tl-goal"><b>Ships when:</b> a shipment moves from Material Request to a closed STO touching each piece of data exactly once — no re-keying, one audit trail.</div>
+          </div>
+        </div>
+
+        <div class="tl-item p2">
+          <div class="tl-dot"></div>
+          <div class="tl-card">
+            <div class="tl-top">
+              <span class="tl-title">Phase 2 — Attach the adjacent trackers</span>
+              <span class="tl-when">Extend</span>
+            </div>
+            <div class="tl-systems">
+              <span class="tag">DNCM</span>
+              <span class="tag">Vial Transfer Database</span>
+              <span class="tag">SLED</span>
+              <span class="tag">Aging Inventory · new</span>
+            </div>
+            <p class="desc">
+              Each of these already overlaps Phase 1 data but runs its own approval logic.
+              Once the core exists, each becomes a new record type on the same foundation —
+              not a new system. Aging Inventory is the one green-field build: no tool to
+              migrate, only a gap to close.
+            </p>
+            <div class="tl-goal"><b>Ships when:</b> non-conforming material, cell-bank issuance, and expiring-material review all run through the platform's own approval engine.</div>
+          </div>
+        </div>
+
+        <div class="tl-item p3">
+          <div class="tl-dot"></div>
+          <div class="tl-card">
+            <div class="tl-top">
+              <span class="tl-title">Phase 3 — Satellite tools, case by case</span>
+              <span class="tl-when">Evaluate</span>
+            </div>
+            <div class="tl-systems">
+              <span class="tag">DSP Request</span>
+              <span class="tag">Calibration Scheduling</span>
+              <span class="tag">Cycle Count / Kitting</span>
+              <span class="tag">Used Resin &amp; TFF</span>
+              <span class="tag">Label Tracker</span>
+              <span class="tag">PSP Ship App</span>
+            </div>
+            <p class="desc">
+              These touch the core workflow but don't block it. Some likely become platform
+              record types; others may be better left on Smartsheet with a data feed back in.
+              We decide each on its own once the pattern from Phase 1 is proven — not before.
+            </p>
+            <div class="tl-goal"><b>Ships when:</b> each tool has an explicit decision — migrate, integrate, or keep as-is — instead of an open question.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>Analytics come with the platform, not after it</h2>
+      <p class="lede">The audit calls out metrics and dashboards as unmet needs across a dozen rows. This isn't a Phase 4 add-on — it's what a shared data model gives you automatically.</p>
+    </div>
+    <div class="indent">
+      <p class="metrics-note">
+        The <b>STO Request</b> system already proves the point: because every transfer lives in
+        one place with one status history, the questions the audit's "Metrics/Dashboard" column
+        keeps asking — <i>are we on time, where do things get stuck, why do things get
+        rejected</i> — are just queries against data that's already there. Nobody built a
+        separate reporting project; the reporting <i>is</i> the data model.
+      </p>
+      <div class="metric-grid">
+        <div class="metric-tile">
+          <div class="m-label">On-time delivery</div>
+          <div class="m-value">% met need-by</div>
+          <div class="m-sub">closed requests vs. their due date</div>
+        </div>
+        <div class="metric-tile">
+          <div class="m-label">Cycle time</div>
+          <div class="m-value">days / stage</div>
+          <div class="m-sub">where a request actually waits</div>
+        </div>
+        <div class="metric-tile">
+          <div class="m-label">Aging</div>
+          <div class="m-value">stuck &gt; N days</div>
+          <div class="m-sub">flags requests before they're overdue</div>
+        </div>
+        <div class="metric-tile">
+          <div class="m-label">Rejection rate</div>
+          <div class="m-value">by stage &amp; reason</div>
+          <div class="m-sub">where quality actually breaks down</div>
+        </div>
+      </div>
+      <div class="metrics-scale">
+        <span>→</span>
+        <span>Extend the same model to Phase 1's other five systems and to Phase 2, and <b>on-time rate, bottleneck stage, and rejection reason</b> become answerable for the whole shipment lifecycle — not just the STO leg of it.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <h2>In the team's own words</h2>
+      <p class="lede">Pulled straight from the audit's feedback column — not a guess about pain, a report of it.</p>
+    </div>
+    <div class="indent">
+      <div class="evidence">
+        <div class="ev-card">
+          <p class="ev-quote">"Clunky and buggy."</p>
+          <p class="ev-source">MATERIAL REQUEST — busiest system in the core cluster</p>
+        </div>
+        <div class="ev-card">
+          <p class="ev-quote">"Duplicate work — could the metrology scheduler go directly into ship ticket request form?"</p>
+          <p class="ev-source">CALIBRATION SCHEDULING TOOL</p>
+        </div>
+        <div class="ev-card">
+          <p class="ev-quote">"Doesn't really have a tool."</p>
+          <p class="ev-source">AGING INVENTORY — zero coverage today</p>
+        </div>
+        <div class="ev-card">
+          <p class="ev-quote">"Want more milestone tracking for inbound shipments."</p>
+          <p class="ev-source">IRQ — duplicated from Delivery Schedule</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <h2>What could slow this down</h2>
+      <p class="lede">Named up front so they're decisions, not surprises.</p>
+    </div>
+    <div class="indent">
+      <div class="table-wrap">
+        <table class="risk-table">
+          <thead>
+            <tr><th style="width:26%">Risk</th><th>What it means for the plan</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="what">eMDO has no clear owner</td>
+              <td>It feeds both DNCM and the SLED file but has no platform or UI listed in the audit. Needs a short scoping session before Phase 2 starts, not mid-build.</td>
+            </tr>
+            <tr>
+              <td class="what">Phase 1 scope creep</td>
+              <td>Every one of the 19 rows has a plausible case for "fold this in too." Phase 1 stays at six systems — that discipline is what makes Phase 2 and 3 cheap instead of each becoming its own program.</td>
+            </tr>
+            <tr>
+              <td class="what">Parallel migration, not staged</td>
+              <td>Systems that already share data (IRQ / Delivery Schedule, Material Request / Firm Zone) must move together. Migrating one without the other just relocates the duplicate-entry problem.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">07</span>
+      <h2>Immediate next steps</h2>
+    </div>
+    <div class="indent">
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">1</span>
+          <div><b>Confirm the Phase 1 boundary</b><span>Get sign-off that Phase 1 = these six systems, nothing more — before design work starts.</span></div>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <div><b>Scope eMDO</b><span>A 30-minute working session to understand what it is and who owns it, before it becomes a Phase 2 blocker.</span></div>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <div><b>Pick one real shipment scenario</b><span>Choose a genuine, currently-painful path (e.g. a rush transfer with a Firm Zone override) and design Phase 1 to prove it end-to-end.</span></div>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <div><b>Set the Phase 1 "done" bar</b><span>One shipment, one audit trail, zero re-keying between systems — agree this is the finish line before estimating effort.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Prepared from the team's Supply Chain Data Structure audit — Sheet1, Process Map Input, and Process Map tabs.</span>
+    <span>Plan forward — for team discussion.</span>
+  </footer>
+
+</div>
+</body>
+</html>
