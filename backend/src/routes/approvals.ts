@@ -9,6 +9,7 @@ import {
   sendStoCompletedEmail,
   sendStoSubmittedEmail,
   sendStoAwaitingPlanningEmail,
+  sendPlanningReviewEmail,
 } from '../lib/notify';
 
 const router = Router();
@@ -227,6 +228,13 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
         notes,
         execute,
       );
+    });
+    sendPlanningReviewEmail(outcome, {
+      sto_id: sto.sto_id as string,
+      mpn_number: mpn_number ?? null,
+      batch_number: batch_number ?? null,
+      expiration_date: expiration_date ?? null,
+      notes: notes ?? null,
     });
     const msg =
       outcome === 'approve'

@@ -7,14 +7,20 @@ const RELAY_TEMPLATE = process.env.NOTIFICATION_RELAY_TEMPLATE || 'sto-completio
 const RELAY_SUBMITTED_TEMPLATE = process.env.NOTIFICATION_RELAY_SUBMITTED_TEMPLATE || 'sto-submitted';
 const RELAY_PLANNING_QUEUE_TEMPLATE =
   process.env.NOTIFICATION_RELAY_PLANNING_QUEUE_TEMPLATE || 'sto-planning-queue';
+const RELAY_PLANNING_APPROVED_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_PLANNING_APPROVED_TEMPLATE || 'sto-planning-approved';
+const RELAY_PLANNING_REVISION_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_PLANNING_REVISION_TEMPLATE || 'sto-planning-revision';
+const RELAY_PLANNING_REJECTED_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_PLANNING_REJECTED_TEMPLATE || 'sto-planning-rejected';
 
-// TESTING ONLY — every "STO submitted" email (both the requestor confirmation
-// and the group/queue notification below) is redirected to this address
-// instead of the real recipient(s), so the relay + templates can be verified
-// without emailing anyone for real. Remove TEST_NOTIFICATION_OVERRIDE (or
-// unset it) once ready to send to real recipients — at that point the group
-// notification will need a real per-site distribution list/address, since
-// there is no per-role email on file today (only individual requestor_email).
+// TESTING ONLY — every notification this module sends is redirected to this
+// address instead of the real recipient(s), so the relay + templates can be
+// verified without emailing anyone for real. Remove TEST_NOTIFICATION_OVERRIDE
+// (or unset it) once ready to send to real recipients — group/role
+// notifications will then need a real per-site distribution list/address,
+// since there is no per-role email on file today (only individual
+// requestor_email).
 const TEST_NOTIFICATION_OVERRIDE = 'ABC123@gmail.com';
 
 function configured(): boolean {
@@ -187,5 +193,66 @@ export function sendStoAwaitingPlanningEmail(sto: {
       },
     },
     { sto_id: sto.sto_id },
+  );
+}
+
+// "Shipping Site Planning Review" outcome notification — sent when Planning
+// approves, requests revision on, or rejects a submitted STO. Per spec, one
+// of three subjects/bodies/templates depending on outcome; recipients are the
+// requestor, Shipping Site Logistics, and relevant site stakeholders.
+// Requires three templates on the relay:
+//   sto-planning-approved — "STO Request Approved by Shipping Site Planning"
+//   sto-planning-revision — "STO Request Requires Revision"
+//   sto-planning-rejected — "STO Request Rejected by Shipping Site Planning"
+//
+// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE — see the
+// constant above.
+export function sendPlanningReviewEmail(
+  outcome: 'approve' | 'revise' | 'reject',
+  sto: {
+    sto_id: string;
+    mpn_number?: string | null;
+    batch_number?: string | null;
+    expiration_date?: string | null;
+    notes?: string | null;
+  },
+): void {
+  if (!configured()) return;
+
+  const byOutcome = {
+    approve: {
+      template: RELAY_PLANNING_APPROVED_TEMPLATE,
+      eventSuffix: 'approved',
+      message:
+        'Your STO request has been approved by Shipping Site Planning and has moved to Shipping Site Logistics for further processing.',
+    },
+    revise: {
+      template: RELAY_PLANNING_REVISION_TEMPLATE,
+      eventSuffix: 'revision-requested',
+      message: 'Your STO request requires revision and has been returned to the requestor for update.',
+    },
+    reject: {
+      template: RELAY_PLANNING_REJECTED_TEMPLATE,
+      eventSuffix: 'rejected',
+      message: 'Your STO request has been rejected and the case is closed.',
+    },
+  }[outcome];
+
+  postNotification(
+    {
+      event_id: `sto-planning-${byOutcome.eventSuffix}-${sto.sto_id}-${Date.now()}`,
+      event_name: `STO ${sto.sto_id} planning ${byOutcome.eventSuffix}`,
+      message: byOutcome.message,
+      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
+      email_template: byOutcome.template,
+      email_vars: {
+        sto_id: sto.sto_id,
+        mpn_number: sto.mpn_number ?? '',
+        batch_number: sto.batch_number ?? '',
+        expiration_date: sto.expiration_date ?? '',
+        planning_notes: sto.notes ?? '',
+      },
+    },
+    { sto_id: sto.sto_id, outcome },
   );
 }
