@@ -5,7 +5,11 @@ import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
-import { sendStoCompletedEmail, sendStoSubmittedEmail } from '../lib/notify';
+import {
+  sendStoCompletedEmail,
+  sendStoSubmittedEmail,
+  sendStoAwaitingPlanningEmail,
+} from '../lib/notify';
 
 const router = Router();
 router.use(authenticate);
@@ -73,6 +77,33 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void
     sendStoSubmittedEmail({
       sto_id: sto.sto_id as string,
       requestor_name: sto.requestor_name as string,
+    });
+    sendStoAwaitingPlanningEmail({
+      sto_id: sto.sto_id as string,
+      requestor_name: sto.requestor_name as string | undefined,
+      requestor_email: sto.requestor_email as string | undefined,
+      requesting_plant: sto.requesting_plant as string | undefined,
+      shipping_site: sto.shipping_site as string | undefined,
+      receiving_site: sto.receiving_site as string | undefined,
+      priority: sto.priority as number | undefined,
+      repeat_shipment_calendar_year: sto.repeat_shipment_calendar_year as string | null,
+      rush_request: Boolean(sto.rush_request),
+      rush_reason: sto.rush_reason as string | null,
+      receiving_site_need_by_date: sto.receiving_site_need_by_date as string | null,
+      distressed_inventory: Boolean(sto.distressed_inventory),
+      di_value: sto.di_value as number | null,
+      material_sap: sto.material_sap as string | undefined,
+      material_description: sto.material_description as string | undefined,
+      brand_at_receiving_site: sto.brand_at_receiving_site as string | undefined,
+      inco_terms: sto.inco_terms as string | null,
+      quantity: sto.quantity as number | undefined,
+      uom: sto.uom as string | undefined,
+      shipping_conditions: sto.shipping_conditions as string | undefined,
+      material_value: sto.material_value as number | undefined,
+      controlled_shipping_required: Boolean(sto.controlled_shipping_required),
+      sto_number: sto.sto_number as string | null,
+      shipment_id: sto.shipment_id as string | null,
+      corporate_sto_tracker_status: sto.corporate_sto_tracker_status as string | null,
     });
     res.json({ message: 'Submitted to Shipping Planning queue' });
   } catch (err) {

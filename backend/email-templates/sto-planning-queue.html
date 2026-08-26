@@ -1,0 +1,58 @@
+<!--
+  notification_relay template body for "sto-planning-queue".
+
+  This is NOT deployed automatically — it's reference source for the relay's
+  own template store. To (re)create it there, paste this file's contents as
+  the "body" field via the relay UI (/ui/templates) or its API, with:
+
+    template_name:  sto-planning-queue
+    subject:        New STO Request Submitted for Review
+    required_vars:  (leave empty — see note below)
+
+  Sent by sendStoAwaitingPlanningEmail() in ../src/lib/notify.ts, fired from
+  POST /api/sto/:id/submit alongside the requestor confirmation email.
+
+  Required vars note: the relay's own required-var checker does not detect
+  variables referenced only inside {{if .field}} blocks (rush_reason,
+  di_value below use this pattern) — leave required_vars empty to avoid a
+  false "missing variable" validation error when creating the template.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#0f1c33; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#7fb2e5; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#fbfaf6; margin:6px 0 0; font-size:20px;">New STO Request Submitted for Review</h2>
+  </div>
+  <div style="border:1px solid #d8d3c5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      A new STO request has been submitted and is ready for Shipping Site Planning review.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #2f5d8a; color:#2f5d8a; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Request</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:45%;">STO Number</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.sto_id}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Requestor</td><td style="padding:6px 0; color:#1a2029;">{{.requestor_name}} &lt;{{.requestor_email}}&gt;</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Requesting Plant</td><td style="padding:6px 0; color:#1a2029;">{{.requesting_plant}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Shipping Site / Receiving Site</td><td style="padding:6px 0; color:#1a2029;">{{.shipping_site}} / {{.receiving_site}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Priority</td><td style="padding:6px 0; color:#1a2029;">{{.priority}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Repeat Shipment</td><td style="padding:6px 0; color:#1a2029;">{{.repeat_shipment}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Receiving Site Need-By Date</td><td style="padding:6px 0; color:#1a2029;">{{.need_by_date}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Rush Request</td><td style="padding:6px 0; color:#1a2029;">{{.rush_request}}{{if .rush_reason}} — {{.rush_reason}}{{end}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Distressed Inventory</td><td style="padding:6px 0; color:#1a2029;">{{.distressed_inventory}}{{if .di_value}} — DI Value: {{.di_value}}{{end}}</td></tr>
+
+      <tr><td colspan="2" style="padding:16px 0 6px; border-bottom:2px solid #2f5d8a; color:#2f5d8a; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Material</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Material SAP #</td><td style="padding:6px 0; color:#1a2029;">{{.material_sap}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Description</td><td style="padding:6px 0; color:#1a2029;">{{.material_description}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Brand at Receiving Site</td><td style="padding:6px 0; color:#1a2029;">{{.brand_at_receiving_site}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">INCO Terms</td><td style="padding:6px 0; color:#1a2029;">{{.inco_terms}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Quantity / UOM</td><td style="padding:6px 0; color:#1a2029;">{{.quantity}} {{.uom}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Shipping Conditions</td><td style="padding:6px 0; color:#1a2029;">{{.shipping_conditions}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Material Value</td><td style="padding:6px 0; color:#1a2029;">{{.material_value}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Controlled Shipping</td><td style="padding:6px 0; color:#1a2029;">{{.controlled_shipping}}</td></tr>
+
+      <tr><td colspan="2" style="padding:16px 0 6px; border-bottom:2px solid #2f5d8a; color:#2f5d8a; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Tracking Reference</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">STO Number (SAP)</td><td style="padding:6px 0; color:#1a2029;">{{.sto_number}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Shipment ID</td><td style="padding:6px 0; color:#1a2029;">{{.shipment_id}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Corporate Tracker Status</td><td style="padding:6px 0; color:#1a2029;">{{.corporate_sto_tracker_status}}</td></tr>
+    </table>
+  </div>
+</div>

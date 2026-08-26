@@ -5,11 +5,16 @@ const RELAY_USER = process.env.NOTIFICATION_RELAY_USER;
 const RELAY_PASS = process.env.NOTIFICATION_RELAY_PASSWORD;
 const RELAY_TEMPLATE = process.env.NOTIFICATION_RELAY_TEMPLATE || 'sto-completion';
 const RELAY_SUBMITTED_TEMPLATE = process.env.NOTIFICATION_RELAY_SUBMITTED_TEMPLATE || 'sto-submitted';
+const RELAY_PLANNING_QUEUE_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_PLANNING_QUEUE_TEMPLATE || 'sto-planning-queue';
 
-// TESTING ONLY — every "STO submitted" email is redirected to this address
-// instead of the real requestor, so the relay + template can be verified
+// TESTING ONLY — every "STO submitted" email (both the requestor confirmation
+// and the group/queue notification below) is redirected to this address
+// instead of the real recipient(s), so the relay + templates can be verified
 // without emailing anyone for real. Remove TEST_NOTIFICATION_OVERRIDE (or
-// unset it) once ready to send to the actual requestor_email.
+// unset it) once ready to send to real recipients — at that point the group
+// notification will need a real per-site distribution list/address, since
+// there is no per-role email on file today (only individual requestor_email).
 const TEST_NOTIFICATION_OVERRIDE = 'ABC123@gmail.com';
 
 function configured(): boolean {
@@ -96,6 +101,89 @@ export function sendStoSubmittedEmail(sto: { sto_id: string; requestor_name: str
       email_vars: {
         sto_id: sto.sto_id,
         requestor_name: sto.requestor_name,
+      },
+    },
+    { sto_id: sto.sto_id },
+  );
+}
+
+// "New STO Request Submitted for Review" notification — sent alongside
+// sendStoSubmittedEmail() when a DRAFT is submitted and enters PLANNING_REVIEW.
+// Per spec: recipients are Shipping Site Planning, Shipping Site Logistics,
+// and the requestor; the email carries the full request snapshot so reviewers
+// don't have to open the app to see what's waiting.
+// Requires an "sto-planning-queue" template on the relay — subject "New STO
+// Request Submitted for Review", body "A new STO request has been submitted
+// and is ready for Shipping Site Planning review.", referencing the
+// email_vars below (sto_id plus every field in the spec's "key details" list).
+//
+// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE — there is
+// no real distribution list for "Shipping Planning + Logistics at site X"
+// today, only individual requestor_email. Wire up real recipients (site-scoped
+// distribution lists, or every user holding those roles at the site) before
+// removing the override.
+export function sendStoAwaitingPlanningEmail(sto: {
+  sto_id: string;
+  requestor_name?: string;
+  requestor_email?: string;
+  requesting_plant?: string;
+  shipping_site?: string;
+  receiving_site?: string;
+  priority?: number;
+  repeat_shipment_calendar_year?: string | null;
+  rush_request?: boolean;
+  rush_reason?: string | null;
+  receiving_site_need_by_date?: string | null;
+  distressed_inventory?: boolean;
+  di_value?: number | null;
+  material_sap?: string;
+  material_description?: string;
+  brand_at_receiving_site?: string;
+  inco_terms?: string | null;
+  quantity?: number;
+  uom?: string;
+  shipping_conditions?: string;
+  material_value?: number;
+  controlled_shipping_required?: boolean;
+  sto_number?: string | null;
+  shipment_id?: string | null;
+  corporate_sto_tracker_status?: string | null;
+}): void {
+  if (!configured()) return;
+
+  postNotification(
+    {
+      event_id: `sto-planning-queue-${sto.sto_id}-${Date.now()}`,
+      event_name: `STO ${sto.sto_id} submitted for review`,
+      message: 'A new STO request has been submitted and is ready for Shipping Site Planning review.',
+      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
+      email_template: RELAY_PLANNING_QUEUE_TEMPLATE,
+      email_vars: {
+        sto_id: sto.sto_id,
+        requestor_name: sto.requestor_name ?? '',
+        requestor_email: sto.requestor_email ?? '',
+        requesting_plant: sto.requesting_plant ?? '',
+        shipping_site: sto.shipping_site ?? '',
+        receiving_site: sto.receiving_site ?? '',
+        priority: sto.priority ?? '',
+        repeat_shipment: sto.repeat_shipment_calendar_year ?? '',
+        rush_request: sto.rush_request ? 'Yes' : 'No',
+        rush_reason: sto.rush_reason ?? '',
+        need_by_date: sto.receiving_site_need_by_date ?? '',
+        distressed_inventory: sto.distressed_inventory ? 'Yes' : 'No',
+        di_value: sto.di_value ?? '',
+        material_sap: sto.material_sap ?? '',
+        material_description: sto.material_description ?? '',
+        brand_at_receiving_site: sto.brand_at_receiving_site ?? '',
+        inco_terms: sto.inco_terms ?? '',
+        quantity: sto.quantity ?? '',
+        uom: sto.uom ?? '',
+        shipping_conditions: sto.shipping_conditions ?? '',
+        material_value: sto.material_value ?? '',
+        controlled_shipping: sto.controlled_shipping_required ? 'Yes' : 'No',
+        sto_number: sto.sto_number ?? '',
+        shipment_id: sto.shipment_id ?? '',
+        corporate_sto_tracker_status: sto.corporate_sto_tracker_status ?? '',
       },
     },
     { sto_id: sto.sto_id },
