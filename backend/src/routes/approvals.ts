@@ -5,7 +5,7 @@ import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
-import { sendStoCompletedEmail } from '../lib/notify';
+import { sendStoCompletedEmail, sendStoSubmittedEmail } from '../lib/notify';
 
 const router = Router();
 router.use(authenticate);
@@ -69,6 +69,10 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void
         undefined,
         execute,
       );
+    });
+    sendStoSubmittedEmail({
+      sto_id: sto.sto_id as string,
+      requestor_name: sto.requestor_name as string,
     });
     res.json({ message: 'Submitted to Shipping Planning queue' });
   } catch (err) {
