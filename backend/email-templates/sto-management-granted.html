@@ -1,0 +1,28 @@
+<!--
+  notification_relay template body for "sto-management-granted".
+  Paste as the "body" via /ui/templates, with:
+    template_name:  sto-management-granted
+    subject:        STO Request Approved by Management
+    required_vars:  (leave empty)
+  Sent by sendManagementGrantedEmail() in ../src/lib/notify.ts, fired from
+  POST /api/sto/:id/management and POST /api/sto/:id/receiving-management
+  when approved=true.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#0f1c33; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#7fb2e5; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#fbfaf6; margin:6px 0 0; font-size:20px;">STO Request Approved by Management</h2>
+  </div>
+  <div style="border:1px solid #d8d3c5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      Management approval has been granted and the request will move to the next processing step.
+    </p>
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #3f6b4f; color:#3f6b4f; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Details</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:45%;">STO Number</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.sto_id}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Approving Site Management Group</td><td style="padding:6px 0; color:#1a2029;">{{.approving_group}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Approval Date</td><td style="padding:6px 0; color:#1a2029;">{{.approval_date}}</td></tr>
+      {{if .notes}}<tr><td style="padding:6px 0; color:#4a5364;">Conditions / Notes</td><td style="padding:6px 0; color:#1a2029;">{{.notes}}</td></tr>{{end}}
+    </table>
+  </div>
+</div>

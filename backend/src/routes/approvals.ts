@@ -6,10 +6,15 @@ import { STOStatus } from '../types';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
 import {
-  sendStoCompletedEmail,
   sendStoSubmittedEmail,
   sendStoAwaitingPlanningEmail,
   sendPlanningReviewEmail,
+  sendManagementRequestedEmail,
+  sendManagementGrantedEmail,
+  sendManagementDeniedEmail,
+  sendLogisticsInProgressEmail,
+  sendReadyToShipAndExecutedEmails,
+  sendReceiptClosedEmail,
 } from '../lib/notify';
 
 const router = Router();
@@ -236,6 +241,9 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
       expiration_date: expiration_date ?? null,
       notes: notes ?? null,
     });
+    if (outcome === 'approve') {
+      sendLogisticsInProgressEmail({ sto_id: sto.sto_id as string });
+    }
     const msg =
       outcome === 'approve'
         ? 'Approved — sent to Shipping Logistics'
@@ -402,6 +410,37 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         execute,
       );
     });
+    if (goToMgmt) {
+      const reasons = [
+        materialValue > matThreshold && `material $${materialValue.toLocaleString()} > threshold`,
+        freightCost > freightThreshold && `freight $${freightCost.toLocaleString()} > threshold`,
+        isColdShipping && `cold shipping (${sto.shipping_conditions})`,
+        freightToValueRatio > 0.3 &&
+          `freight:value ratio ${(freightToValueRatio * 100).toFixed(0)}%`,
+        isControlledShipping && 'controlled shipping',
+        isNonStandardInco && `non-standard INCO term (${sto.inco_terms})`,
+      ]
+        .filter(Boolean)
+        .join('; ');
+      sendManagementRequestedEmail({
+        sto_id: sto.sto_id as string,
+        approval_reasons: reasons,
+        freight_cost: freightCost,
+        material_value: materialValue,
+        shipment_ratio: `${(freightToValueRatio * 100).toFixed(0)}%`,
+        shipping_conditions: sto.shipping_conditions as string | undefined,
+        rush_reason: sto.rush_reason as string | null,
+        controlled_shipping_required: isControlledShipping,
+      });
+    } else if (body.ready_to_ship) {
+      sendReadyToShipAndExecutedEmails({
+        sto_id: sto.sto_id as string,
+        sto_number: (body.sto_number || sto.sto_number) as string | null,
+        shipment_id: (body.shipment_id || sto.shipment_id) as string | null,
+        scheduled_ship_date: body.actual_ship_date || null,
+        actual_ship_date: body.actual_ship_date || null,
+      });
+    }
     res.json({
       message: goToMgmt ? 'Sent to Management review' : 'Sent to Receiving Logistics',
       new_status: newStatus,
@@ -533,6 +572,20 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
         execute,
       );
     });
+    if (approved) {
+      sendManagementGrantedEmail({
+        sto_id: sto.sto_id as string,
+        approving_group: 'Shipping Site Management',
+        approval_date: new Date().toISOString().slice(0, 10),
+        notes: notes ?? null,
+      });
+    } else {
+      sendManagementDeniedEmail({
+        sto_id: sto.sto_id as string,
+        denial_reason: notes ?? null,
+        approving_site: sto.shipping_site as string | undefined,
+      });
+    }
     res.json({
       message: approved
         ? 'Shipping management approved — sent to Receiving Management'
@@ -616,6 +669,20 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
         execute,
       );
     });
+    if (approved) {
+      sendManagementGrantedEmail({
+        sto_id: sto.sto_id as string,
+        approving_group: 'Receiving Site Management',
+        approval_date: new Date().toISOString().slice(0, 10),
+        notes: notes ?? null,
+      });
+    } else {
+      sendManagementDeniedEmail({
+        sto_id: sto.sto_id as string,
+        denial_reason: notes ?? null,
+        approving_site: sto.receiving_site as string | undefined,
+      });
+    }
     res.json({
       message: approved
         ? 'Receiving management approved — returned to Shipping Logistics to confirm'
@@ -689,14 +756,11 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
       );
     });
     if (newStatus === 'CLOSED') {
-      sendStoCompletedEmail({
+      sendReceiptClosedEmail({
         sto_id: sto.sto_id as string,
-        requestor_name: sto.requestor_name as string,
-        requestor_email: sto.requestor_email as string,
-        shipping_site: sto.shipping_site as string | undefined,
-        receiving_site: sto.receiving_site as string | undefined,
-        material_description: sto.material_description as string | undefined,
-        material_sap: sto.material_sap as string | undefined,
+        actual_receipt_date: body.actual_receipt_date || null,
+        sto_number: sto.sto_number as string | null,
+        delivery_closed_out: true,
       });
     }
     res.json({
