@@ -1,7 +1,7 @@
 # Creating & submitting a request
 
-Requestors (and admins) create new STOs. From the **STOs** list or the Dashboard,
-click **New STO** to open the form.
+Any signed-in user can create a new STO — there's no dedicated requestor role. From
+the **STOs** list or the Dashboard, click **New STO** to open the form.
 
 ## Filling in the form
 

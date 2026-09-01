@@ -5,7 +5,7 @@ import { STORequest, STOStatus } from '../types';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { isAdmin, hasRole, hasRoleAtSite } from '../lib/grants';
+import { isAdmin, hasRoleAtSite } from '../lib/grants';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(val?: string | null) {
@@ -462,8 +462,6 @@ export function STODetail() {
   const canShipMgmt = hasRoleAtSite(user, 'management', sto.shipping_site);
   const canRecvMgmt = hasRoleAtSite(user, 'receiving_management', sto.receiving_site);
   const canRecvLog = hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site);
-  // Kept for read-only section framing (e.g. the requestor's own draft section).
-  const isReceivingSiteUser = hasRole(user, 'receiving_site');
 
   // Who is active right now?
   const myTurn =
@@ -597,7 +595,7 @@ export function STODetail() {
         <Section
           title="Request &amp; Material Information"
           icon="📋"
-          active={isReceivingSiteUser && sto.status === 'DRAFT'}
+          active={isRequestor && sto.status === 'DRAFT'}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>

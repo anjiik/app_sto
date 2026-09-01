@@ -2,7 +2,7 @@
 
 The factual core of the system. Everything else in these docs links back here.
 
-- **[Roles & access](roles.md)** — the seven roles and the multi-role, multi-site
+- **[Roles & access](roles.md)** — the six roles and the multi-role, multi-site
   grants model.
 - **[Approval workflow](workflow.md)** — the statuses an STO moves through and who
   acts at each step.

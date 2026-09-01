@@ -7,9 +7,20 @@ const LDAP_BASE_DN = process.env.LDAP_BASE_DN || '';
 const LDAP_BIND_DN = process.env.LDAP_BIND_DN || '';
 const LDAP_BIND_PASS = process.env.LDAP_BIND_PASSWORD || '';
 
+// The company-wide admin group's CN. Exported so anything that needs to
+// reference "the admin group" specifically (e.g. listing its members on the
+// App Info page) uses this single constant rather than a second hardcoded
+// copy of the string.
+export const ADMIN_GROUP_CN = 'APP-STO_MANAGEMENT_ADMIN';
+
 // Explicit map of AD group CN → { app role, site }.
 // Add one entry per group that should have access.
 // The key must match the CN of the group exactly (case-insensitive).
+//
+// There is no per-site admin group and no "create an STO" group — creating an
+// STO requires no specific group at all, just a valid login (see
+// backend/src/routes/sto.ts POST /). Admin access is company-wide only, via
+// the single group below.
 const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   // ── Company-wide admin ────────────────────────────────────────────────────
   // A single admin group that oversees every site. Admins bypass all per-site
@@ -17,25 +28,33 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   // list is not site-scoped, so the `site` here is only a harmless default
   // (e.g. for pre-filling requesting_plant if an admin creates an STO).
   // Key is the exact AD group CN (matched case-insensitively).
-  'APP-STO_MANAGEMENT_ADMIN': { group: 'admin', site: 'ABC' },
+  [ADMIN_GROUP_CN]: { group: 'admin', site: 'ABC' },
   // ── Site: ABC ─────────────────────────────────────────────────────────────
-  ABC_ADMIN: { group: 'admin', site: 'ABC' },
-  ABC_RECEIVING: { group: 'receiving_site', site: 'ABC' },
-  ABC_PLANNING: { group: 'shipping_planning', site: 'ABC' },
-  ABC_LOGISTICS: { group: 'shipping_logistics', site: 'ABC' },
+  'APP-ABC-STO_Management_Planning': { group: 'shipping_planning', site: 'ABC' },
+  'APP-ABC-STO_Management_Logistics': { group: 'shipping_logistics', site: 'ABC' },
+  'APP-ABC-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'ABC' },
   // Two distinct management groups per site: shipping-side vs receiving-side.
   // A user in only the receiving group cannot act on shipping-mgmt steps.
-  ABC_SHIPPING_MANAGEMENT: { group: 'management', site: 'ABC' },
-  ABC_RECEIVING_MANAGEMENT: { group: 'receiving_management', site: 'ABC' },
-  ABC_RECV_LOGISTICS: { group: 'receiving_logistics', site: 'ABC' },
-  // ── Site: XYZ ─────────────────────────────────────────────────────────────
-  XYZ_ADMIN: { group: 'admin', site: 'XYZ' },
-  XYZ_RECEIVING: { group: 'receiving_site', site: 'XYZ' },
-  XYZ_PLANNING: { group: 'shipping_planning', site: 'XYZ' },
-  XYZ_LOGISTICS: { group: 'shipping_logistics', site: 'XYZ' },
-  XYZ_SHIPPING_MANAGEMENT: { group: 'management', site: 'XYZ' },
-  XYZ_RECEIVING_MANAGEMENT: { group: 'receiving_management', site: 'XYZ' },
-  XYZ_RECV_LOGISTICS: { group: 'receiving_logistics', site: 'XYZ' },
+  'APP-ABC-STO_Management_Management': { group: 'management', site: 'ABC' },
+  'APP-ABC-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABC' },
+  // ── Site: ABL ─────────────────────────────────────────────────────────────
+  'APP-ABL-STO_Management_Planning': { group: 'shipping_planning', site: 'ABL' },
+  'APP-ABL-STO_Management_Logistics': { group: 'shipping_logistics', site: 'ABL' },
+  'APP-ABL-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'ABL' },
+  'APP-ABL-STO_Management_Management': { group: 'management', site: 'ABL' },
+  'APP-ABL-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABL' },
+  // ── Site: ABS ─────────────────────────────────────────────────────────────
+  'APP-ABS-STO_Management_Planning': { group: 'shipping_planning', site: 'ABS' },
+  'APP-ABS-STO_Management_Logistics': { group: 'shipping_logistics', site: 'ABS' },
+  'APP-ABS-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'ABS' },
+  'APP-ABS-STO_Management_Management': { group: 'management', site: 'ABS' },
+  'APP-ABS-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABS' },
+  // ── Site: MBM ─────────────────────────────────────────────────────────────
+  'APP-MBM-STO_Management_Planning': { group: 'shipping_planning', site: 'MBM' },
+  'APP-MBM-STO_Management_Logistics': { group: 'shipping_logistics', site: 'MBM' },
+  'APP-MBM-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'MBM' },
+  'APP-MBM-STO_Management_Management': { group: 'management', site: 'MBM' },
+  'APP-MBM-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'MBM' },
 };
 
 export interface LdapAuthResult {
@@ -81,7 +100,8 @@ const CLIENT_OPTS = () => ({
 
 // Scans the user's AD group memberships and derives the app role (from the first
 // matching group) plus EVERY site the user has that same role at. This lets a
-// user who belongs to e.g. ABC_LOGISTICS and ABL_LOGISTICS see both sites' data.
+// user who belongs to e.g. APP-ABC-STO_Management_Logistics and
+// APP-ABL-STO_Management_Logistics see both sites' data.
 function resolveGrants(memberOf: string[]): {
   grants: Grant[];
   group: Group;
@@ -233,6 +253,64 @@ export async function authenticateWithAD(
       throw new Error('Invalid username or password');
     }
     throw err;
+  } finally {
+    await client.unbind().catch(() => {});
+  }
+}
+
+export interface GroupMember {
+  displayName: string;
+  email: string;
+  username: string;
+}
+
+// Looks up every user whose memberOf includes the given group CN. Used to
+// populate the Administrators list on the App Info page from the real
+// APP-STO_MANAGEMENT_ADMIN group, rather than hardcoding names.
+//
+// Requires a service account bind (LDAP_BIND_DN/LDAP_BIND_PASSWORD) — unlike
+// login, there is no signed-in user's own credentials to search with here.
+export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> {
+  if (!LDAP_URL || !LDAP_DOMAIN || !LDAP_BASE_DN) {
+    throw new Error('LDAP not configured — set LDAP_URL, LDAP_DOMAIN, and LDAP_BASE_DN in .env');
+  }
+  if (!LDAP_BIND_DN || !LDAP_BIND_PASS) {
+    throw new Error(
+      'LDAP_BIND_DN/LDAP_BIND_PASSWORD are required to list group members (no per-user credentials available for this lookup)',
+    );
+  }
+
+  const client = new Client(CLIENT_OPTS());
+  try {
+    await client.bind(LDAP_BIND_DN, LDAP_BIND_PASS);
+
+    // Find the group's own DN first, then search users by memberOf=<that DN>
+    // rather than reading the group's `member` attribute directly — this
+    // reads the same info without needing to resolve each member DN by hand,
+    // and naturally excludes stale/unresolvable member references.
+    const { searchEntries: groupEntries } = await client.search(LDAP_BASE_DN, {
+      scope: 'sub',
+      filter: `(&(objectClass=group)(cn=${escapeLdap(groupCN)}))`,
+      attributes: ['dn'],
+    });
+    if (!groupEntries.length) {
+      throw new Error(`AD group "${groupCN}" not found`);
+    }
+    const groupDN = groupEntries[0].dn as string;
+
+    const { searchEntries: memberEntries } = await client.search(LDAP_BASE_DN, {
+      scope: 'sub',
+      filter: `(memberOf=${escapeLdap(groupDN)})`,
+      attributes: ['displayName', 'mail', 'sAMAccountName'],
+    });
+
+    return memberEntries
+      .map(e => ({
+        displayName: (e.displayName as string) || (e.sAMAccountName as string) || '',
+        email: (e.mail as string) || '',
+        username: (e.sAMAccountName as string) || '',
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   } finally {
     await client.unbind().catch(() => {});
   }

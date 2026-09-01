@@ -5,7 +5,7 @@ this throughout — your queues, lists, and approvals span everything you're ass
 to.
 
 - Your access is defined by your Active Directory groups, one per **site + role**
-  (e.g. `ABC_LOGISTICS` and `ABL_LOGISTICS`).
+  (e.g. `APP-ABC-STO_Management_Logistics` and `APP-ABL-STO_Management_Logistics`).
 - Dashboard queues automatically include work from **every** site and role you cover,
   shown as a separate section per role.
 - On the STOs list, the shipping-site and receiving-site filters accept **multiple

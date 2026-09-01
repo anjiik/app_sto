@@ -1,5 +1,4 @@
 export type Group =
-  | 'receiving_site'
   | 'shipping_planning'
   | 'shipping_logistics'
   | 'management' // shipping-site management review

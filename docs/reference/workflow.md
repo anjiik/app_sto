@@ -7,7 +7,7 @@ are inserted only when [management approval is required](approval-rules.md).
 
 | Status | Meaning | Acted on by |
 |--------|---------|-------------|
-| `DRAFT` | Being written; not yet submitted | Requestor (`receiving_site`) |
+| `DRAFT` | Being written; not yet submitted | Requestor (any authenticated user) |
 | `PLANNING_REVIEW` | Submitted; under feasibility review | `shipping_planning` |
 | `SHIPPING_LOGISTICS` | Freight & shipping details being added | `shipping_logistics` |
 | `MANAGEMENT_REVIEW` | Awaiting shipping-site management sign-off | `management` (shipping site) |

@@ -1,18 +1,23 @@
 # Roles & access
 
-## The seven roles
+## The six roles
 
 | Role | Responsibility |
 |------|----------------|
-| `receiving_site` | Creates and submits STO requests (the requestor) |
 | `shipping_planning` | Reviews requests; approves, revises, or rejects |
 | `shipping_logistics` | Adds freight & shipping details; routes for approval |
 | `management` | Shipping-site management sign-off (high-value / cold-chain / controlled / non-standard shipments) |
 | `receiving_management` | Receiving-site management sign-off on the same shipments |
 | `receiving_logistics` | Confirms receipt and closes out delivery |
-| `admin` | Fixes mistakes (revert / send-back), archiving, oversight |
+| `admin` | Fixes mistakes (revert / send-back), archiving, oversight — company-wide, not per-site |
 
 There is no `finance` role — management is the only approval tier beyond planning.
+
+!!! note "Creating a request needs no role"
+    There is no dedicated "requestor" role. Any authenticated user — holding any
+    role, at any site — can create and submit a new STO request. Site-scoped access
+    only starts to matter once the request enters the workflow (planning, logistics,
+    management, receiving).
 
 !!! note "Shipping vs receiving management are distinct roles"
     A management-flagged STO needs sign-off from **both** sides. The shipping-site
@@ -22,10 +27,10 @@ There is no `finance` role — management is the only approval tier beyond plann
 
 ## Per-site vs company-wide
 
-- **The six non-admin roles are per-site.** A `shipping_planning` grant at ABC
+- **The five non-admin roles are per-site.** A `shipping_planning` grant at ABC
   lets you plan for ABC only. To act at another site you need a grant for that site.
-- **`admin` is company-wide.** A single admin grant confers access across every
-  site — admins bypass all per-site checks.
+- **`admin` is company-wide only** — there is no per-site admin tier. A single
+  admin grant confers access across every site; admins bypass all per-site checks.
 
 ## The multi-role, multi-site model
 
@@ -56,5 +61,5 @@ pair. A user can hold several at once. This supports, for example:
   scoped to that role's site(s).
 - On an STO's detail page, the action panel for a step appears only when the user
   holds the right role at that STO's relevant site (or is an admin).
-- Creating a new request is available to the requestor role and admins; any signed-in
-  user can view STOs (subject to site scoping on actions).
+- Creating a new request is available to any signed-in user, regardless of role;
+  every user can also view STOs (subject to site scoping on workflow actions).

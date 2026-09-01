@@ -14,7 +14,6 @@ interface DemoUser {
 }
 
 const GROUP_COLORS: Record<Group, string> = {
-  receiving_site: 'bg-blue-100 text-blue-800',
   shipping_planning: 'bg-amber-100 text-amber-800',
   shipping_logistics: 'bg-teal-100 text-teal-800',
   management: 'bg-purple-100 text-purple-800',
@@ -26,7 +25,8 @@ const GROUP_COLORS: Record<Group, string> = {
 const SITE_COLORS: Record<string, string> = {
   ABC: 'bg-indigo-600',
   ABL: 'bg-cyan-600',
-  XYZ: 'bg-rose-600',
+  ABS: 'bg-rose-600',
+  MBM: 'bg-emerald-600',
 };
 
 export function Login() {

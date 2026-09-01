@@ -1,10 +1,8 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Group } from '../types';
-import { hasRole } from '../lib/grants';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site: 'Receiving Site',
   shipping_planning: 'Shipping Planning',
   shipping_logistics: 'Shipping Logistics',
   management: 'Shipping Management',
@@ -14,7 +12,6 @@ const GROUP_LABELS: Record<Group, string> = {
 };
 
 const GROUP_COLORS: Record<Group, string> = {
-  receiving_site: 'bg-blue-700',
   shipping_planning: 'bg-amber-600',
   shipping_logistics: 'bg-teal-600',
   management: 'bg-purple-700',
@@ -33,13 +30,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login', { replace: true });
   }
 
-  const canCreateNew = hasRole(user, 'receiving_site');
-
+  // Creating an STO requires no specific role — any authenticated user can.
   const navLinks = [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/sto', label: 'All STOs' },
     { to: '/analytics', label: 'Analytics' },
-    ...(canCreateNew ? [{ to: '/sto/new', label: 'New Request' }] : []),
+    { to: '/sto/new', label: 'New Request' },
     { to: '/app-info', label: 'App Info' },
   ];
 

@@ -28,8 +28,8 @@ step, and how management approval is triggered — see the Reference:
 
 ## By role
 
-- **Requestor (`receiving_site`)** — create a request from **New STO**, fill in the
-  material, quantity, sites, and dates, then submit. It moves to planning review.
+- **Requestor (any authenticated user)** — create a request from **New STO**, fill in
+  the material, quantity, sites, and dates, then submit. It moves to planning review.
 - **Shipping Planning** — review requests in your queue; **approve** to send to
   logistics, **revise** to send back to the requestor with a note, or **reject**.
 - **Shipping Logistics** — add freight and shipping details and submit. The app

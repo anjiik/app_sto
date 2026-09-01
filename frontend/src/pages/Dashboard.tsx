@@ -75,9 +75,7 @@ function fetchRoleQueue(
   // Receiving-side roles scope by receiving_site; shipping-side roles by
   // shipping_site. management = shipping-side; receiving_management = receiving-side.
   const siteCol =
-    role === 'receiving_logistics' ||
-    role === 'receiving_site' ||
-    role === 'receiving_management'
+    role === 'receiving_logistics' || role === 'receiving_management'
       ? 'receiving_site'
       : 'shipping_site';
   return get(`?status=${status}&${siteCol}=${siteParam}`).then(r => ({
@@ -555,7 +553,6 @@ export function Dashboard() {
   };
 
   const groupLabel: Record<Group, string> = {
-    receiving_site: 'Receiving Site',
     shipping_planning: 'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
     management: 'Shipping Management',

@@ -3,9 +3,10 @@
 ## Requesting access
 
 Access is granted by Active Directory group membership for your **site** and **role**
-(e.g. `ABC_PLANNING`). Use the **Requesting Access** link on the **App Info** page and
-include the site(s) and role you need. For help, contact an administrator (listed on
-the same page) or your IT service desk.
+(e.g. `APP-ABC-STO_Management_Planning`). Use the **Requesting Access** link on the
+**App Info** page and include the site(s) and role you need. For help, contact an
+administrator (listed on the same page) or your IT service desk. Creating a new STO
+needs no group membership at all — any signed-in user can do that.
 
 ## Status quick reference
 

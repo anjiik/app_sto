@@ -9,17 +9,37 @@ screen.
 
 ## Per-site users
 
-Each site (**ABC**, **ABL**, **XYZ**) has one user per role. Shown here for ABC; ABL
-uses the `abl.*` prefix and XYZ uses `xyz.*`.
+Each site (**ABC**, **ABL**, **ABS**, **MBM**) has one user per role. There is no
+dedicated "requestor" account — any demo user can create an STO. Shown here for
+ABC; ABL uses the `abl.*` prefix, ABS uses `abs.*`, and MBM uses `mbm.*`.
 
 | Username | Name | Site | Role |
 |----------|------|------|------|
-| `abc.recv` | Alice Carter | ABC | receiving_site (requestor) |
 | `abc.plan` | Brian Scott | ABC | shipping_planning |
 | `abc.slog` | Carol White | ABC | shipping_logistics |
 | `abc.mgmt` | Daniel Ross | ABC | management (shipping side) |
 | `abc.rmgmt` | Emma Hayes | ABC | receiving_management |
 | `abc.rlog` | Frank Lopez | ABC | receiving_logistics |
+
+MBM's accounts (added alongside the MBM site itself):
+
+| Username | Name | Site | Role |
+|----------|------|------|------|
+| `mbm.plan` | Marcus Ellery | MBM | shipping_planning |
+| `mbm.slog` | Priya Deshmukh | MBM | shipping_logistics |
+| `mbm.mgmt` | Derek Holloway | MBM | management (shipping side) |
+| `mbm.rmgmt` | Naomi Castillo | MBM | receiving_management |
+| `mbm.rlog` | Felix Andersson | MBM | receiving_logistics |
+
+ABS's accounts:
+
+| Username | Name | Site | Role |
+|----------|------|------|------|
+| `abs.plan` | Nathan Cole | ABS | shipping_planning |
+| `abs.slog` | Olivia Reed | ABS | shipping_logistics |
+| `abs.mgmt` | Patrick James | ABS | management (shipping side) |
+| `abs.rmgmt` | Sophia Bell | ABS | receiving_management |
+| `abs.rlog` | Rachel Tran | ABS | receiving_logistics |
 
 ## Admin
 

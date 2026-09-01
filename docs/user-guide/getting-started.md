@@ -8,18 +8,19 @@ play.
 
 Open the app in your browser at your organisation's STO address (served under
 `/sto`). Sign in with your normal work credentials — access is granted through your
-Active Directory group for your **site** and **role** (for example `ABC_LOGISTICS`).
-If you can't sign in, see [Troubleshooting](troubleshooting.md#requesting-access).
+Active Directory group for your **site** and **role** (for example
+`APP-ABC-STO_Management_Logistics`). If you can't sign in, see
+[Troubleshooting](troubleshooting.md#requesting-access).
 
 ## Your role determines what you see
 
 The app is role-aware: your dashboard, queues, and available actions all depend on
-your role. You may hold **more than one role** or cover **more than one site**. The
-seven roles are:
+your role. You may hold **more than one role** or cover **more than one site**.
+Creating a request needs no role at all — any signed-in user can. Beyond that, the
+six roles are:
 
 | Role | What you do |
 |------|-------------|
-| Requestor (`receiving_site`) | Create and submit new STO requests; track your own drafts. |
 | Shipping Planning (`shipping_planning`) | Review requests; add planning details; approve, revise, or reject. |
 | Shipping Logistics (`shipping_logistics`) | Add freight & shipping details; route for management approval when required. |
 | Shipping Management (`management`) | Approve flagged shipments at the **shipping** site. |

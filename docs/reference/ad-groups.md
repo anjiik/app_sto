@@ -17,31 +17,37 @@ their **Active Directory group memberships**. The mapping from AD group to
 
 ## The map
 
-Each entry is `AD group CN → { role, site }`. Naming convention: `{SITE}_{ROLE}`,
-plus a single company-wide admin group.
+Each entry is `AD group CN → { role, site }`. Naming convention:
+`APP-{SITE}-STO_Management_{Role}`, plus a single company-wide admin group.
 
 | AD group (CN) | Role | Site |
 |---------------|------|------|
 | `APP-STO_MANAGEMENT_ADMIN` | admin | (company-wide) |
-| `ABC_RECEIVING` | receiving_site | ABC |
-| `ABC_PLANNING` | shipping_planning | ABC |
-| `ABC_LOGISTICS` | shipping_logistics | ABC |
-| `ABC_SHIPPING_MANAGEMENT` | management | ABC |
-| `ABC_RECEIVING_MANAGEMENT` | receiving_management | ABC |
-| `ABC_RECV_LOGISTICS` | receiving_logistics | ABC |
+| `APP-ABC-STO_Management_Planning` | shipping_planning | ABC |
+| `APP-ABC-STO_Management_Logistics` | shipping_logistics | ABC |
+| `APP-ABC-STO_Management_Logistics_Receiving` | receiving_logistics | ABC |
+| `APP-ABC-STO_Management_Management` | management | ABC |
+| `APP-ABC-STO_Management_Management_Receiving` | receiving_management | ABC |
 
-The same seven-per-site pattern repeats for each additional site (e.g. `XYZ_*`).
+The same five-per-site pattern repeats for each additional site: `APP-ABL-...`,
+`APP-ABS-...`, `APP-MBM-...`.
 
 !!! important "Two management groups per site"
     Shipping-side and receiving-side management are **separate** roles backed by
-    separate groups (`{SITE}_SHIPPING_MANAGEMENT` and `{SITE}_RECEIVING_MANAGEMENT`).
-    Add a user to whichever side they approve for; a user in only one cannot act on
-    the other side's step.
+    separate groups (`APP-{SITE}-STO_Management_Management` and
+    `APP-{SITE}-STO_Management_Management_Receiving`). Add a user to whichever side
+    they approve for; a user in only one cannot act on the other side's step.
 
-!!! note "Real vs placeholder names"
-    `APP-STO_MANAGEMENT_ADMIN` is the real admin group CN. The `{SITE}_*` entries
-    are **placeholder examples** — replace each key with the exact CN of the real AD
-    group your directory team creates.
+!!! note "No per-site admin group, no 'create an STO' group"
+    Admin access is company-wide only (`APP-STO_MANAGEMENT_ADMIN`) — there is no
+    per-site admin group. There is also no group for creating an STO: any
+    authenticated user, in any of the groups above (or none), can create one.
+
+!!! note "These are the real group names"
+    Unlike some earlier drafts of this table, the `APP-{SITE}-STO_Management_*`
+    names above are the actual AD group names — not placeholders. If your
+    directory team creates them under different names, update the keys in
+    `GROUP_MAP` to match exactly.
 
 ## Adding or renaming a group
 
@@ -59,9 +65,10 @@ The same seven-per-site pattern repeats for each additional site (e.g. `XYZ_*`).
 ## Multi-site and multi-role users
 
 There is no special "multi-site" group. To give someone access at two sites, add
-them to the relevant group at **each** site (e.g. `ABC_LOGISTICS` and
-`ABL_LOGISTICS`) — the app merges these into two grants automatically. The same
-applies to holding different roles.
+them to the relevant group at **each** site (e.g.
+`APP-ABC-STO_Management_Logistics` and `APP-ABL-STO_Management_Logistics`) — the
+app merges these into two grants automatically. The same applies to holding
+different roles.
 
 ## Troubleshooting login
 
