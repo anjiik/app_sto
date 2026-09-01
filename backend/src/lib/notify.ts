@@ -27,23 +27,47 @@ const RELAY_SHIPMENT_EXECUTED_TEMPLATE =
 const RELAY_RECEIPT_CLOSED_TEMPLATE =
   process.env.NOTIFICATION_RELAY_RECEIPT_CLOSED_TEMPLATE || 'sto-receipt-closed';
 
-// TESTING ONLY — every notification this module sends is redirected to this
-// address instead of the real recipient(s), so the relay + templates can be
-// verified without emailing anyone for real. Remove TEST_NOTIFICATION_OVERRIDE
-// (or unset it) once ready to send to real recipients — group/role
-// notifications will then need a real per-site distribution list/address,
-// since there is no per-role email on file today (only individual
-// requestor_email).
-const TEST_NOTIFICATION_OVERRIDE = 'ABC123@gmail.com';
+// Test mode toggle. When on, EVERY notification this module would send is
+// redirected to TEST_NOTIFICATION_OVERRIDE instead of the real recipient —
+// this is the current production setting (deliberately), so nothing goes to
+// a real inbox until it's explicitly switched off with
+// NOTIFICATION_TEST_MODE=false once real recipients are ready everywhere.
+// Defaults ON (missing/unset = test mode) so this is safe-by-default even if
+// the var is never set at all — the previous hardcoded behavior, just now a
+// single flag instead of a value buried in code.
+const TEST_MODE = process.env.NOTIFICATION_TEST_MODE !== 'false';
+const TEST_NOTIFICATION_OVERRIDE = process.env.NOTIFICATION_TEST_EMAIL || 'ABC123@gmail.com';
 
 function configured(): boolean {
   return Boolean(RELAY_URL && RELAY_USER && RELAY_PASS);
 }
 
+// Resolves who a notification should actually go to. In test mode, always
+// the override. Otherwise the real address if one was given — some events
+// (see the per-function comments below) have no real per-role/per-site
+// recipient on file yet, only the requestor's own email, so those pass
+// `undefined` here and get skipped rather than guessing at a fake target.
+function resolveDestination(realEmail: string | undefined | null): string | null {
+  if (TEST_MODE) return TEST_NOTIFICATION_OVERRIDE;
+  return realEmail || null;
+}
+
 // Shared POST to the relay's /notifications endpoint — fire-and-forget (no
 // await from the caller) so a relay failure never blocks the workflow action
-// that triggered it. Logs but does not throw on error.
-function postNotification(payload: Record<string, unknown>, logCtx: Record<string, unknown>): void {
+// that triggered it. Logs but does not throw on error. Returns without
+// calling the relay at all if there's no destination to send to (relay not
+// configured, or no real recipient available outside test mode).
+function postNotification(
+  destination: string | null,
+  payload: Record<string, unknown>,
+  logCtx: Record<string, unknown>,
+): void {
+  if (!configured()) return;
+  if (!destination) {
+    logger.info({ ...logCtx }, 'notification skipped — no recipient available');
+    return;
+  }
+
   const creds = Buffer.from(`${RELAY_USER}:${RELAY_PASS}`).toString('base64');
 
   fetch(`${RELAY_URL}/api/v1/notifications`, {
@@ -52,7 +76,7 @@ function postNotification(payload: Record<string, unknown>, logCtx: Record<strin
       'Content-Type': 'application/json',
       Authorization: `Basic ${creds}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, destinations: [{ channel: 'email', target: destination }] }),
   })
     .then(res => {
       if (!res.ok) {
@@ -66,8 +90,6 @@ function postNotification(payload: Record<string, unknown>, logCtx: Record<strin
     .catch(err => logger.error({ ...logCtx, err }, 'notification relay unreachable'));
 }
 
-// Fire-and-forget — call without await so a relay failure never blocks the caller.
-// Logs an error if the relay is reachable but returns a non-2xx response.
 // "STO Receipt Confirmed and Closed" — sent when Receiving Site Logistics
 // confirms actual receipt and closes out delivery (5) Receiving Site
 // Logistics / Receipt Closeout). Replaces the previous STO-completion email;
@@ -76,22 +98,21 @@ function postNotification(payload: Record<string, unknown>, logCtx: Record<strin
 // Requires an "sto-receipt-closed" template on the relay (subject: "STO
 // Receipt Confirmed and Closed").
 //
-// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE — see the
-// constant above.
+// No per-role distribution list exists yet for Receiving/Shipping
+// Logistics/Planning — outside test mode this is skipped until one does.
 export function sendReceiptClosedEmail(sto: {
   sto_id: string;
   actual_receipt_date?: string | null;
   sto_number?: string | null;
   delivery_closed_out?: boolean;
 }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-receipt-closed-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} receipt confirmed and closed`,
       message: 'The material has been received and the STO has been closed out.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_RECEIPT_CLOSED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -110,17 +131,19 @@ export function sendReceiptClosedEmail(sto: {
 // body confirming the request is under Shipping Site Planning review) — see
 // docs/admin/configuration.md for the one-time setup call.
 //
-// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE regardless
-// of the real requestor_email — see the constant above to change this.
-export function sendStoSubmittedEmail(sto: { sto_id: string; requestor_name: string }): void {
-  if (!configured()) return;
-
+// Sent to the requestor's own email outside test mode.
+export function sendStoSubmittedEmail(sto: {
+  sto_id: string;
+  requestor_name: string;
+  requestor_email?: string | null;
+}): void {
+  const destination = resolveDestination(sto.requestor_email);
   postNotification(
+    destination,
     {
       event_id: `sto-submitted-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} submitted`,
       message: `STO ${sto.sto_id} has been submitted and is under Shipping Site Planning review.`,
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_SUBMITTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -141,11 +164,9 @@ export function sendStoSubmittedEmail(sto: { sto_id: string; requestor_name: str
 // and is ready for Shipping Site Planning review.", referencing the
 // email_vars below (sto_id plus every field in the spec's "key details" list).
 //
-// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE — there is
-// no real distribution list for "Shipping Planning + Logistics at site X"
-// today, only individual requestor_email. Wire up real recipients (site-scoped
-// distribution lists, or every user holding those roles at the site) before
-// removing the override.
+// No per-role distribution list exists yet for Shipping Planning/Logistics —
+// outside test mode this is skipped until one does (see requestor_email on
+// the payload for a human to manually loop them in, in the meantime).
 export function sendStoAwaitingPlanningEmail(sto: {
   sto_id: string;
   requestor_name?: string;
@@ -173,14 +194,13 @@ export function sendStoAwaitingPlanningEmail(sto: {
   shipment_id?: string | null;
   corporate_sto_tracker_status?: string | null;
 }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-planning-queue-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} submitted for review`,
       message: 'A new STO request has been submitted and is ready for Shipping Site Planning review.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_PLANNING_QUEUE_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -223,20 +243,19 @@ export function sendStoAwaitingPlanningEmail(sto: {
 //   sto-planning-revision — "STO Request Requires Revision"
 //   sto-planning-rejected — "STO Request Rejected by Shipping Site Planning"
 //
-// TESTING: destination is hardcoded to TEST_NOTIFICATION_OVERRIDE — see the
-// constant above.
+// Sent to the requestor's own email outside test mode (Shipping
+// Logistics/other stakeholders have no distribution list yet).
 export function sendPlanningReviewEmail(
   outcome: 'approve' | 'revise' | 'reject',
   sto: {
     sto_id: string;
+    requestor_email?: string | null;
     mpn_number?: string | null;
     batch_number?: string | null;
     expiration_date?: string | null;
     notes?: string | null;
   },
 ): void {
-  if (!configured()) return;
-
   const byOutcome = {
     approve: {
       template: RELAY_PLANNING_APPROVED_TEMPLATE,
@@ -256,12 +275,13 @@ export function sendPlanningReviewEmail(
     },
   }[outcome];
 
+  const destination = resolveDestination(sto.requestor_email);
   postNotification(
+    destination,
     {
       event_id: `sto-planning-${byOutcome.eventSuffix}-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} planning ${byOutcome.eventSuffix}`,
       message: byOutcome.message,
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: byOutcome.template,
       email_vars: {
         sto_id: sto.sto_id,
@@ -279,6 +299,9 @@ export function sendPlanningReviewEmail(
 // MANAGEMENT_REVIEW (i.e. the logistics submission determined management
 // approval is required). Requires an "sto-management-requested" template
 // (subject: "STO Request Requires Management Approval").
+//
+// No per-role distribution list exists yet for Management — outside test
+// mode this is skipped until one does.
 export function sendManagementRequestedEmail(sto: {
   sto_id: string;
   approval_reasons?: string;
@@ -289,14 +312,13 @@ export function sendManagementRequestedEmail(sto: {
   rush_reason?: string | null;
   controlled_shipping_required?: boolean;
 }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-management-requested-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} requires management approval`,
       message: 'Your STO request requires management review before it can proceed.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_MANAGEMENT_REQUESTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -316,20 +338,22 @@ export function sendManagementRequestedEmail(sto: {
 // "Management Approval Granted" — sent when either shipping-site or
 // receiving-site management approves. Requires an "sto-management-granted"
 // template (subject: "STO Request Approved by Management").
+//
+// No per-role distribution list exists yet — outside test mode this is
+// skipped until one does.
 export function sendManagementGrantedEmail(sto: {
   sto_id: string;
   approving_group: string;
   approval_date?: string;
   notes?: string | null;
 }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-management-granted-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} management approval granted`,
       message: 'Management approval has been granted and the request will move to the next processing step.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_MANAGEMENT_GRANTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -345,19 +369,21 @@ export function sendManagementGrantedEmail(sto: {
 // "Management Approval Denied" — sent when either shipping-site or
 // receiving-site management rejects. Requires an "sto-management-denied"
 // template (subject: "STO Request Denied by Management").
+//
+// No per-role distribution list exists yet — outside test mode this is
+// skipped until one does.
 export function sendManagementDeniedEmail(sto: {
   sto_id: string;
   denial_reason?: string | null;
   approving_site?: string;
 }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-management-denied-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} management approval denied`,
       message: 'Management approval was denied. The STO request cannot proceed.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_MANAGEMENT_DENIED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -372,15 +398,17 @@ export function sendManagementDeniedEmail(sto: {
 // "Logistics In Progress" — sent when an STO enters SHIPPING_LOGISTICS (i.e.
 // Planning approves it). Requires an "sto-logistics-in-progress" template
 // (subject: "STO Request in Shipping Logistics Processing").
+//
+// No per-role distribution list exists yet — outside test mode this is
+// skipped until one does.
 export function sendLogisticsInProgressEmail(sto: { sto_id: string }): void {
-  if (!configured()) return;
-
+  const destination = resolveDestination(undefined);
   postNotification(
+    destination,
     {
       event_id: `sto-logistics-in-progress-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} in shipping logistics processing`,
       message: 'Your STO request is now with Shipping Site Logistics for execution planning.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_LOGISTICS_IN_PROGRESS_TEMPLATE,
       email_vars: { sto_id: sto.sto_id },
     },
@@ -394,6 +422,9 @@ export function sendLogisticsInProgressEmail(sto: { sto_id: string }): void {
 // both fire from the same event. Requires "sto-ready-to-ship" (subject: "STO
 // Ready to Ship") and "sto-shipment-executed" (subject: "STO Shipment
 // Executed") templates on the relay.
+//
+// No per-role distribution list exists yet — outside test mode both are
+// skipped until one does.
 export function sendReadyToShipAndExecutedEmails(sto: {
   sto_id: string;
   sto_number?: string | null;
@@ -401,15 +432,15 @@ export function sendReadyToShipAndExecutedEmails(sto: {
   scheduled_ship_date?: string | null;
   actual_ship_date?: string | null;
 }): void {
-  if (!configured()) return;
+  const destination = resolveDestination(undefined);
 
   postNotification(
+    destination,
     {
       event_id: `sto-ready-to-ship-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} ready to ship`,
       message:
         'The STO is ready to ship. All required approvals, documentation, and booking activities have been completed.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_READY_TO_SHIP_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
@@ -423,11 +454,11 @@ export function sendReadyToShipAndExecutedEmails(sto: {
   );
 
   postNotification(
+    destination,
     {
       event_id: `sto-shipment-executed-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} shipment executed`,
       message: 'The shipment has been executed and the request has moved to Receiving Site Logistics.',
-      destinations: [{ channel: 'email', target: TEST_NOTIFICATION_OVERRIDE }],
       email_template: RELAY_SHIPMENT_EXECUTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,

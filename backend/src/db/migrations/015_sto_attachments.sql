@@ -3,7 +3,9 @@
 -- point in the workflow. Stored as VARBINARY(MAX) in the row for simplicity —
 -- no filesystem path or backup plan to manage separately.
 -- Run AFTER 014_sto_number_request.sql.
+-- Safe to re-run: table and index creation are both guarded.
 
+IF NOT EXISTS (SELECT 1 FROM sysobjects WHERE name = 'sto_attachments' AND xtype = 'U')
 CREATE TABLE sto_attachments (
     id              INT PRIMARY KEY IDENTITY(1,1),
     sto_request_id  INT NOT NULL,
@@ -18,5 +20,6 @@ CREATE TABLE sto_attachments (
         REFERENCES sto_requests(id)
 );
 
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_sto_attachments_sto' AND object_id = OBJECT_ID('sto_attachments'))
 CREATE NONCLUSTERED INDEX IX_sto_attachments_sto
   ON sto_attachments (sto_request_id, uploaded_at DESC);

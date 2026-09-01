@@ -38,17 +38,30 @@ Run each file in `backend\src\db\migrations\` **in order**, against `sto_managem
 | 011 | `011_form_overhaul.sql` | Form/workflow overhaul columns |
 | 012 | `012_demo_user_grants.sql` | Multi-role demo users (`grants` column) |
 | 013 | `013_distressed_inventory.sql` | Distressed Inventory flag + value (`distressed_inventory`, `di_value`) |
+| 014 | `014_sto_number_request.sql` | STO# request reminder (`sto_number_requested_at`) |
+| 015 | `015_sto_attachments.sql` | STO attachments table (Certificate of Analysis, etc.) |
+| 016 | `016_mbm_demo_users.sql` | MBM site demo users |
+| 017 | `017_migration_tracking.sql` | Creates `schema_migrations`, a checklist table recording which migrations have run |
+| 018 | `018_backfill_migration_history.sql` | One-time backfill: records 001-018 as applied in `schema_migrations` |
+| 019 | `019_site_xyz_to_abs_rename.sql` | Renames site XYZ to ABS everywhere (sites, sto_requests, demo_users) and drops the retired `receiving_site` demo role |
 
 !!! tip "Fresh vs existing database"
-    On a **brand-new** database, run all of them in order — each is safe. On an
-    **existing** database, check whether a column already exists before re-running a
-    migration, e.g.:
+    All migrations 001-018 are safe to re-run — every `ALTER TABLE`,
+    `CREATE TABLE`, and `CREATE INDEX` is guarded to no-op if already applied.
+    On a **brand-new** database created from `schema.sql`, the schema already
+    includes everything through 018 (using site code ABS, not XYZ) plus the
+    `schema_migrations` table itself — just run
+    `018_backfill_migration_history.sql` once to record history. **Skip 019** —
+    a fresh install never had XYZ to rename.
+    On an **existing** database, run any migrations you haven't yet, in order,
+    including 019 if it still has site XYZ; re-running an already-applied one
+    is harmless.
+
+    To check what's already applied, once `schema_migrations` exists (017+):
 
     ```sql
-    SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_NAME = 'demo_users' AND COLUMN_NAME = 'grants';
+    SELECT * FROM schema_migrations ORDER BY filename;
     ```
-    If a row is returned, that migration is already applied — skip it.
 
 ## Find your SQL Server name
 
@@ -58,7 +71,7 @@ instance.
 
 ## Set your real sites
 
-The schema pre-loads placeholder sites (ABC, ABL, XYZ). Replace them with yours:
+The schema pre-loads placeholder sites (ABC, ABL, ABS, MBM). Replace them with yours:
 
 ```sql
 USE sto_management;

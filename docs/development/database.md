@@ -7,8 +7,8 @@ changes live under `backend/src/db`.
 
 - **`schema.sql`** — full schema for a fresh database (tables, indexes, the
   STO-number sequence, and initial `sites`).
-- **`migrations/`** — numbered, incremental changes (001–013). Apply in order; see
-  [Admin → Database & migrations](../admin/database.md).
+- **`migrations/`** — numbered, incremental changes (001, 003–019; no 002). Apply in
+  order; see [Admin → Database & migrations](../admin/database.md).
 - **`seed.ts`** — demo users + sample STOs for dev (`npm run seed`). Not used in
   production.
 - **`connection.ts`**, **`audit.ts`** — pooled query helpers and the audit-log writer.
@@ -30,9 +30,10 @@ changes live under `backend/src/db`.
     [Approval rules](../reference/approval-rules.md).
 
 !!! note "`app_users` removed"
-    An `app_users` table existed in early versions but was removed by migration 006 —
-    roles and sites come from Active Directory (production) or `demo_users` (dev), not
-    from a users table.
+    An `app_users` table existed in early versions but was removed from the
+    authorization path by migration 006 — roles and sites come from Active Directory
+    (production) or `demo_users` (dev), not from a users table. `schema.sql` no longer
+    creates it and `seed.ts` no longer populates it.
 
 ## Status values
 

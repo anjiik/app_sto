@@ -5,6 +5,9 @@
 --   di_value             — the estimated saving; editable by the requestor,
 --                          shipping planning, and shipping logistics.
 -- Run AFTER 012_demo_user_grants.sql.
+-- Safe to re-run: each column add is guarded by a sys.columns check.
 
-ALTER TABLE sto_requests ADD distressed_inventory BIT NOT NULL DEFAULT 0;
-ALTER TABLE sto_requests ADD di_value             DECIMAL(18,2) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('sto_requests') AND name = 'distressed_inventory')
+  ALTER TABLE sto_requests ADD distressed_inventory BIT NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('sto_requests') AND name = 'di_value')
+  ALTER TABLE sto_requests ADD di_value             DECIMAL(18,2) NULL;

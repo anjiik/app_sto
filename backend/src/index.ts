@@ -53,7 +53,27 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 app.use(helmet());
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
-app.use(pinoHttp({ logger }));
+// Only log HTTP requests that actually failed (4xx/5xx) or errored — a
+// successful request logs nothing, so routine traffic (dashboard polling,
+// list/analytics fetches, etc.) doesn't fill the log with noise. Real
+// failures still get a line, including the status code and any thrown error.
+// req/res are trimmed to the essentials (method, URL, status, timing) —
+// the default serializers dump full headers, which is a lot of scroll for
+// something rarely needed when scanning a day's errors.
+app.use(
+  pinoHttp({
+    logger,
+    customLogLevel: (_req, res, err) => {
+      if (err || res.statusCode >= 500) return 'error';
+      if (res.statusCode >= 400) return 'warn';
+      return 'silent';
+    },
+    serializers: {
+      req: req => ({ method: req.method, url: req.url }),
+      res: res => ({ statusCode: res.statusCode }),
+    },
+  }),
+);
 app.use('/api/', apiLimit);
 
 app.use('/api/auth', authRoutes);
@@ -74,6 +94,16 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+// Catch-all for errors that escape a route's own try/catch (e.g. thrown
+// synchronously in middleware, or by a route that forgot one). Without this,
+// Express falls back to its default HTML error handler, which can leak stack
+// traces to the client. Must be registered last, after all routes.
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err, path: req.path }, 'unhandled route error');
+  if (res.headersSent) return;
+  res.status(500).json({ message: 'Internal server error' });
+});
+
 const server = app.listen(PORT, () => {
   logger.info(
     { port: PORT, cors: FRONTEND_ORIGIN, db: process.env.DB_SERVER },
@@ -89,3 +119,17 @@ function shutdown() {
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// Last-resort safety nets. Without these, an unhandled promise rejection (e.g.
+// a fire-and-forget call that throws) or a truly uncaught exception crashes
+// the Node process with no log line and no graceful recovery — under a
+// service manager that just means the whole app silently drops until the
+// next restart. Log what happened, then exit so the service manager restarts
+// us into a known-good state rather than continuing in a possibly-corrupted one.
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'unhandled promise rejection');
+});
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'uncaught exception — shutting down');
+  shutdown();
+});

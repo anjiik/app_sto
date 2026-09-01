@@ -4,6 +4,23 @@ dotenv.config();
 import bcrypt from 'bcryptjs';
 import { dbExecute, dbQuery, dbQueryOne } from './connection';
 
+// This script wipes and rebuilds demo data — DELETE FROM sto_requests,
+// sto_audit_log, demo_users, all unconditionally. It is meant for
+// local/demo databases only. DEV_BYPASS=true is the one signal in this app
+// that a given environment is a demo/testing one (see backend/src/index.ts —
+// it's allowed even under NODE_ENV=production, for a deliberate test pass),
+// so require it here too: refuse to run against a database that isn't
+// explicitly in that mode, rather than trusting NODE_ENV alone.
+if (process.env.DEV_BYPASS !== 'true') {
+  console.error(
+    '[seed] Refusing to run: DEV_BYPASS is not "true". This script deletes all STO ' +
+      'requests, audit history, and demo/app users. Only run it against a demo/dev ' +
+      'database with DEV_BYPASS=true set. If this really is a demo database and you ' +
+      'want to proceed, set DEV_BYPASS=true in .env and re-run.',
+  );
+  process.exit(1);
+}
+
 const now = new Date().toISOString().slice(0, 10);
 
 interface StoRow {
@@ -557,7 +574,8 @@ interface DemoUser {
 
 const DEMO_USERS: DemoUser[] = [
   // ── Site ABC ──────────────────────────────────────────────────────────────
-  { username: 'abc.recv', display_name: 'Alice Carter', site: 'ABC', group_key: 'receiving_site' },
+  // Note: there is no dedicated "create an STO" role/account — any
+  // authenticated user (any account below) can create a new request.
   {
     username: 'abc.plan',
     display_name: 'Brian Scott',
@@ -595,7 +613,6 @@ const DEMO_USERS: DemoUser[] = [
   },
 
   // ── Site ABL ──────────────────────────────────────────────────────────────
-  { username: 'abl.recv', display_name: 'Grace Kim', site: 'ABL', group_key: 'receiving_site' },
   { username: 'abl.plan', display_name: 'Henry Wu', site: 'ABL', group_key: 'shipping_planning' },
   {
     username: 'abl.slog',
@@ -618,12 +635,6 @@ const DEMO_USERS: DemoUser[] = [
   },
 
   // ── Site MBM ──────────────────────────────────────────────────────────────
-  {
-    username: 'mbm.recv',
-    display_name: 'Olivia Bennett',
-    site: 'MBM',
-    group_key: 'receiving_site',
-  },
   {
     username: 'mbm.plan',
     display_name: 'Marcus Ellery',
@@ -650,31 +661,30 @@ const DEMO_USERS: DemoUser[] = [
     group_key: 'receiving_logistics',
   },
 
-  // ── Site XYZ ──────────────────────────────────────────────────────────────
-  { username: 'xyz.recv', display_name: 'Maria Evans', site: 'XYZ', group_key: 'receiving_site' },
+  // ── Site ABS ──────────────────────────────────────────────────────────────
   {
-    username: 'xyz.plan',
+    username: 'abs.plan',
     display_name: 'Nathan Cole',
-    site: 'XYZ',
+    site: 'ABS',
     group_key: 'shipping_planning',
   },
   {
-    username: 'xyz.slog',
+    username: 'abs.slog',
     display_name: 'Olivia Reed',
-    site: 'XYZ',
+    site: 'ABS',
     group_key: 'shipping_logistics',
   },
-  { username: 'xyz.mgmt', display_name: 'Patrick James', site: 'XYZ', group_key: 'management' },
+  { username: 'abs.mgmt', display_name: 'Patrick James', site: 'ABS', group_key: 'management' },
   {
-    username: 'xyz.rmgmt',
+    username: 'abs.rmgmt',
     display_name: 'Sophia Bell',
-    site: 'XYZ',
+    site: 'ABS',
     group_key: 'receiving_management',
   },
   {
-    username: 'xyz.rlog',
+    username: 'abs.rlog',
     display_name: 'Rachel Tran',
-    site: 'XYZ',
+    site: 'ABS',
     group_key: 'receiving_logistics',
   },
 
@@ -746,27 +756,9 @@ async function seedSites(): Promise<void> {
   }
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABC', 'Site ABC')`);
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABL', 'Site ABL')`);
-  await dbExecute(`INSERT INTO sites (code, name) VALUES ('XYZ', 'Site XYZ')`);
+  await dbExecute(`INSERT INTO sites (code, name) VALUES ('ABS', 'Site ABS')`);
   await dbExecute(`INSERT INTO sites (code, name) VALUES ('MBM', 'Site MBM')`);
-  console.log('✓ Seeded 4 sites (ABC, ABL, XYZ, MBM).');
-}
-
-async function seedAppUsers(): Promise<void> {
-  await dbExecute('DELETE FROM app_users');
-  // Reset IDENTITY so app_users.id always starts at 1 after re-seeding.
-  // This keeps the values consistent with requestor_user_id in the seeded STOs.
-  await dbExecute("DBCC CHECKIDENT ('app_users', RESEED, 0)");
-  for (const u of DEMO_USERS) {
-    await dbExecute(
-      `INSERT INTO app_users (ad_username, display_name, site, app_group)
-       VALUES (@username, @display_name, @site, @group_key)`,
-      { username: u.username, display_name: u.display_name, site: u.site, group_key: u.group_key },
-    );
-  }
-  console.log(`✓ Seeded ${DEMO_USERS.length} app_users from demo user list.`);
-  console.log(
-    "  To add an admin in dev: UPDATE app_users SET app_group = 'admin' WHERE ad_username = 'your.username';",
-  );
+  console.log('✓ Seeded 4 sites (ABC, ABL, ABS, MBM).');
 }
 
 async function seed() {
@@ -864,7 +856,6 @@ async function seed() {
 
   await seedDemoUsers();
   await seedSites();
-  await seedAppUsers();
 }
 
 seed()

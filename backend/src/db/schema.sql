@@ -1,6 +1,22 @@
 -- Run this script once against your SQL Server database
 -- 1. Create the database first: CREATE DATABASE sto_management;
 -- 2. Then run this script against it.
+--
+-- This is the FRESH-INSTALL path only — it reflects the fully-migrated
+-- schema (equivalent to running every file in migrations/ 001-018 in order
+-- against an empty database). An EXISTING database should keep applying
+-- migrations/*.sql in order instead of re-running this file.
+--
+-- IMPORTANT for maintainers: whenever a new migration is added to
+-- migrations/, apply the same change here too, so this file never drifts
+-- from the migrated state again. Drift here has caused two classes of bug
+-- before: a fresh install missing a column/table a migration had added (e.g.
+-- archived/archived_at, receiving_mgmt_*), and a fresh install having the
+-- WRONG constraint on a column a migration had altered (e.g.
+-- requestor_user_id and sto_audit_log.performed_by were left NOT NULL here
+-- after migration 006 made them nullable — the app never populates either,
+-- so every insert failed on a fresh install until that was caught and fixed).
+-- Check migrations for ALTER COLUMN, not just ADD, when reconciling.
 
 CREATE TABLE sto_requests (
     id                              INT PRIMARY KEY IDENTITY(1,1),
@@ -21,7 +37,10 @@ CREATE TABLE sto_requests (
     distressed_inventory            BIT DEFAULT 0,
     di_value                        DECIMAL(18,2),
 
-    requestor_user_id               INT NOT NULL,
+    -- Nullable: there is no app_users table (removed — roles/identity come
+    -- from AD or demo_users, see routes/sto.ts POST /, which always inserts
+    -- NULL here). The requestor is identified by requestor_name/email instead.
+    requestor_user_id               INT NULL,
     requestor_name                  VARCHAR(200),
     requestor_email                 VARCHAR(200),
 
@@ -59,6 +78,14 @@ CREATE TABLE sto_requests (
     management_approved_at          DATETIME,
     management_notes                NVARCHAR(MAX),
 
+    receiving_mgmt_approved             BIT,
+    receiving_mgmt_approved_by_user_id  INT,
+    receiving_mgmt_approved_at          DATETIME,
+    receiving_mgmt_notes                NVARCHAR(1000),
+
+    -- finance_* is retired (the finance role no longer exists — see
+    -- receiving_management above) but kept for old-row compatibility rather
+    -- than dropping columns; no live code reads/writes these.
     finance_approved                BIT,
     finance_approved_by_user_id     INT,
     finance_approved_at             DATETIME,
@@ -82,7 +109,13 @@ CREATE TABLE sto_requests (
     status                          VARCHAR(50) DEFAULT 'DRAFT',
     rejection_reason                NVARCHAR(MAX),
     created_at                      DATETIME DEFAULT GETDATE(),
-    updated_at                      DATETIME DEFAULT GETDATE()
+    updated_at                      DATETIME DEFAULT GETDATE(),
+
+    -- Soft-archive: CLOSED/REJECTED rows older than the retention window are
+    -- flagged archived=1 by the admin archive job and excluded from every
+    -- normal query (every list/analytics route filters archived = 0).
+    archived                        BIT NOT NULL DEFAULT 0,
+    archived_at                     DATETIME NULL
 );
 
 CREATE TABLE sto_audit_log (
@@ -91,7 +124,10 @@ CREATE TABLE sto_audit_log (
     action          VARCHAR(100) NOT NULL,
     old_status      VARCHAR(50),
     new_status      VARCHAR(50),
-    performed_by    INT NOT NULL,
+    -- Nullable: there is no app_users table to reference an integer user id
+    -- against. Every write identifies the actor via performed_by_name instead
+    -- (see db/audit.ts logAudit, which never populates this column).
+    performed_by    INT NULL,
     performed_by_name VARCHAR(200),
     notes           NVARCHAR(MAX),
     performed_at    DATETIME DEFAULT GETDATE()
@@ -134,8 +170,8 @@ CREATE TABLE demo_users (
     username     VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(200) NOT NULL,
     display_name VARCHAR(200) NOT NULL,
-    site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, XYZ (legacy; primary/first site)
-    group_key    VARCHAR(50)  NOT NULL,   -- legacy single role: receiving_site, etc.
+    site         VARCHAR(20)  NOT NULL,   -- e.g. ABC, ABL, ABS (legacy; primary/first site)
+    group_key    VARCHAR(50)  NOT NULL,   -- legacy single role: shipping_planning, etc.
     -- Multi-role support: semicolon-separated `role@site` grants, e.g.
     -- "shipping_logistics@ABC;receiving_logistics@ABC;shipping_planning@ABL".
     -- When NULL/blank, login falls back to group_key expanded across `site`.
@@ -200,8 +236,12 @@ CREATE NONCLUSTERED INDEX IX_audit_performed_at
   ON sto_audit_log (performed_at DESC)
   INCLUDE (action, old_status, new_status, performed_by_name, notes);
 
+-- The archived = 0 predicate is applied by nearly every query — see above.
+CREATE NONCLUSTERED INDEX IX_sto_requests_archived
+  ON sto_requests (archived);
+
 -- ── App users + sites ─────────────────────────────────────────────────────────
--- sites: master list of valid site codes (e.g. ABC, ABL, XYZ).
+-- sites: master list of valid site codes (e.g. ABC, ABL, ABS).
 CREATE TABLE sites (
     id    INT PRIMARY KEY IDENTITY(1,1),
     code  VARCHAR(50)  UNIQUE NOT NULL,
@@ -211,25 +251,16 @@ CREATE TABLE sites (
 INSERT INTO sites (code, name) VALUES
     ('ABC', 'Site ABC'),
     ('ABL', 'Site ABL'),
-    ('XYZ', 'Site XYZ');
+    ('ABS', 'Site ABS'),
+    ('MBM', 'Site MBM');
 
--- app_users: source of truth for roles and site assignments.
--- AD only proves identity; roles/sites live here.
--- New users are auto-created as receiving_site on first login and must pick
--- their site via the setup-site page.  Admins can change any field.
-CREATE TABLE app_users (
-    id            INT          PRIMARY KEY IDENTITY(1,1),
-    ad_username   VARCHAR(200) NOT NULL,
-    display_name  VARCHAR(200) NOT NULL,
-    email         VARCHAR(200) NULL,
-    site          VARCHAR(50)  NULL,           -- NULL until user completes setup
-    app_group     VARCHAR(50)  NOT NULL DEFAULT 'receiving_site',
-    is_active     BIT          NOT NULL DEFAULT 1,
-    created_at    DATETIME     DEFAULT GETDATE(),
-    updated_at    DATETIME     DEFAULT GETDATE()
+-- ── Migration tracking ──────────────────────────────────────────────────────
+-- A fresh install from this file already reflects everything through
+-- migration 018 (018_backfill_migration_history.sql backfills this table's
+-- history rows on both fresh and pre-existing databases — run it once after
+-- this script). Do NOT run migrations 001-018 by hand against a database
+-- created from this file; they are already applied here.
+CREATE TABLE schema_migrations (
+    filename    VARCHAR(200) PRIMARY KEY,
+    applied_at  DATETIME NOT NULL DEFAULT GETDATE()
 );
-
-CREATE UNIQUE INDEX UQ_app_users_username ON app_users (ad_username);
-
--- ── To promote the first admin (run after your first login) ───────────────────
--- UPDATE app_users SET app_group = 'admin' WHERE ad_username = 'firstname.lastname@company.com';

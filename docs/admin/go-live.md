@@ -7,14 +7,18 @@ Work through this before opening the app to users.
 - [ ] SQL Server database `sto_management` created; schema + all migrations applied.
 - [ ] Real sites loaded into the `sites` table.
 - [ ] `backend\.env` complete: fresh `JWT_SECRET`, correct `DB_SERVER`,
-      `FRONTEND_ORIGIN`, and **`DEV_BYPASS=false`**.
+      `FRONTEND_ORIGIN`, and `DEV_BYPASS` set deliberately for this environment
+      (`false` for AD login; `true` is also valid in production if demo/test
+      access is intentionally being kept available — see
+      [Configuration](configuration.md#auth-mode)).
 - [ ] LDAP settings filled in and reachable (`LDAP_URL`, `LDAP_DOMAIN`,
       `LDAP_BASE_DN`, bind account).
 - [ ] Approval thresholds set (or defaults accepted).
 
 ## Active Directory
 
-- [ ] IT has created the `{SITE}_{ROLE}` groups for every site, plus the admin group.
+- [ ] IT has created the `APP-{SITE}-STO_Management_{Role}` groups for every site,
+      plus the company-wide admin group.
 - [ ] Real group names entered into `GROUP_MAP` (`backend/src/lib/ldap.ts`) and the
       backend rebuilt.
 - [ ] At least one admin account is a member of the admin group.
