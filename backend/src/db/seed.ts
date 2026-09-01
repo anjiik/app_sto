@@ -4,8 +4,8 @@ dotenv.config();
 import bcrypt from 'bcryptjs';
 import { dbExecute, dbQuery, dbQueryOne } from './connection';
 
-// This script wipes and rebuilds demo data — DELETE FROM sto_requests,
-// sto_audit_log, demo_users, all unconditionally. It is meant for
+// This script wipes and rebuilds demo data — DELETE FROM sto_attachments,
+// sto_audit_log, sto_requests, demo_users, all unconditionally. It is meant for
 // local/demo databases only. DEV_BYPASS=true is the one signal in this app
 // that a given environment is a demo/testing one (see backend/src/index.ts —
 // it's allowed even under NODE_ENV=production, for a deliberate test pass),
@@ -762,6 +762,7 @@ async function seedSites(): Promise<void> {
 }
 
 async function seed() {
+  await dbExecute('DELETE FROM sto_attachments');
   await dbExecute('DELETE FROM sto_audit_log');
   await dbExecute('DELETE FROM sto_requests');
 
