@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { JwtPayload, Group, Grant } from '../types';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { dbQuery, dbQueryOne } from '../db/connection';
-import { authenticateWithAD } from '../lib/ldap';
+import { authenticateWithAD, listGroupMembers, ADMIN_GROUP_CN } from '../lib/ldap';
 
 const router = Router();
 
@@ -25,7 +25,6 @@ const loginRateLimit = rateLimit({
 const DEV_BYPASS = process.env.DEV_BYPASS === 'true';
 
 const GROUP_LABELS: Record<Group, string> = {
-  receiving_site: 'Receiving Site',
   shipping_planning: 'Shipping Planning',
   shipping_logistics: 'Shipping Logistics',
   management: 'Shipping Management',
@@ -166,6 +165,38 @@ router.get('/demo-users', async (_req: Request, res: Response): Promise<void> =>
       })),
     );
   } catch {
+    res.json([]);
+  }
+});
+
+// GET /api/auth/admins — Administrators contact list for the App Info page.
+// Any authenticated user can call this (not admin-only) — the whole point is
+// that a locked-out or misconfigured user can find who to contact.
+router.get('/admins', authenticate, async (_req: AuthRequest, res: Response): Promise<void> => {
+  if (DEV_BYPASS) {
+    try {
+      interface DemoUserListRow {
+        username: string;
+        display_name: string;
+      }
+      const users = await dbQuery<DemoUserListRow>(
+        "SELECT username, display_name FROM demo_users WHERE group_key = 'admin' ORDER BY display_name",
+      );
+      res.json(
+        users.map(u => ({ displayName: u.display_name, email: `${u.username}@demo.local` })),
+      );
+    } catch (err) {
+      console.error('[admins] Error listing demo admins:', err);
+      res.json([]);
+    }
+    return;
+  }
+
+  try {
+    const members = await listGroupMembers(ADMIN_GROUP_CN);
+    res.json(members.map(m => ({ displayName: m.displayName, email: m.email })));
+  } catch (err: any) {
+    console.error('[admins] Error listing AD admin group members:', err.message);
     res.json([]);
   }
 });

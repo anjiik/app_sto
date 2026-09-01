@@ -493,9 +493,9 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
 
   const parsed = createStoSchema.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({ message: 'Validation failed', errors: parsed.error.flatten().fieldErrors });
+    const errors = parsed.error.flatten().fieldErrors;
+    logger.warn({ user: user.adUsername, errors }, 'sto POST validation failed');
+    res.status(400).json({ message: 'Validation failed', errors });
     return;
   }
 
@@ -595,9 +595,9 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
 
   const parsed = updateStoSchema.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({ message: 'Validation failed', errors: parsed.error.flatten().fieldErrors });
+    const errors = parsed.error.flatten().fieldErrors;
+    logger.warn({ id, user: user.adUsername, errors }, 'sto PUT validation failed');
+    res.status(400).json({ message: 'Validation failed', errors });
     return;
   }
 

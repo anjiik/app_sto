@@ -2,8 +2,10 @@
 
 For administrators and IT: deploying, running, and troubleshooting the app.
 
-This section is the deployment runbook. Work through the pages in order for a fresh
-install:
+**Doing a fresh install?** Follow the [Deployment checklist](deploy-checklist.md) — one
+linear page covering every step below in order, with commands to copy/paste. The pages
+listed here have the full detail behind each step; use them when the checklist isn't
+enough or something goes wrong:
 
 1. [Prerequisites](prerequisites.md)
 2. [Database & migrations](database.md)

@@ -13,23 +13,22 @@ const USER_GUIDE_URL = `${import.meta.env.BASE_URL}sto-user-guide.pdf`;
 interface AdminContact {
   name: string;
   email: string;
-  site: string;
 }
 
 export function AppInfo() {
   const [admins, setAdmins] = useState<AdminContact[]>([]);
 
   useEffect(() => {
-    // In dev-bypass mode /auth/demo-users lists the demo accounts; pull the admins
-    // out of it so testers know who to contact. Returns [] in production (LDAP).
+    // In DEV_BYPASS mode this lists demo_users with group_key='admin'; in
+    // production it queries the real APP-STO_MANAGEMENT_ADMIN AD group. Admin
+    // is company-wide (no per-site admin tier), so there's no site to show.
     api
-      .get('/auth/demo-users')
+      .get('/auth/admins')
       .then(r => {
-        const list = (
-          r.data as { displayName: string; group: string; site: string; username: string }[]
-        )
-          .filter(u => u.group === 'admin')
-          .map(u => ({ name: u.displayName, email: `${u.username}@demo.local`, site: u.site }));
+        const list = (r.data as { displayName: string; email: string }[]).map(a => ({
+          name: a.displayName,
+          email: a.email,
+        }));
         setAdmins(list);
       })
       .catch(() => setAdmins([]));
@@ -63,8 +62,9 @@ export function AppInfo() {
           <h2 className="font-semibold text-gray-800 mb-2">Requesting Access</h2>
           <p className="text-sm text-gray-600 mb-3">
             Access is granted through Active Directory group membership for your site and role (e.g.{' '}
-            <code className="bg-gray-100 px-1 rounded">ABC_LOGISTICS</code>). Submit a request using
-            the link below and include your site(s) and the role you need.
+            <code className="bg-gray-100 px-1 rounded">APP-ABC-STO_Management_Logistics</code>).
+            Submit a request using the link below and include your site(s) and the role you need.
+            Creating a new STO needs no group membership at all.
           </p>
           <a
             href={ACCESS_REQUEST_URL}
@@ -90,7 +90,7 @@ export function AppInfo() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['Name', 'Email', 'Site'].map(h => (
+                  {['Name', 'Email'].map(h => (
                     <th
                       key={h}
                       className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
@@ -109,7 +109,6 @@ export function AppInfo() {
                         {a.email}
                       </a>
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{a.site}</td>
                   </tr>
                 ))}
               </tbody>

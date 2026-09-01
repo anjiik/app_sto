@@ -42,7 +42,7 @@ npm install -g pm2-windows-startup
 
 ```cmd
 cd C:\
-git clone https://github.com/ak2254/app_sto.git sto-management
+git clone https://github.com/anjiik/app_sto.git sto-management
 cd sto-management
 ```
 

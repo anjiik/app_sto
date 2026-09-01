@@ -85,6 +85,7 @@ nav:
       - Demo users: reference/demo-users.md
   - Administration:
       - Overview: admin/index.md
+      - Deployment checklist: admin/deploy-checklist.md
       - Prerequisites: admin/prerequisites.md
       - Database & migrations: admin/database.md
       - Active Directory groups: admin/active-directory.md

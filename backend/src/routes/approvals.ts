@@ -83,6 +83,7 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response): Promise<void
     sendStoSubmittedEmail({
       sto_id: sto.sto_id as string,
       requestor_name: sto.requestor_name as string,
+      requestor_email: sto.requestor_email as string | null,
     });
     sendStoAwaitingPlanningEmail({
       sto_id: sto.sto_id as string,
@@ -236,6 +237,7 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
     });
     sendPlanningReviewEmail(outcome, {
       sto_id: sto.sto_id as string,
+      requestor_email: sto.requestor_email as string | null,
       mpn_number: mpn_number ?? null,
       batch_number: batch_number ?? null,
       expiration_date: expiration_date ?? null,
