@@ -293,20 +293,39 @@ export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> 
       filter: `(&(objectClass=group)(cn=${escapeLdap(groupCN)}))`,
       attributes: ['dn'],
     });
+    console.log(`[admins] Group lookup for "${groupCN}": found ${groupEntries.length} match(es)`);
     if (!groupEntries.length) {
       throw new Error(`AD group "${groupCN}" not found`);
     }
     const groupDN = groupEntries[0].dn as string;
+    console.log(`[admins] Group DN resolved to: ${groupDN}`);
 
     // LDAP_MATCHING_RULE_IN_CHAIN (1.2.840.113556.1.4.1941) makes AD walk
     // nested group membership transitively — a plain `memberOf=<groupDN>`
     // filter only matches users added DIRECTLY to this group, and silently
     // misses anyone added via a nested group (a common real-AD setup).
-    const { searchEntries: memberEntries } = await client.search(LDAP_BASE_DN, {
+    const chainFilter = `(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)})`;
+    const { searchEntries: chainEntries } = await client.search(LDAP_BASE_DN, {
       scope: 'sub',
-      filter: `(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)})`,
+      filter: chainFilter,
       attributes: ['displayName', 'mail', 'sAMAccountName'],
     });
+    console.log(`[admins] Transitive-match filter "${chainFilter}" → ${chainEntries.length} member(s)`);
+
+    // Fall back to a plain direct-membership filter if the transitive match
+    // returned nothing — some AD/LDAP configurations restrict or don't
+    // support LDAP_MATCHING_RULE_IN_CHAIN for the bind account being used.
+    let memberEntries = chainEntries;
+    if (memberEntries.length === 0) {
+      const directFilter = `(memberOf=${escapeLdap(groupDN)})`;
+      const { searchEntries: directEntries } = await client.search(LDAP_BASE_DN, {
+        scope: 'sub',
+        filter: directFilter,
+        attributes: ['displayName', 'mail', 'sAMAccountName'],
+      });
+      console.log(`[admins] Direct-match filter "${directFilter}" → ${directEntries.length} member(s)`);
+      memberEntries = directEntries;
+    }
 
     return memberEntries
       .map(e => ({
