@@ -68,6 +68,12 @@ app.use(
       if (res.statusCode >= 400) return 'warn';
       return 'silent';
     },
+    // Default pino-http messages are just "request completed" / "request
+    // errored" — put the method, URL, and status code in the message itself
+    // so a line is readable without expanding the req/res objects.
+    customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
+    customErrorMessage: (req, res, err) =>
+      `${req.method} ${req.url} ${res.statusCode} — ${err.message}`,
     serializers: {
       req: req => ({ method: req.method, url: req.url }),
       res: res => ({ statusCode: res.statusCode }),
