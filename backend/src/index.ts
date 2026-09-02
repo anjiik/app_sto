@@ -53,6 +53,20 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 app.use(helmet());
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
+
+// Capture the JSON body a route sends via res.json() so the log line below can
+// include the actual { message: '...' } (e.g. "Invalid username or password",
+// "not in any STO application group") instead of just a bare status code.
+// Must run before pinoHttp so the wrapped res.json is what routes actually call.
+app.use((_req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body: unknown) => {
+    (res as express.Response & { locals: { loggedBody?: unknown } }).locals.loggedBody = body;
+    return originalJson(body);
+  };
+  next();
+});
+
 // Only log HTTP requests that actually failed (4xx/5xx) or errored — a
 // successful request logs nothing, so routine traffic (dashboard polling,
 // list/analytics fetches, etc.) doesn't fill the log with noise. Real
@@ -60,6 +74,10 @@ app.use(express.json({ limit: '100kb' }));
 // req/res are trimmed to the essentials (method, URL, status, timing) —
 // the default serializers dump full headers, which is a lot of scroll for
 // something rarely needed when scanning a day's errors.
+function responseMessage(res: express.Response): string {
+  const body = res.locals.loggedBody as { message?: string } | undefined;
+  return body?.message ? ` — ${body.message}` : '';
+}
 app.use(
   pinoHttp({
     logger,
@@ -69,9 +87,11 @@ app.use(
       return 'silent';
     },
     // Default pino-http messages are just "request completed" / "request
-    // errored" — put the method, URL, and status code in the message itself
-    // so a line is readable without expanding the req/res objects.
-    customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
+    // errored" — put the method, URL, status code, AND the actual response
+    // message (e.g. "Invalid username or password") in the log line, so the
+    // log file alone is enough to diagnose a failure without reproducing it.
+    customSuccessMessage: (req, res) =>
+      `${req.method} ${req.url} ${res.statusCode}${responseMessage(res)}`,
     customErrorMessage: (req, res, err) =>
       `${req.method} ${req.url} ${res.statusCode} — ${err.message}`,
     serializers: {
