@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>STO Management System — Implementation &amp; Design v3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10.5pt; line-height: 1.6; color: #1a1a2e; background: #fff; }
+  .page-break { page-break-after: always; break-after: page; }
+
+  /* COVER */
+  .cover { height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 80px 72px; background: linear-gradient(135deg, #1e3a5f 0%, #0f2040 60%, #0a1628 100%); color: #fff; position: relative; overflow: hidden; }
+  .cover::before { content: ''; position: absolute; top: -120px; right: -120px; width: 500px; height: 500px; border-radius: 50%; background: rgba(59,130,246,0.12); }
+  .cover::after { content: ''; position: absolute; bottom: -80px; left: -80px; width: 350px; height: 350px; border-radius: 50%; background: rgba(99,179,237,0.08); }
+  .cover-tag { font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: #63b3ed; font-weight: 600; margin-bottom: 24px; }
+  .cover h1 { font-size: 36pt; font-weight: 700; line-height: 1.15; margin-bottom: 20px; color: #fff; }
+  .cover h1 span { color: #63b3ed; }
+  .cover-sub { font-size: 13pt; color: #a0aec0; margin-bottom: 56px; max-width: 560px; }
+  .cover-meta { display: flex; gap: 48px; margin-top: 48px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 32px; }
+  .cover-meta-item label { display: block; font-size: 8pt; letter-spacing: 1.5px; text-transform: uppercase; color: #63b3ed; margin-bottom: 4px; }
+  .cover-meta-item span { font-size: 10pt; color: #e2e8f0; font-weight: 500; }
+  .cover-stack { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+  .stack-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 5px 14px; font-size: 9pt; color: #e2e8f0; font-weight: 500; }
+
+  /* CONTENT */
+  .content { padding: 56px 72px; max-width: 100%; }
+  .section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; padding-bottom: 14px; border-bottom: 2px solid #e2e8f0; }
+  .section-num { background: #1e3a5f; color: #fff; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11pt; font-weight: 700; flex-shrink: 0; }
+  .section-header h2 { font-size: 18pt; font-weight: 700; color: #1e3a5f; }
+  h3 { font-size: 12pt; font-weight: 600; color: #2d3748; margin: 24px 0 10px; }
+  h4 { font-size: 10.5pt; font-weight: 600; color: #4a5568; margin: 16px 0 8px; }
+  p { margin-bottom: 12px; color: #4a5568; }
+
+  /* CARDS */
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  .card-title { font-size: 10pt; font-weight: 700; color: #1e3a5f; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .highlight-box { background: #ebf4ff; border-left: 4px solid #3182ce; border-radius: 0 8px 8px 0; padding: 14px 20px; margin: 16px 0; }
+  .highlight-box p { color: #2b6cb0; margin: 0; font-size: 10pt; }
+  .warn-box { background: #fffaf0; border-left: 4px solid #d69e2e; border-radius: 0 8px 8px 0; padding: 14px 20px; margin: 16px 0; }
+  .warn-box p { color: #744210; margin: 0; font-size: 10pt; }
+  .info-box { background: #f0fff4; border-left: 4px solid #38a169; border-radius: 0 8px 8px 0; padding: 14px 20px; margin: 16px 0; }
+  .info-box p { color: #276749; margin: 0; font-size: 10pt; }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 9.5pt; }
+  thead tr { background: #1e3a5f; color: #fff; }
+  thead th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 9pt; letter-spacing: 0.3px; }
+  tbody tr { border-bottom: 1px solid #e2e8f0; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody td { padding: 9px 14px; color: #4a5568; vertical-align: top; }
+  tbody td:first-child { font-weight: 600; color: #2d3748; }
+
+  /* CODE */
+  pre { background: #1a202c; color: #e2e8f0; border-radius: 10px; padding: 18px 22px; margin: 14px 0 20px; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 8.5pt; line-height: 1.7; overflow: hidden; white-space: pre-wrap; }
+  code { background: #edf2f7; color: #c05621; padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .kw { color: #63b3ed; } .st { color: #68d391; } .cm { color: #718096; font-style: italic; } .fn { color: #f6ad55; } .tp { color: #b794f4; }
+
+  /* FLOW */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 20px 0; padding: 20px 24px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
+  .flow-node { background: #fff; border: 2px solid #3182ce; border-radius: 8px; padding: 7px 12px; font-size: 8.5pt; font-weight: 600; color: #1e3a5f; text-align: center; min-width: 80px; }
+  .flow-node.draft { border-color: #718096; color: #718096; }
+  .flow-node.rejected { border-color: #e53e3e; color: #e53e3e; }
+  .flow-node.closed { border-color: #38a169; color: #38a169; }
+  .flow-node.optional { border-color: #d69e2e; color: #8b6914; background: #fffff0; border-style: dashed; }
+  .flow-label { font-size: 7pt; color: #718096; display: block; text-align: center; margin-top: 3px; }
+  .flow-arrow { font-size: 14pt; color: #a0aec0; }
+
+  /* ROLE SWIMLANE */
+  .swimlane { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 8.5pt; }
+  .swimlane th { padding: 8px 12px; text-align: left; font-size: 8pt; font-weight: 700; letter-spacing: 0.3px; color: #fff; }
+  .swimlane td { padding: 8px 12px; vertical-align: top; border: 1px solid #e2e8f0; }
+  .swimlane .group-cell { font-weight: 700; font-size: 9pt; white-space: nowrap; }
+  .sw-receiving  { background: #2b6cb0; }
+  .sw-planning   { background: #c05621; }
+  .sw-logistics  { background: #276749; }
+  .sw-mgmt       { background: #6b46c1; }
+  .sw-recv-log   { background: #2c7a7b; }
+  .field-mandatory { color: #c53030; font-weight: 600; }
+  .field-optional  { color: #4a5568; }
+  .field-auto      { color: #718096; font-style: italic; }
+
+  /* ROLE CARDS */
+  .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+  .role-card { border-radius: 10px; padding: 16px; border: 1px solid; }
+  .role-card.blue   { background: #ebf8ff; border-color: #bee3f8; }
+  .role-card.orange { background: #fffaf0; border-color: #feebc8; }
+  .role-card.green  { background: #f0fff4; border-color: #c6f6d5; }
+  .role-card.purple { background: #faf5ff; border-color: #e9d8fd; }
+  .role-card.teal   { background: #e6fffa; border-color: #b2f5ea; }
+  .role-card.cyan   { background: #e0f7fa; border-color: #b2ebf2; }
+  .role-card .role-name  { font-weight: 700; font-size: 10pt; margin-bottom: 6px; }
+  .role-card .role-perms { font-size: 8.5pt; color: #4a5568; line-height: 1.5; }
+  ul { padding-left: 20px; margin: 8px 0; color: #4a5568; }
+  li { margin-bottom: 4px; font-size: 9.5pt; }
+
+  /* ARCH BOXES */
+  .arch-grid { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr; align-items: center; gap: 0; margin: 24px 0; padding: 28px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
+  .arch-box { background: #fff; border-radius: 10px; padding: 18px 14px; text-align: center; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .arch-box .arch-icon { font-size: 22pt; display: block; margin-bottom: 6px; }
+  .arch-box .arch-label { font-weight: 700; font-size: 10pt; color: #1e3a5f; display: block; margin-bottom: 4px; }
+  .arch-box .arch-detail { font-size: 8pt; color: #718096; line-height: 1.4; }
+  .arch-arrow { text-align: center; font-size: 20pt; color: #a0aec0; }
+
+  /* SEQUENCE DIAGRAM */
+  .seq { font-family: 'JetBrains Mono', monospace; font-size: 8pt; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px 24px; margin: 16px 0; white-space: pre; line-height: 1.8; color: #2d3748; overflow: hidden; }
+
+  /* BADGE */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 8pt; font-weight: 600; }
+  .badge-blue   { background: #ebf4ff; color: #2b6cb0; }
+  .badge-green  { background: #f0fff4; color: #276749; }
+  .badge-red    { background: #fff5f5; color: #c53030; }
+  .badge-orange { background: #fffaf0; color: #c05621; }
+  .badge-purple { background: #faf5ff; color: #6b46c1; }
+
+  @page { margin: 0; size: A4; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .decision-row { display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start; }
+  .decision-num { background: #3182ce; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .decision-body strong { display: block; font-size: 10pt; color: #1e3a5f; margin-bottom: 3px; }
+  .decision-body p { font-size: 9pt; margin: 0; }
+  .mode-block { border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin-bottom: 14px; }
+  .mode-block .mode-title { font-weight: 700; font-size: 10.5pt; color: #1e3a5f; margin-bottom: 8px; }
+  .mode-block.active { border-color: #bee3f8; background: #ebf8ff; }
+  .mode-block.inactive { border-color: #e2e8f0; background: #f8fafc; opacity: 0.75; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<div class="cover">
+  <div class="cover-tag">Technical Design Document — v3.0</div>
+  <h1>Stock Transfer Order<br/><span>Management System</span></h1>
+  <p class="cover-sub">Full-stack implementation covering architecture, authentication, data model, API design, role-based access control, the approval state machine, site-based queue filtering, and the analytics dashboard.</p>
+  <div class="cover-stack">
+    <span class="stack-pill">React 18 + TypeScript</span>
+    <span class="stack-pill">Vite + Tailwind CSS</span>
+    <span class="stack-pill">Node.js + Express</span>
+    <span class="stack-pill">SQL Server (Windows Auth)</span>
+    <span class="stack-pill">JWT — 8h expiry</span>
+    <span class="stack-pill">LDAP / Active Directory</span>
+    <span class="stack-pill">Axios</span>
+  </div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><label>Version</label><span>4.0 — Production Build</span></div>
+    <div class="cover-meta-item"><label>Date</label><span>September 2026</span></div>
+    <div class="cover-meta-item"><label>Auth Model</label><span>Username + Password → AD / Demo</span></div>
+    <div class="cover-meta-item"><label>Groups</label><span>6 roles × 4 sites + 1 company-wide admin</span></div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 1. OVERVIEW ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">1</div><h2>Overview</h2></div>
+  <p>The STO Management System digitises the full lifecycle of pharmaceutical Stock Transfer Orders — from any user submitting a material transfer request, through a multi-stage, role- and site-scoped approval workflow, to Receiving Site Logistics confirming final receipt and closing the order.</p>
+  <div class="highlight-box">
+    <p><strong>Core problem solved:</strong> Excel-based STOs had no audit trail, no real-time status visibility, and no role enforcement. This system enforces strict role- and site-based field ownership at every step, logs every action immutably, and surfaces an actionable site-filtered queue to each team so they know exactly which STOs need their attention at their facility.</p>
+  </div>
+
+  <h3>High-Level System Architecture</h3>
+  <div class="arch-grid">
+    <div class="arch-box">
+      <span class="arch-icon">🖥️</span>
+      <span class="arch-label">React SPA</span>
+      <span class="arch-detail">React 18 + TypeScript<br/>Vite dev server<br/>Tailwind CSS<br/>Port 5173</span>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box">
+      <span class="arch-icon">⚙️</span>
+      <span class="arch-label">Express API</span>
+      <span class="arch-detail">Node.js + TypeScript<br/>JWT middleware<br/>Role enforcement<br/>Port 4000</span>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box">
+      <span class="arch-icon">🗄️</span>
+      <span class="arch-label">SQL Server</span>
+      <span class="arch-detail">Windows Authentication<br/>msnodesqlv8 driver<br/>sto_management DB<br/>No SQL password</span>
+    </div>
+  </div>
+  <p style="text-align:center; font-size:9pt; color:#718096; margin-top:0;">Active Directory is reached separately during login (LDAP mode only)</p>
+
+  <h3>Component Map</h3>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Frontend</div>
+      <ul>
+        <li><strong>React Router v6</strong> — client-side routing, ProtectedRoute wrapper</li>
+        <li><strong>AuthContext</strong> — JWT state, login/logout, auth mode detection</li>
+        <li><strong>Axios</strong> — HTTP client, auto JWT header, 401 redirect</li>
+        <li><strong>Tailwind CSS</strong> — utility-first styling, no custom CSS</li>
+        <li><strong>Recharts</strong> — donut, bar, and line charts</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Backend</div>
+      <ul>
+        <li><strong>Express 4</strong> — HTTP server and route mounting</li>
+        <li><strong>jsonwebtoken</strong> — JWT sign &amp; verify (8-hour expiry)</li>
+        <li><strong>mssql / msnodesqlv8</strong> — SQL Server with Windows Auth</li>
+        <li><strong>bcryptjs</strong> — password hashing for demo users</li>
+        <li><strong>ldapts</strong> — pure-TypeScript LDAP client for AD auth</li>
+        <li><strong>dotenv + cors</strong> — environment config, cross-origin</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 2. AUTHENTICATION ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">2</div><h2>Authentication</h2></div>
+  <p>The app supports two authentication modes, controlled by a single environment variable. The frontend login page is the same in both modes — only the backend behaviour changes.</p>
+
+  <div class="mode-block active">
+    <div class="mode-title">Mode A — Demo / Development &nbsp;<span class="badge badge-orange">DEV_BYPASS=true</span></div>
+    <p style="margin:0; font-size:9.5pt;">Login validates against a <code>demo_users</code> table in SQL Server. Passwords are bcrypt-hashed. A demo accounts panel appears on the login page listing all test accounts with one-click autofill. Run <code>npm run seed</code> to populate the demo users. Password for all demo accounts is <code>Demo123!</code>. This is intentionally also a valid production setting — it is never blocked or warned against, so demo/test access can stay available on a production server if desired (see Section 9).</p>
+  </div>
+
+  <div class="mode-block active">
+    <div class="mode-title">Mode B — Active Directory / LDAP &nbsp;<span class="badge badge-blue">DEV_BYPASS=false</span></div>
+    <p style="margin:0 0 8px; font-size:9.5pt;">Login validates against Active Directory via LDAP using the <code>ldapts</code> library. Users enter their AD username (e.g. <code>john.doe</code> or <code>john.doe@company.com</code>) and their Windows password. The demo accounts panel is hidden.</p>
+    <p style="margin:0; font-size:9.5pt;"><strong>Two-step bind flow:</strong> The backend binds with a service account to search the directory for the user, then opens a separate LDAP connection to validate the user's password with their own credentials. The user's <code>memberOf</code> groups are mapped to one or more role+site grants via <code>GROUP_MAP</code>.</p>
+  </div>
+
+  <h3>AD Authentication Flow</h3>
+  <div class="seq">Browser              Express              Active Directory (LDAP)
+   │                    │                         │
+   │─ POST /auth/login ─►│                         │
+   │  { username,        │                         │
+   │    password }       │                         │
+   │                    │─ bind(serviceAccount) ──►│
+   │                    │─ search(userPrincipalName│
+   │                    │   or sAMAccountName) ────►│
+   │                    │◄─ { dn, memberOf[] } ────│
+   │                    │                         │
+   │                    │─ bind(userDN, password) ─►│
+   │                    │◄─ success / error 49 ────│  (49 = wrong password)
+   │                    │                         │
+   │                    │  map EVERY memberOf CN   │
+   │                    │  → Grant[] via GROUP_MAP │
+   │                    │  (lib/ldap.ts)           │
+   │                    │                         │
+   │◄─ { token, user } ─│  jwt.sign(payload)       │
+   │                    │  { adUsername, name,     │
+   │                    │    grants[], group,      │
+   │                    │    site, sites }          │</div>
+
+  <h3>JWT Token</h3>
+  <p>On successful login (either mode), the backend issues a signed JWT valid for 8 hours. The payload carries the user's <strong>entire</strong> permission set — every role+site pair they hold — not just a single group/site:</p>
+  <pre><code>{
+  <span class="st">"adUsername"</span>: <span class="st">"john.doe@company.com"</span>,
+  <span class="st">"name"</span>:       <span class="st">"John Doe"</span>,
+  <span class="st">"grants"</span>: [                        <span class="cm">// every {role, site} the user holds — source of truth</span>
+    { <span class="st">"group"</span>: <span class="st">"shipping_planning"</span>, <span class="st">"site"</span>: <span class="st">"ABC"</span> },
+    { <span class="st">"group"</span>: <span class="st">"shipping_planning"</span>, <span class="st">"site"</span>: <span class="st">"ABL"</span> }
+  ],
+  <span class="st">"group"</span>: <span class="st">"shipping_planning"</span>,       <span class="cm">// derived "primary" role — display only, never used for authz</span>
+  <span class="st">"site"</span>:  <span class="st">"ABC"</span>,                      <span class="cm">// derived primary site — display only</span>
+  <span class="st">"sites"</span>: [<span class="st">"ABC"</span>, <span class="st">"ABL"</span>]              <span class="cm">// derived union of all grant sites — display only</span>
+}</code></pre>
+  <p>Because <code>grants[]</code> travels inside the token, the backend never re-queries the database on later requests — every request just decodes and verifies the signature. A user can hold multiple roles and/or multiple sites at once (e.g. <code>shipping_logistics@ABC</code> + <code>receiving_logistics@ABC</code>, or <code>shipping_planning@ABC</code> + <code>shipping_planning@ABL</code>).</p>
+
+  <h3>AD Group → Role Mapping</h3>
+  <p>Configured in <code>GROUP_MAP</code>, <code>backend/src/lib/ldap.ts</code>. Each entry maps one AD group CN (common name) to a site code and an app role. Groups follow the naming convention <code>APP-{SITE}-STO_Management_{Role}</code>, plus a single company-wide admin group — five entries per site, no per-site admin group, and no group for creating an STO (any authenticated user can create one).</p>
+  <pre><code><span class="cm">// backend/src/lib/ldap.ts</span>
+<span class="kw">const</span> GROUP_MAP: Record&lt;<span class="tp">string</span>, { group: Group; site: <span class="tp">string</span> }&gt; = {
+  <span class="cm">// Company-wide admin (bypasses all per-site checks)</span>
+  <span class="st">'APP-STO_MANAGEMENT_ADMIN'</span>: { group: <span class="st">'admin'</span>, site: <span class="st">'ABC'</span> },
+
+  <span class="cm">// Site ABC</span>
+  <span class="st">'APP-ABC-STO_Management_Planning'</span>:              { group: <span class="st">'shipping_planning'</span>,    site: <span class="st">'ABC'</span> },
+  <span class="st">'APP-ABC-STO_Management_Logistics'</span>:             { group: <span class="st">'shipping_logistics'</span>,   site: <span class="st">'ABC'</span> },
+  <span class="st">'APP-ABC-STO_Management_Logistics_Receiving'</span>:   { group: <span class="st">'receiving_logistics'</span>,   site: <span class="st">'ABC'</span> },
+  <span class="st">'APP-ABC-STO_Management_Management'</span>:            { group: <span class="st">'management'</span>,           site: <span class="st">'ABC'</span> },
+  <span class="st">'APP-ABC-STO_Management_Management_Receiving'</span>:  { group: <span class="st">'receiving_management'</span>, site: <span class="st">'ABC'</span> },
+  <span class="cm">// Repeat for ABL, ABS, MBM</span>
+};</code></pre>
+
+  <div class="warn-box">
+    <p><strong>Finding your AD group names:</strong> Set <code>DEV_BYPASS=false</code> and attempt a login. If the user's groups don't match any entry, the backend logs <code>[AD auth]</code> diagnostics (visible via <code>pm2 logs sto-backend</code>) listing every found AD group CN and whether each matched — use those exact strings in <code>GROUP_MAP</code>.</p>
+  </div>
+
+  <h3>Routes</h3>
+  <table>
+    <thead><tr><th>Route</th><th>Component / Page</th><th>Who can access</th></tr></thead>
+    <tbody>
+      <tr><td>/login</td><td>Login.tsx</td><td>Public — redirects to /dashboard if already logged in</td></tr>
+      <tr><td>/dashboard</td><td>Dashboard.tsx</td><td>All authenticated users</td></tr>
+      <tr><td>/sto</td><td>STOList.tsx</td><td>All authenticated users — shows every STO the user can see</td></tr>
+      <tr><td>/sto/new</td><td>STOForm.tsx</td><td>Any authenticated user — no role required to create an STO</td></tr>
+      <tr><td>/sto/:id/edit</td><td>STOForm.tsx</td><td>Any authenticated user, DRAFT status only</td></tr>
+      <tr><td>/sto/:id</td><td>STODetail.tsx</td><td>All users — action panel gated by role + site + status</td></tr>
+      <tr><td>/analytics</td><td>Analytics.tsx</td><td>All authenticated users</td></tr>
+      <tr><td>/app-info</td><td>AppInfo.tsx</td><td>All authenticated users — user guide, access request link, admin contacts</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 3. ROLES & SITE FILTERING ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">3</div><h2>Roles &amp; Site-Based Access</h2></div>
+
+  <h3>The 6 Roles</h3>
+  <p style="font-size:9.5pt; color:#718096; margin-top:-6px;">There is no dedicated "requestor" role — any authenticated user, holding any role or none, can create and submit a new STO. The six roles below govern the workflow steps after that.</p>
+  <div class="role-grid">
+    <div class="role-card orange">
+      <div class="role-name" style="color:#c05621;">Shipping Site Planning</div>
+      <div class="role-perms">Reviews PLANNING_REVIEW queue. Verifies inventory. Fills MPN Number, Batch Number, Expiration Date. Approves (→ Logistics), Revises (→ back to Draft), or Rejects. All 3 fields mandatory to approve.</div>
+    </div>
+    <div class="role-card green">
+      <div class="role-name" style="color:#276749;">Shipping Site Logistics</div>
+      <div class="role-perms">Fills container info, freight cost, tracking ID. Submission checks 6 conditions (value, freight, freight/value ratio, cold-chain, non-standard Inco terms, controlled shipping) — if any is true, routes to Management; otherwise straight to Receiving Logistics. Also does the post-management "confirm pass": actual ship date, delivery date, PGI date, ready-to-ship, SAP STO#.</div>
+    </div>
+    <div class="role-card purple">
+      <div class="role-name" style="color:#6b46c1;">Management</div>
+      <div class="role-perms">Shipping-site sign-off, only when one of the 6 conditions above triggers it. Approves or rejects with notes. A distinct AD group from Receiving Management — holding one does not grant the other.</div>
+    </div>
+    <div class="role-card purple" style="background:#fdf2f8; border-color:#f9c3e0;">
+      <div class="role-name" style="color:#97266d;">Receiving Management</div>
+      <div class="role-perms">Receiving-site sign-off — the second, separate management gate. Both shipping-site and receiving-site management must approve before the STO can proceed to shipment.</div>
+    </div>
+    <div class="role-card teal">
+      <div class="role-name" style="color:#2c7a7b;">Receiving Logistics</div>
+      <div class="role-perms">Confirms receipt. Fills Actual Receipt Date. Closes out delivery (marks STO CLOSED). Queue filtered by receiving site.</div>
+    </div>
+    <div class="role-card blue">
+      <div class="role-name" style="color:#2b6cb0;">Admin</div>
+      <div class="role-perms">Company-wide, not per-site — a single AD group. Reverts an STO back one step, or sends it back with a mandatory reason. Manages archiving of old closed/rejected records.</div>
+    </div>
+  </div>
+
+  <h3>Site-Based Queue Filtering</h3>
+  <p>The <strong>All STOs</strong> list is scoped to what the user is entitled to see; the Dashboard's per-role queues are additionally filtered by site — both are enforced server-side via query parameters on <code>GET /api/sto</code>, not filtered client-side after an unrestricted fetch. Each queue is scoped by the matching role <strong>and</strong> site together (the same grant), not as two independent checks.</p>
+
+  <table>
+    <thead><tr><th>Role</th><th>Queue filtered by</th><th>Logic</th></tr></thead>
+    <tbody>
+      <tr><td>shipping_planning</td><td>shipping_site = user's site(s)</td><td>STOs where their facility is doing the shipping</td></tr>
+      <tr><td>shipping_logistics</td><td>shipping_site = user's site(s)</td><td>STOs where their facility is doing the shipping</td></tr>
+      <tr><td>management</td><td>shipping_site = user's site(s)</td><td>Shipping-side management — per site, not cross-site</td></tr>
+      <tr><td>receiving_management</td><td>receiving_site = user's site(s)</td><td>Receiving-side management — per site, not cross-site</td></tr>
+      <tr><td>receiving_logistics</td><td>receiving_site = user's site(s)</td><td>STOs arriving at their facility to be confirmed</td></tr>
+      <tr><td>admin</td><td>No site filter</td><td>Company-wide — bypasses all per-site checks</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Concrete Workflow Example</h3>
+  <p>Site ABC needs 500 units of a part from Site ABL, and the shipment is high-value enough to require management approval:</p>
+  <div class="seq">Person                Role @ Site                  Action                        STO Field Set
+──────────────────────────────────────────────────────────────────────────────────────
+Alice                 (any authenticated user)      Creates STO                   shipping_site=ABL, receiving_site=ABC
+                                                     Submits for review             status → PLANNING_REVIEW
+
+Bob                   shipping_planning@ABL         Queue shows this STO          (shipping_site = ABL ✓)
+                                                     Verifies inventory             mpn_number, batch_number, expiration_date
+                                                     Approves                       status → SHIPPING_LOGISTICS
+
+Charlie               shipping_logistics@ABL        Queue shows this STO          (shipping_site = ABL ✓)
+                                                     Fills freight, submits         container_info, freight_cost
+                                                     Value over threshold           status → MANAGEMENT_REVIEW
+
+Dana                  management@ABL                Approves (shipping side)       status → RECEIVING_MGMT_REVIEW
+
+Eve                   receiving_management@ABC      Approves (receiving side)      status → SHIPPING_LOGISTICS (confirm pass)
+
+Charlie               shipping_logistics@ABL        Finalizes shipment             actual_ship_date, ready_to_ship, sto_number
+                                                     Confirm pass complete           status → RECEIVING_LOGISTICS
+
+Frank                 receiving_logistics@ABC       Queue shows this STO          (receiving_site = ABC ✓)
+                                                     Confirms receipt               actual_receipt_date, delivery_closed_out=true
+                                                                                    status → CLOSED</div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 4. APPROVAL STATE MACHINE ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">4</div><h2>Approval State Machine</h2></div>
+  <p>Every STO moves through a defined sequence of statuses. Transitions are enforced server-side — the backend validates both the caller's group and the STO's current status before writing. A client cannot skip or fake a stage.</p>
+
+  <div class="flow">
+    <div><div class="flow-node draft">DRAFT</div><span class="flow-label">any user</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">PLANNING<br/>REVIEW</div><span class="flow-label">on submit</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">SHIPPING<br/>LOGISTICS</div><span class="flow-label">planning approved</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node optional">MANAGEMENT<br/>REVIEW</div><span class="flow-label">if any of 6 conditions</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node optional">RECEIVING MGMT<br/>REVIEW</div><span class="flow-label">shipping mgmt approved</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">SHIPPING<br/>LOGISTICS</div><span class="flow-label">confirm pass</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node">RECEIVING<br/>LOGISTICS</div><span class="flow-label">both mgmt approved / skipped entirely</span></div>
+    <div class="flow-arrow">→</div>
+    <div><div class="flow-node closed">CLOSED</div><span class="flow-label">delivery confirmed</span></div>
+    <div style="margin-left:16px; padding-left:16px; border-left:2px solid #e2e8f0;">
+      <div class="flow-node rejected">REJECTED</div>
+      <span class="flow-label">Planning, Mgmt, or Receiving Mgmt</span>
+    </div>
+  </div>
+  <p style="font-size:9pt; color:#718096; margin-top:-8px;">Planning can also route an STO back to DRAFT ("revise") instead of approving or rejecting. Admin can revert or send back any in-progress STO one step.</p>
+
+  <h3>Transition Map</h3>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Group Required (at the right site)</th><th>From</th><th>To</th><th>Key Fields Saved</th></tr></thead>
+    <tbody>
+      <tr><td>POST /sto/:id/submit</td><td>any authenticated user</td><td>DRAFT</td><td>PLANNING_REVIEW</td><td>—</td></tr>
+      <tr><td>POST /sto/:id/planning</td><td>shipping_planning</td><td>PLANNING_REVIEW</td><td>SHIPPING_LOGISTICS / DRAFT (revise) / REJECTED</td><td>mpn_number, batch_number, expiration_date, planning_notes</td></tr>
+      <tr><td>POST /sto/:id/logistics</td><td>shipping_logistics</td><td>SHIPPING_LOGISTICS</td><td>MANAGEMENT_REVIEW or RECEIVING_LOGISTICS</td><td>container_information, freight_cost; on the confirm pass also actual_ship_date, estimated_delivery_date, pgi_date, ready_to_ship, sto_number</td></tr>
+      <tr><td>POST /sto/:id/request-sto-number</td><td>shipping_logistics</td><td>(any)</td><td>(unchanged)</td><td>sto_number_requested_at — flags a reminder, does not block submission</td></tr>
+      <tr><td>POST /sto/:id/management</td><td>management</td><td>MANAGEMENT_REVIEW</td><td>RECEIVING_MGMT_REVIEW or REJECTED</td><td>management_approved, management_notes</td></tr>
+      <tr><td>POST /sto/:id/receiving-management</td><td>receiving_management</td><td>RECEIVING_MGMT_REVIEW</td><td>SHIPPING_LOGISTICS (confirm pass) or REJECTED</td><td>receiving_mgmt_approved, receiving_mgmt_notes, mgmt_confirmed=1</td></tr>
+      <tr><td>POST /sto/:id/receiving-logistics</td><td>receiving_logistics</td><td>RECEIVING_LOGISTICS</td><td>CLOSED (if delivery_closed_out=true)</td><td>actual_receipt_date, delivery_closed_out</td></tr>
+      <tr><td>POST /sto/:id/revert</td><td>admin</td><td>(any, not DRAFT/REJECTED)</td><td>previous step</td><td>—</td></tr>
+      <tr><td>POST /sto/:id/send-back</td><td>admin</td><td>(any, not DRAFT/REJECTED)</td><td>previous step</td><td>rejection_reason (mandatory)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Management Approval Auto-Trigger</h3>
+  <p>When Shipping Logistics submits, the backend checks <strong>six</strong> conditions — if any is true, the STO routes to Management; otherwise it goes straight to Receiving Logistics:</p>
+  <pre><code><span class="kw">const</span> matThreshold    = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || <span class="st">'100000'</span>);
+<span class="kw">const</span> freightThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD  || <span class="st">'20000'</span>);
+<span class="kw">const</span> isColdShipping    = [<span class="st">'Cold 2-8C'</span>, <span class="st">'Cold below 0'</span>, <span class="st">'Frozen'</span>].includes(shippingConditions);
+<span class="kw">const</span> freightToValueRatio = materialValue &gt; <span class="tp">0</span> ? freightCost / materialValue : <span class="tp">0</span>;
+<span class="kw">const</span> isNonStandardInco  = incoTerms !== <span class="st">''</span> &amp;&amp; !<span class="st">['FCA', 'DAP']</span>.includes(incoTerms);
+<span class="kw">const</span> isControlledShipping = Boolean(controlled_shipping_required);
+
+<span class="kw">const</span> mgmtRequired =
+  materialValue &gt; matThreshold ||
+  freightCost &gt; freightThreshold ||
+  isColdShipping ||
+  freightToValueRatio &gt; <span class="tp">0.3</span> ||
+  isNonStandardInco ||
+  isControlledShipping;</code></pre>
+  <p>If required, the STO goes through <strong>both</strong> shipping-site Management and receiving-site Receiving Management (two distinct AD groups) before returning to Shipping Logistics for a confirm pass, then on to Receiving Logistics. <code>mgmt_confirmed=1</code> after both approvals is what tells the confirm-pass submission to advance directly rather than loop back into management again.</p>
+
+  <h3>Planning Approval Validation</h3>
+  <p>Shipping Planning cannot approve without all three mandatory fields:</p>
+  <pre><code><span class="kw">if</span> (approved &amp;&amp; (!mpn_number || !batch_number || !expiration_date)) {
+  res.status(<span class="tp">400</span>).json({ message: <span class="st">'MPN Number, Batch Number and Expiration Date are required to approve'</span> });
+  <span class="kw">return</span>;
+}</code></pre>
+
+  <h3>Audit Log</h3>
+  <p>Every transition appends a row to <code>sto_audit_log</code>. The table is append-only — nothing in the codebase deletes from it. The log is shown in the STO detail view and powers the Dashboard's Recent Activity feed.</p>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 5. FIELD OWNERSHIP ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">5</div><h2>Field Ownership Per Group</h2></div>
+  <p><span class="field-mandatory">Red = mandatory to proceed</span> &nbsp;·&nbsp; <span class="field-optional">Plain = optional</span> &nbsp;·&nbsp; <span class="field-auto">Italic = auto-generated or computed</span></p>
+
+  <table class="swimlane">
+    <thead>
+      <tr>
+        <th style="width:170px; background:#1e3a5f;">Group</th>
+        <th style="background:#1e3a5f;">Fields They Fill In</th>
+        <th style="width:140px; background:#1e3a5f;">Stage</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="group-cell sw-receiving" style="color:#fff; border:none;">Any authenticated user</td>
+        <td style="background:#ebf8ff;">
+          <span class="field-mandatory">Shipping Site, Receiving Site, Material SAP# (8 digits), Material Description, Quantity, UOM, Shipping Conditions, Brand at Receiving Site, Material Value, Priority</span><br/>
+          <span class="field-optional">Requestor Name, Requestor Email, Requesting Plant, Rush Request (Y/N) + Rush Reason (required if rush), Toll MFG (Y/N), Distressed Inventory (Y/N) + DI Value, Controlled Shipping Required (Y/N) + notes, Inco Terms, Insurance Loss Required (Y/N), Receiving Site Need-By Date, Repeat Shipment Calendar Year, STO Number, Shipment ID, Corporate STO Tracker Status</span><br/>
+          <span class="field-auto">STO ID (auto-generated: STO-{year}-{sequence}, e.g. STO-2026-00042, via a SQL Server SEQUENCE — not a row count)</span>
+        </td>
+        <td>DRAFT → creates STO<br/>Submit → PLANNING_REVIEW</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-planning" style="color:#fff; border:none;">Shipping Site Planning</td>
+        <td style="background:#fffaf0;">
+          <span class="field-mandatory">MPN Number, Batch Number, Expiration Date (to approve)</span><br/>
+          <span class="field-optional">Planning Notes (required to revise or reject)</span>
+        </td>
+        <td>PLANNING_REVIEW</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-logistics" style="color:#fff; border:none;">Shipping Site Logistics</td>
+        <td style="background:#f0fff4;">
+          <span class="field-mandatory">Container Information, Freight Cost</span><br/>
+          <span class="field-optional">Distressed Inventory / DI Value (still editable here)</span><br/>
+          <span class="field-mandatory">On the post-management confirm pass: Actual Ship Date, Estimated Delivery Date, PGI Date, Ready to Ship, SAP STO#</span>
+        </td>
+        <td>SHIPPING_LOGISTICS<br/>(visited twice if management required)</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-mgmt" style="color:#fff; border:none;">Management</td>
+        <td style="background:#faf5ff;">
+          <span class="field-mandatory">Management Approved (Y/N)</span><br/>
+          <span class="field-optional">Management Notes (required on rejection)</span>
+        </td>
+        <td>MANAGEMENT_REVIEW<br/>(only if triggered)</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-mgmt" style="background:#805ad5; color:#fff; border:none;">Receiving Management</td>
+        <td style="background:#fdf2f8;">
+          <span class="field-mandatory">Receiving Mgmt Approved (Y/N)</span><br/>
+          <span class="field-optional">Receiving Mgmt Notes (required on rejection)</span>
+        </td>
+        <td>RECEIVING_MGMT_REVIEW<br/>(only if triggered)</td>
+      </tr>
+      <tr>
+        <td class="group-cell sw-recv-log" style="color:#fff; border:none;">Receiving Site Logistics</td>
+        <td style="background:#e6fffa;">
+          <span class="field-mandatory">Actual Receipt Date, Delivery Closed Out (Y/N)</span>
+        </td>
+        <td>RECEIVING_LOGISTICS → CLOSED</td>
+      </tr>
+      <tr>
+        <td class="group-cell" style="background:#718096; color:#fff; border:none;">Auto-computed</td>
+        <td style="background:#f7fafc; color:#718096; font-style:italic;">
+          management_approval_required — computed from material value, freight cost, freight/value ratio, cold-chain conditions, non-standard Inco terms, and controlled shipping at logistics submission. Not entered by any group.
+        </td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <p><strong>Dual enforcement:</strong> The frontend shows an editable action panel only to a user holding the right role <em>at the STO's relevant site</em> at the current status — everyone else sees read-only values. The backend independently validates the role, site, and status on every write endpoint via <code>hasRoleAtSite</code>. Frontend enforcement is UI-only and cannot be bypassed via direct API calls.</p>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 6. DATABASE ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">6</div><h2>Database Design</h2></div>
+  <p>Microsoft SQL Server with Windows Authentication. The <code>msnodesqlv8</code> driver uses the logged-in Windows account — no SQL username or password is needed. The connection pool is lazily initialised on first use.</p>
+
+  <div class="info-box">
+    <p><strong>Windows Auth:</strong> The app connects as the Windows user running the Node.js process. The SQL Server must have that Windows account (or its domain group) added as a login with db_owner or appropriate permissions on <code>sto_management</code>.</p>
+  </div>
+
+  <h3>sto_requests — Main Table</h3>
+  <table>
+    <thead><tr><th>Column Group</th><th>Key Fields</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Identity</td><td>id, sto_id</td><td>sto_id format: STO-{year}-{sequence}, e.g. STO-2026-00042 — generated from a SQL Server SEQUENCE (<code>NEXT VALUE FOR sto_number_seq</code>), atomic under concurrent inserts, not a row count</td></tr>
+      <tr><td>Request Info</td><td>request_date, priority, rush_request, public_holiday, repeat_shipment_calendar_year, rush_reason</td><td>Priority: 1=Urgent, 2=Expedited, 3=Standard</td></tr>
+      <tr><td>Sites</td><td>requesting_plant, shipping_site, receiving_site, toll_mfg, distressed_inventory, di_value</td><td>shipping_site and receiving_site drive queue filtering</td></tr>
+      <tr><td>Requestor</td><td>requestor_user_id (nullable — no app_users table), requestor_name, requestor_email</td><td>Denormalized at create time — survives any future auth changes</td></tr>
+      <tr><td>Material (creation)</td><td>material_sap, material_description, quantity, uom, inco_terms, shipping_conditions, controlled_shipping_required, controlled_shipping_notes, brand_at_receiving_site, material_value</td><td>All filled at creation</td></tr>
+      <tr><td>Material (Planning)</td><td>mpn_number, batch_number, expiration_date</td><td>Filled by Shipping Planning during inventory review</td></tr>
+      <tr><td>Financials</td><td>freight_cost, insurance_loss_required, management_approval_required</td><td>freight_cost by Logistics; mgmt flag auto-computed from 6 conditions</td></tr>
+      <tr><td>Scheduling</td><td>standard_estimated_ship_date, expedited_estimated_ship_date, receiving_site_need_by_date, estimated_ship_by_date, estimated_delivery_date</td><td>estimated_delivery_date filled by Shipping Logistics on the confirm pass</td></tr>
+      <tr><td>Reference</td><td>sto_number, shipment_id, corporate_sto_tracker_status, sto_number_requested_at</td><td>sto_number_requested_at is a reminder flag, cleared automatically once sto_number is filled</td></tr>
+      <tr><td>Shipping</td><td>container_information, ready_to_ship, pgi_date, actual_ship_date, tracking_id</td><td>Filled by Shipping Logistics</td></tr>
+      <tr><td>Planning Approval</td><td>planning_approved, planning_approved_by_user_id (nullable), planning_approved_at, planning_notes</td><td>Set by shipping_planning</td></tr>
+      <tr><td>Management Approval</td><td>management_approved, management_approved_by_user_id, management_approved_at, management_notes, mgmt_confirmed</td><td>Shipping-site gate — only set when management_approval_required = 1</td></tr>
+      <tr><td>Receiving Mgmt Approval</td><td>receiving_mgmt_approved, receiving_mgmt_approved_by_user_id, receiving_mgmt_approved_at, receiving_mgmt_notes</td><td>Receiving-site gate — the second, separate management approval</td></tr>
+      <tr><td>Receipt</td><td>actual_receipt_date, delivery_closed_out</td><td>Filled by Receiving Site Logistics</td></tr>
+      <tr><td>Lifecycle</td><td>status, rejection_reason, created_at, updated_at, archived, archived_at</td><td>updated_at set on every write via GETDATE(); archived rows are soft-hidden from normal queries, not deleted</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9pt; color:#718096;"><code>finance_approved</code>, <code>finance_approved_by_user_id</code>, <code>finance_approved_at</code>, and <code>finance_notes</code> columns still exist in the schema but are retired — no live code reads or writes them. Kept only for compatibility with old rows, not dropped.</p>
+
+  <h3>sto_audit_log — Append-only</h3>
+  <table>
+    <thead><tr><th>Column</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>sto_request_id</td><td>FK → sto_requests.id</td></tr>
+      <tr><td>action</td><td>CREATED | SUBMITTED | PLANNING_APPROVED | PLANNING_REJECTED | PLANNING_REVISION_REQUESTED | LOGISTICS_SUBMITTED | LOGISTICS_CONFIRMED | STO_NUMBER_REQUESTED | MANAGEMENT_APPROVED | MANAGEMENT_REJECTED | RECEIVING_MGMT_APPROVED | RECEIVING_MGMT_REJECTED | RECEIPT_UPDATED | DELIVERY_CLOSED | REVERTED | SENT_BACK</td></tr>
+      <tr><td>old_status / new_status</td><td>State before and after the action</td></tr>
+      <tr><td>performed_by (nullable) / performed_by_name</td><td>No integer user ID exists post app_users removal — actor is identified by name</td></tr>
+      <tr><td>notes</td><td>Reviewer comments or rejection reasons</td></tr>
+      <tr><td>performed_at</td><td>GETDATE() default — immutable once written</td></tr>
+    </tbody>
+  </table>
+
+  <h3>sto_attachments</h3>
+  <p>Any signed-in user can attach a file (PDF, JPG, or PNG, up to 10MB) to an STO at any point in the workflow — a Certificate of Analysis or other supporting document. File bytes are stored directly in the row (<code>VARBINARY(MAX)</code>), FK'd to <code>sto_requests.id</code>. No role or status restriction on adding one.</p>
+
+  <h3>demo_users — Dev / Demo Mode</h3>
+  <p>Used only when <code>DEV_BYPASS=true</code>. Stores test accounts with bcrypt-hashed passwords, a legacy single <code>group_key</code> + <code>site</code>, and an optional <code>grants</code> column (semicolon-separated <code>role@site</code> pairs) for multi-role demo accounts. Populated by <code>npm run seed</code>. In production this table is only consulted if <code>DEV_BYPASS</code> is deliberately left true; otherwise login goes through AD.</p>
+
+  <h3>sto_config — present but unused</h3>
+  <p>Key-value table pre-seeded with <code>management_approval_material_threshold</code> (10000) and <code>management_approval_freight_threshold</code> (5000). The application does <strong>not</strong> read this table — the real, effective thresholds ($100,000 / $20,000 by default) come from <code>MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD</code> / <code>MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD</code> in <code>.env</code>, or the built-in code defaults if unset. Changing <code>sto_config</code> rows has no effect.</p>
+
+  <h3>schema_migrations</h3>
+  <p>A manual checklist table (not an automated runner) recording which migration files have been applied to a given server — one row per filename, with a timestamp. Lets an admin see at a glance what state a server is in via <code>SELECT * FROM schema_migrations</code> instead of inspecting <code>sys.columns</code> by hand.</p>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 7. API DESIGN ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">7</div><h2>API Design</h2></div>
+  <p>RESTful API at <code>http://localhost:4000/api</code>. Every route except <code>/auth/login</code>, <code>/auth/demo-users</code>, and <code>/auth/ping-login-url</code> requires a valid JWT (enforced by <code>authenticate</code> middleware, mounted per-router). Role/site enforcement happens inside each route handler in addition to that middleware.</p>
+
+  <h4>Auth Routes — /api/auth</h4>
+  <table>
+    <thead><tr><th>Method</th><th>Route</th><th>Auth</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>POST</td><td>/auth/login</td><td>Public, rate-limited</td><td>{ username, password } → validates against demo_users (DEV_BYPASS=true) or AD (false) → returns JWT + user payload</td></tr>
+      <tr><td>GET</td><td>/auth/demo-users</td><td>Public</td><td>Returns demo account list with plaintext password for the login page hints panel. Returns [] when DEV_BYPASS=false.</td></tr>
+      <tr><td>GET</td><td>/auth/admins</td><td>JWT (any user)</td><td>Administrators contact list for the App Info page. DEV_BYPASS=true: queries demo_users. false: queries the real APP-STO_MANAGEMENT_ADMIN AD group. Not admin-gated — the point is a locked-out user can find who to contact.</td></tr>
+      <tr><td>GET</td><td>/auth/ping-login-url</td><td>Public</td><td>Returns { devBypass: true } or { ldapMode: true }. Used by frontend on load to detect auth mode.</td></tr>
+      <tr><td>GET</td><td>/auth/me</td><td>JWT</td><td>Returns current user decoded from JWT. Used on page load to validate a stored token.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>STO Routes — /api/sto</h4>
+  <table>
+    <thead><tr><th>Method</th><th>Route</th><th>Group required</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td>/sto</td><td>Any (results scoped by site)</td><td>Paginated, filterable list. Query params: status, priority, search, shipping_site, receiving_site, rush_only, active_only, has_need_by, sort, page, limit</td></tr>
+      <tr><td>GET</td><td>/sto/audit-log</td><td>Any</td><td>Last 20 audit entries across all STOs. Registered before /:id so Express doesn't match "audit-log" as an :id.</td></tr>
+      <tr><td>GET</td><td>/sto/audit-log/export</td><td>admin</td><td>Full, uncapped audit trail export</td></tr>
+      <tr><td>GET</td><td>/sto/kpis</td><td>Any</td><td>DB-computed rush/due-soon/overdue counts, scoped by site</td></tr>
+      <tr><td>GET</td><td>/sto/export</td><td>Any</td><td>Up to 5000 rows matching current filters, no pagination — CSV export</td></tr>
+      <tr><td>GET</td><td>/sto/filter-options</td><td>Any</td><td>Distinct requestor names and shipping→receiving route pairs, for populating filter dropdowns</td></tr>
+      <tr><td>GET</td><td>/sto/approval-thresholds</td><td>Any</td><td>Live threshold values from .env, so the frontend can preview whether a submission will trigger management review</td></tr>
+      <tr><td>POST</td><td>/sto</td><td>Any authenticated user</td><td>Create STO → saved as DRAFT, sto_id auto-generated from a SQL sequence</td></tr>
+      <tr><td>GET</td><td>/sto/:id</td><td>Any</td><td>Full STO detail + complete audit_log array</td></tr>
+      <tr><td>PUT</td><td>/sto/:id</td><td>Original creator or admin</td><td>Edit DRAFT STO only</td></tr>
+      <tr><td>PATCH</td><td>/sto/:id/tracking</td><td>Requestor or admin</td><td>Update SAP tracking references at any workflow stage</td></tr>
+      <tr><td>POST</td><td>/sto/:id/submit</td><td>Any authenticated user</td><td>DRAFT → PLANNING_REVIEW</td></tr>
+      <tr><td>POST</td><td>/sto/:id/planning</td><td>shipping_planning@shipping_site</td><td>{ decision: approve/revise/reject, notes, mpn_number, batch_number, expiration_date } → SHIPPING_LOGISTICS / DRAFT / REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/logistics</td><td>shipping_logistics@shipping_site</td><td>Saves logistics fields → MANAGEMENT_REVIEW or RECEIVING_LOGISTICS (6-condition auto-check)</td></tr>
+      <tr><td>POST</td><td>/sto/:id/request-sto-number</td><td>shipping_logistics@shipping_site</td><td>Flags sto_number_requested_at as a reminder — non-blocking</td></tr>
+      <tr><td>POST</td><td>/sto/:id/management</td><td>management@shipping_site</td><td>{ approved, notes } → RECEIVING_MGMT_REVIEW or REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/receiving-management</td><td>receiving_management@receiving_site</td><td>{ approved, notes } → SHIPPING_LOGISTICS (confirm pass) or REJECTED</td></tr>
+      <tr><td>POST</td><td>/sto/:id/receiving-logistics</td><td>receiving_logistics@receiving_site</td><td>{ actual_receipt_date, delivery_closed_out } → CLOSED or remains RECEIVING_LOGISTICS</td></tr>
+      <tr><td>POST</td><td>/sto/:id/revert</td><td>admin</td><td>Steps back one workflow stage, no reason required</td></tr>
+      <tr><td>POST</td><td>/sto/:id/send-back</td><td>admin</td><td>Steps back one stage with a mandatory reason</td></tr>
+      <tr><td>GET / POST / DELETE</td><td>/sto/:id/attachments[/:attId]</td><td>Any authenticated user</td><td>List, add (PDF/JPG/PNG, ≤10MB), or delete an STO attachment</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Sites &amp; Admin Routes</h4>
+  <table>
+    <thead><tr><th>Method</th><th>Route</th><th>Group required</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td>/sites</td><td>Any</td><td>The site list (code + name)</td></tr>
+      <tr><td>GET</td><td>/admin/archive/preview</td><td>admin</td><td>Count of CLOSED/REJECTED records older than the retention window, eligible to archive</td></tr>
+      <tr><td>POST</td><td>/admin/archive/run</td><td>admin</td><td>Marks eligible records archived=1 — hidden from normal queries, not deleted</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Analytics Routes — /api/analytics</h4>
+  <table>
+    <thead><tr><th>Route</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr><td>GET /analytics/summary</td><td>Totals: count by status, total/monthly value, rush count</td></tr>
+      <tr><td>GET /analytics/by-status</td><td>Count + value grouped by status — powers the donut chart</td></tr>
+      <tr><td>GET /analytics/by-month</td><td>Count + value per month, defaults to last 12 months — powers trend line</td></tr>
+      <tr><td>GET /analytics/by-site</td><td>Top 10 shipping sites + top 10 receiving sites by volume</td></tr>
+      <tr><td>GET /analytics/site-flow</td><td>Top 15 shipping→receiving site pairs by volume</td></tr>
+      <tr><td>GET /analytics/rush-split</td><td>Rush vs. normal count per month</td></tr>
+      <tr><td>GET /analytics/raw-data</td><td>Paginated STO list matching current filters — powers the data table</td></tr>
+      <tr><td>GET /analytics/cycle-time</td><td>Average time spent at each workflow stage</td></tr>
+      <tr><td>GET /analytics/aging</td><td>How long currently-open STOs have been sitting, bucketed</td></tr>
+      <tr><td>GET /analytics/rejections</td><td>Rejection counts and reasons by stage</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <p><strong>Route ordering note:</strong> <code>GET /sto/audit-log</code>, <code>/sto/kpis</code>, <code>/sto/export</code>, etc. must be registered before <code>GET /sto/:id</code>. If reversed, Express matches the literal path segment as the <code>:id</code> parameter and the intended route is never reached.</p>
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 8. FRONTEND ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">8</div><h2>Frontend Architecture</h2></div>
+
+  <h3>Component Tree</h3>
+  <pre><code>App.tsx  (BrowserRouter + AuthProvider)
+│
+├── AuthProvider  (context/AuthContext.tsx)
+│   └── provides: user, token, loading, ldapMode, login(), logout()
+│
+├── /login  → Login.tsx (public; redirects to /dashboard if already logged in)
+│
+└── ProtectedRoute  (loading? spinner : no user? → /login : render page)
+    └── Layout.tsx  (nav bar + max-width wrapper)
+        ├── /dashboard    → Dashboard.tsx
+        ├── /sto          → STOList.tsx
+        ├── /sto/new      → STOForm.tsx (create)
+        ├── /sto/:id/edit → STOForm.tsx (edit a DRAFT)
+        ├── /sto/:id      → STODetail.tsx
+        ├── /analytics    → Analytics.tsx
+        └── /app-info     → AppInfo.tsx</code></pre>
+
+  <h3>Key Pages</h3>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Login.tsx</div>
+      Username + password form. In demo mode: shows demo accounts panel with site filter tabs and one-click autofill (only rendered when the backend actually returns demo accounts — empty in production). In LDAP mode: hides demo panel, shows "Sign in with your Active Directory credentials". On success navigates to /dashboard.
+    </div>
+    <div class="card">
+      <div class="card-title">Dashboard.tsx</div>
+      KPI cards (Rush Active, Due Soon, Overdue). One action-queue section per role the user holds, each scoped to that role's site(s) via server-side query params. Rush + Overdue alert panels. Pipeline stage pills. Recent Activity feed. A separate "My Drafts" section, scoped by requestor name (not by role — anyone can have drafts).
+    </div>
+    <div class="card">
+      <div class="card-title">STOForm.tsx</div>
+      Any authenticated user. Multi-section creation/edit form: Requestor Info, Request Information, Material Details, Shipping Details (incl. Distressed Inventory), Tracking Reference. Rush checkbox unlocks Rush Reason. Submits POST/PUT /api/sto then redirects to the STO's detail page.
+    </div>
+    <div class="card">
+      <div class="card-title">STODetail.tsx</div>
+      Role- and site-gated action sections — each shows an editable panel only to a user holding the right role at the STO's relevant site, at the current status; everyone else sees read-only values. Attachments section (any user, any status). Full audit trail at bottom. Admin-only revert/send-back controls.
+    </div>
+    <div class="card">
+      <div class="card-title">STOList.tsx</div>
+      Shows STOs the user is entitled to see. Filterable by status, priority, site(s), requestor, need-by range, rush-only, active-only, free-text search. Sortable by need-by date. CSV export respects active filters. StatusBadge and PriorityBadge colour-code every row.
+    </div>
+    <div class="card">
+      <div class="card-title">Analytics.tsx</div>
+      Filter bar (site, status, rush, date range) with active filter chips. KPI summary cards. Recharts-based charts — status/rush charts are clickable to toggle the matching filter. Paginated raw data table at bottom, click a row → STODetail.
+    </div>
+  </div>
+
+  <h3>STODetail Action Sections</h3>
+  <table>
+    <thead><tr><th>#</th><th>Section</th><th>Active Group @ Site</th><th>Active Status</th><th>What they can edit</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Request &amp; Material Info</td><td>The original requestor</td><td>DRAFT</td><td>Edit via STOForm (link shown). Read-only once submitted.</td></tr>
+      <tr><td>2</td><td>Shipping Site Planning Review</td><td>shipping_planning @ shipping_site</td><td>PLANNING_REVIEW</td><td>MPN#, Batch#, Expiry Date + Approve/Revise/Reject</td></tr>
+      <tr><td>3</td><td>Shipping Site Logistics</td><td>shipping_logistics @ shipping_site</td><td>SHIPPING_LOGISTICS</td><td>Container Info, Freight Cost; on the confirm pass also Actual Ship Date, Est. Delivery Date, PGI Date, Ready to Ship, SAP STO#</td></tr>
+      <tr><td>4</td><td>Management Approval</td><td>management @ shipping_site</td><td>MANAGEMENT_REVIEW</td><td>Approve/Reject with notes</td></tr>
+      <tr><td>5</td><td>Receiving Management Approval</td><td>receiving_management @ receiving_site</td><td>RECEIVING_MGMT_REVIEW</td><td>Approve/Reject with notes</td></tr>
+      <tr><td>6</td><td>Receiving Site Logistics</td><td>receiving_logistics @ receiving_site</td><td>RECEIVING_LOGISTICS</td><td>Actual Receipt Date + Delivery Closed Out checkbox</td></tr>
+      <tr><td>—</td><td>Attachments</td><td>Any authenticated user</td><td>Any status</td><td>Add/remove PDF, JPG, or PNG files up to 10MB</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 9. ENVIRONMENT & SETUP ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">9</div><h2>Environment Configuration &amp; Setup</h2></div>
+
+  <h3>Environment Variables (backend/.env)</h3>
+  <table>
+    <thead><tr><th>Variable</th><th>Example</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>JWT_SECRET</td><td>long-random-string</td><td>Signs JWTs — never reuse the .env.example placeholder in production</td></tr>
+      <tr><td>PORT</td><td>4000</td><td>Backend HTTP port</td></tr>
+      <tr><td>NODE_ENV</td><td>production</td><td>Standard Node environment flag</td></tr>
+      <tr><td>LOG_LEVEL / LOG_DIR / LOG_RETENTION_DAYS</td><td>info / (default backend/logs) / 30</td><td>Pino logging — only 4xx/5xx and real errors are logged; files rotate daily and old ones are pruned at startup</td></tr>
+      <tr><td>FRONTEND_ORIGIN</td><td>https://host/sto</td><td>CORS allow-list — must match the URL users open</td></tr>
+      <tr><td>DB_SERVER / DB_DATABASE / DB_DRIVER</td><td>LAPTOP-ABC\SQLEXPRESS / sto_management / ODBC Driver 17 for SQL Server</td><td>SQL Server connection (Windows Authentication — no SQL password)</td></tr>
+      <tr><td>MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD</td><td>100000</td><td>USD — one of six conditions that trigger management review</td></tr>
+      <tr><td>MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD</td><td>20000</td><td>USD — one of six conditions that trigger management review</td></tr>
+      <tr><td>DEV_BYPASS</td><td>true / false</td><td>true = demo_users table; false = AD/LDAP. Not blocked or warned against in production — an explicit, permanent toggle, not just a dev setting</td></tr>
+      <tr><td>LDAP_URL</td><td>ldap://ad.company.com</td><td>AD domain controller URL (read only when DEV_BYPASS=false)</td></tr>
+      <tr><td>LDAP_DOMAIN</td><td>company.com</td><td>Domain for building UPN: username@company.com</td></tr>
+      <tr><td>LDAP_BASE_DN</td><td>DC=company,DC=com</td><td>Root of the AD tree to search</td></tr>
+      <tr><td>LDAP_BIND_DN / LDAP_BIND_PASSWORD</td><td>svc_sto@company.com / ...</td><td>Service account for directory search (optional — leave blank to fall back to direct user bind)</td></tr>
+      <tr><td>NOTIFICATION_TEST_MODE</td><td>true (default)</td><td>While true, every STO email — including requestor-facing — redirects to NOTIFICATION_TEST_EMAIL instead of the real recipient</td></tr>
+      <tr><td>NOTIFICATION_TEST_EMAIL</td><td>a test inbox address</td><td>Destination used while test mode is on</td></tr>
+      <tr><td>NOTIFICATION_RELAY_URL / USER / PASSWORD</td><td>http://localhost:8080 / ...</td><td>The notification_relay service. Leave blank to disable email notifications entirely</td></tr>
+    </tbody>
+  </table>
+
+  <h3>First-Time Setup</h3>
+  <pre><code><span class="cm"># 1. Clone the repo</span>
+git clone https://github.com/anjiik/app_sto.git sto-management
+cd sto-management
+
+<span class="cm"># 2. Install dependencies</span>
+cd backend  &amp;&amp; npm install
+cd ../frontend &amp;&amp; npm install
+
+<span class="cm"># 3. Configure environment</span>
+cd ../backend
+cp .env.example .env
+<span class="cm"># Edit .env — fill in DB_SERVER, set DEV_BYPASS, add LDAP_ vars if needed</span>
+
+<span class="cm"># 4. Create the SQL Server database</span>
+<span class="cm"># In SSMS: CREATE DATABASE sto_management;</span>
+<span class="cm"># Then open backend/src/db/schema.sql, paste, and Execute —</span>
+<span class="cm"># this is the fresh-install path; it already reflects every migration.</span>
+<span class="cm"># Run 018_backfill_migration_history.sql once afterward to record history.</span>
+
+<span class="cm"># 5. Seed demo users (dev/demo mode only)</span>
+npm run seed</code></pre>
+
+  <h3>Running the App</h3>
+  <pre><code><span class="cm"># Terminal 1 — Backend (port 4000)</span>
+cd backend &amp;&amp; npm run dev
+
+<span class="cm"># Terminal 2 — Frontend (port 5173)</span>
+cd frontend &amp;&amp; npm run dev
+
+<span class="cm"># Open http://localhost:5173</span></code></pre>
+
+  <h3>Deploying to a Windows Server</h3>
+  <p>See the full <strong>Deployment Checklist</strong> in the docs site (<code>docs/admin/deploy-checklist.md</code>) for the complete IIS + PM2 + Active Directory setup. Summary of an update to an already-deployed server:</p>
+  <pre><code>git pull                        <span class="cm"># get latest code</span>
+cd backend  &amp;&amp; npm install &amp;&amp; npm run build
+cd ../frontend &amp;&amp; npm install &amp;&amp; npm run build
+pm2 restart sto-backend
+
+<span class="cm"># The running service uses the compiled dist/ output — a source edit</span>
+<span class="cm"># (including editing GROUP_MAP) has no effect until rebuilt and restarted.</span></code></pre>
+
+  <h3>Project File Map</h3>
+  <pre><code>sto-management/
+├── backend/
+│   ├── src/
+│   │   ├── index.ts                  <span class="cm">Express entry — env validation, middleware, route mounting, crash handlers</span>
+│   │   ├── types/index.ts            <span class="cm">Group, STOStatus, Grant, JwtPayload types</span>
+│   │   ├── db/
+│   │   │   ├── connection.ts         <span class="cm">SQL Server pool (Windows Auth), dbQuery/dbExecute/withTransaction</span>
+│   │   │   ├── audit.ts              <span class="cm">logAudit() — standalone or transaction-scoped</span>
+│   │   │   ├── schema.sql            <span class="cm">Fresh-install schema — must be kept in sync with migrations/</span>
+│   │   │   ├── migrations/           <span class="cm">Numbered incremental changes for existing databases</span>
+│   │   │   ├── seed.ts               <span class="cm">Populates demo_users + sample STOs (DEV_BYPASS=true only)</span>
+│   │   │   └── sample_data.sql       <span class="cm">Optional sample STOs for analytics demo data</span>
+│   │   ├── lib/
+│   │   │   ├── ldap.ts               <span class="cm">GROUP_MAP + AD authentication via ldapts (service-account + direct bind)</span>
+│   │   │   ├── logger.ts             <span class="cm">Pino — daily rotating log file, 4xx/5xx + errors only</span>
+│   │   │   └── notify.ts             <span class="cm">notification_relay client — test-mode toggle</span>
+│   │   ├── middleware/
+│   │   │   ├── auth.ts               <span class="cm">authenticate, can/hasRole/hasRoleAtSite/isAdmin</span>
+│   │   │   └── rateLimits.ts         <span class="cm">Login + write-endpoint rate limiting</span>
+│   │   └── routes/
+│   │       ├── auth.ts               <span class="cm">login, demo-users, admins, ping-login-url, me</span>
+│   │       ├── sto.ts                <span class="cm">CRUD, list/filter, kpis, export, attachments-adjacent reads</span>
+│   │       ├── approvals.ts          <span class="cm">submit, planning, logistics, management, receiving-management, receiving-logistics, revert, send-back</span>
+│   │       ├── attachments.ts        <span class="cm">list/add/delete STO file attachments</span>
+│   │       ├── analytics.ts          <span class="cm">summary, by-status, by-month, by-site, site-flow, rush-split, raw-data, cycle-time, aging, rejections</span>
+│   │       ├── sites.ts              <span class="cm">GET / — site list</span>
+│   │       └── admin.ts              <span class="cm">archive preview/run</span>
+│   ├── .env                          <span class="cm">Live config — never committed to git</span>
+│   └── .env.example                  <span class="cm">Template with all variables and comments</span>
+└── frontend/
+    └── src/
+        ├── App.tsx                   <span class="cm">BrowserRouter, AuthProvider, ProtectedRoute, route table</span>
+        ├── types/index.ts            <span class="cm">Group, STOStatus, Grant, User, STORequest, AuditEntry interfaces</span>
+        ├── context/AuthContext.tsx   <span class="cm">JWT state, login/logout, ldapMode, restores session on load</span>
+        ├── api/client.ts             <span class="cm">Axios instance — auto JWT header, 401 → login redirect</span>
+        ├── lib/grants.ts             <span class="cm">isAdmin/hasRole/hasRoleAtSite — mirrors the backend, UI decisions only</span>
+        ├── components/
+        │   ├── Layout.tsx            <span class="cm">Nav bar, role badges, Sign Out button</span>
+        │   └── StatusBadge.tsx       <span class="cm">StatusBadge + PriorityBadge colour components</span>
+        └── pages/
+            ├── Login.tsx             <span class="cm">Username/password form + demo accounts panel (DEV_BYPASS only)</span>
+            ├── Dashboard.tsx         <span class="cm">KPI cards, per-role queues, pipeline, activity, My Drafts</span>
+            ├── STOList.tsx           <span class="cm">Filterable/sortable/exportable STO list</span>
+            ├── STOForm.tsx           <span class="cm">Create/edit form — any authenticated user</span>
+            ├── STODetail.tsx         <span class="cm">Role- and site-gated action sections + attachments + audit log</span>
+            ├── Analytics.tsx         <span class="cm">Filter bar, KPI cards, interactive charts, raw data table</span>
+            └── AppInfo.tsx           <span class="cm">User guide, access-request link, admins list (real AD lookup)</span></code></pre>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ 10. KEY DESIGN DECISIONS ═══════════════════ -->
+<div class="content">
+  <div class="section-header"><div class="section-num">10</div><h2>Key Design Decisions</h2></div>
+
+  <div class="decision-row">
+    <div class="decision-num">1</div>
+    <div class="decision-body">
+      <strong>Windows Authentication for SQL Server — no SQL password</strong>
+      <p>The app and SQL Server run on the same Windows domain. Using Windows Auth means no SQL credentials to manage, rotate, or accidentally commit. The <code>msnodesqlv8</code> driver builds an explicit ODBC connection string with <code>Trusted_Connection=yes</code> — this must not be changed to SQL authentication.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">2</div>
+    <div class="decision-body">
+      <strong>ldapts for AD authentication — pure TypeScript, no native compilation</strong>
+      <p>Other LDAP libraries require native binaries that fail to compile on some Windows environments. <code>ldapts</code> is pure TypeScript — it installs with a plain <code>npm install</code> on any machine. The two-step bind (service account searches, separate client validates password) follows AD best practice.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">3</div>
+    <div class="decision-body">
+      <strong>Every role+site grant carried in the JWT, not just one</strong>
+      <p>A user can hold several roles and/or cover several sites at once. Rather than picking one "primary" role+site to store, the token carries the full <code>grants[]</code> array — every {role, site} pair the user holds, derived from ALL of their matched AD groups via <code>GROUP_MAP</code> in <code>lib/ldap.ts</code>. This avoids a DB lookup on every request, and lets a single login correctly authorize a multi-role, multi-site user everywhere in the app.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">4</div>
+    <div class="decision-body">
+      <strong>Site-based queue filtering enforced server-side, via query params</strong>
+      <p><code>GET /api/sto</code> accepts <code>shipping_site</code>/<code>receiving_site</code> filters (comma-separated for multi-site users) that the Dashboard passes based on the user's grants. This keeps the same endpoint usable for both the unrestricted All STOs list and the site-scoped per-role queues, without ever fetching more data than the client needs.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">5</div>
+    <div class="decision-body">
+      <strong>Management is per-site, split into two distinct roles</strong>
+      <p>Unlike an earlier design where Management was a single cross-site approval role, the current model ties Management to specific sites via its own AD group per site, and splits it into shipping-side (<code>management</code>) and receiving-side (<code>receiving_management</code>) — two separate groups, so holding one does not grant the other. This matches the real requirement that both the sending and receiving facility sign off independently on a flagged shipment.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">6</div>
+    <div class="decision-body">
+      <strong>MPN#, Batch#, Expiry Date owned by Shipping Planning — not the requestor</strong>
+      <p>The requestor may not know the exact MPN or batch at request time — Shipping Planning verifies these during inventory review. Making all three mandatory before Planning can approve enforces the process rule server-side.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">7</div>
+    <div class="decision-body">
+      <strong>Management approval auto-computed from six conditions, not manually set</strong>
+      <p>No role can set the <code>management_approval_required</code> flag directly. It is computed at logistics submission from material value, freight cost, freight-to-value ratio, cold-chain shipping conditions, non-standard Inco terms, and controlled-shipping status — the dollar thresholds are configurable via <code>.env</code>, the other four conditions are fixed business rules. Changing a dollar threshold requires only an env variable change, not a code deployment.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">8</div>
+    <div class="decision-body">
+      <strong>Analytics filters applied uniformly via buildFilters() helper</strong>
+      <p>All 10 analytics endpoints share the same <code>buildFilters(q)</code> function that builds parameterised SQL WHERE conditions from the query string. This ensures consistent filter behaviour across every chart and the raw data table, and prevents SQL injection via named parameters.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">9</div>
+    <div class="decision-body">
+      <strong>Requestor info denormalized at STO creation time</strong>
+      <p><code>requestor_name</code> and <code>requestor_email</code> are copied from the submitting user's identity into the STO row when created, rather than referencing a user table (there isn't one — <code>app_users</code> was removed). This means the STO record remains accurate even if the user's AD display name changes or they leave the company, and the app never needs to resolve a stale foreign key to render a historical record.</p>
+    </div>
+  </div>
+
+  <div class="decision-row">
+    <div class="decision-num">10</div>
+    <div class="decision-body">
+      <strong>No admin/creation-scoped AD groups — creation needs no role, admin is company-wide only</strong>
+      <p>Earlier designs gated STO creation behind a "receiving site" role and allowed a per-site admin tier. Both were removed: any authenticated user can create an STO regardless of role, and admin access exists as a single company-wide AD group rather than one per site — matching how the role is actually used in practice.</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

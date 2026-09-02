@@ -7,6 +7,8 @@ For developers working on the codebase.
 - [Frontend](frontend.md) — pages, routing, and UI access checks
 - [Database](database.md) — schema, migrations, and tables
 - [Conventions](conventions.md) — code style and consistency rules
+- [UI style guide](style-guide.md) — the real colors, components, and patterns used
+- [Implementation & Design doc](design.md) — full technical design document
 
 ## Stack
 
@@ -33,7 +35,7 @@ Set `DEV_BYPASS=true` in `backend/.env` to use the [demo users](../reference/dem
 
 ```text
 backend/src/
-  routes/        auth, sto, approvals, analytics, admin, sites
+  routes/        auth, sto, approvals, attachments, analytics, admin, sites
   lib/ldap.ts    AD group → role/site mapping (GROUP_MAP) + login
   middleware/    JWT auth + grant-aware access helpers
   types/         shared types (Group, Grant, JwtPayload, STOStatus)

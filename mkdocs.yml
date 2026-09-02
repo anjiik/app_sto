@@ -103,3 +103,5 @@ nav:
       - Frontend: development/frontend.md
       - Database: development/database.md
       - Conventions: development/conventions.md
+      - UI style guide: development/style-guide.md
+      - Implementation & Design doc: development/design.md
