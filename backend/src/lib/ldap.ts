@@ -319,7 +319,9 @@ export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> 
     // nested group membership transitively — a plain `memberOf=<groupDN>`
     // filter only matches users added DIRECTLY to this group, and silently
     // misses anyone added via a nested group (a common real-AD setup).
-    const chainFilter = `(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)})`;
+    // objectCategory=user (not objectClass=group/etc.) matches the filter
+    // shape confirmed working against this AD by a separate, known-good script.
+    const chainFilter = `(&(objectCategory=user)(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)}))`;
     const { searchEntries: chainEntries } = await client.search(LDAP_BASE_DN, {
       scope: 'sub',
       filter: chainFilter,
@@ -332,7 +334,7 @@ export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> 
     // support LDAP_MATCHING_RULE_IN_CHAIN for the bind account being used.
     let memberEntries = chainEntries;
     if (memberEntries.length === 0) {
-      const directFilter = `(memberOf=${escapeLdap(groupDN)})`;
+      const directFilter = `(&(objectCategory=user)(memberOf=${escapeLdap(groupDN)}))`;
       const { searchEntries: directEntries } = await client.search(LDAP_BASE_DN, {
         scope: 'sub',
         filter: directFilter,
