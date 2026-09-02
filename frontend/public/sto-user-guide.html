@@ -29,6 +29,13 @@
     line-height: 1.5;
     margin: 0;
   }
+  /* Content widths/margins below are tuned for a printed A4 page. On screen,
+     constrain and center so long lines stay readable on a wide monitor. */
+  @media screen {
+    body { background: #eef0f3; }
+    section, .cover, .toc { max-width: 780px; margin: 0 auto; padding: 0 24px; background: #fff; }
+    .cover { padding-top: 48px; }
+  }
   h1, h2, h3, h4 { color: var(--blue-dark); line-height: 1.25; }
   h1 { font-size: 26pt; margin: 0 0 4pt; }
   h2 {
@@ -56,6 +63,14 @@
   .cover {
     height: 247mm; display: flex; flex-direction: column;
     justify-content: center; page-break-after: always;
+  }
+  /* The 247mm cover height is sized for a printed A4 page. On screen (this
+     file is now viewed directly, not just printed) that reads as one huge
+     empty block before any content — cap it to something reasonable instead.
+     (Horizontal padding for .cover on screen comes from the shared
+     "section, .cover, .toc" rule above — only height/vertical space here.) */
+  @media screen {
+    .cover { height: auto; min-height: 40vh; padding-top: 48px; padding-bottom: 32px; }
   }
   .cover .badge {
     display: inline-block; background: var(--blue); color: #fff;
@@ -98,6 +113,16 @@
     padding: 4px 9px; border-radius: 6px; margin: 2px 0;
   }
   .flow .arrow { color: var(--muted); margin: 0 3px; font-size: 9pt; }
+  .flowchart {
+    margin: 10pt 0 14pt;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .flowchart svg { width: 100%; max-width: 300pt; height: auto; }
+  .flowchart figcaption {
+    font-size: 8.5pt; color: var(--muted); margin-top: 6pt;
+    max-width: 460pt; margin-left: auto; margin-right: auto;
+  }
   .role-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8pt 0; page-break-inside: avoid; }
   .role-card h3 { margin-top: 0; }
   .kicker { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 1px; color: var(--blue); font-weight: 700; }
@@ -115,9 +140,9 @@
   <h1>STO Management</h1>
   <div class="sub">Stock Transfer Order requests, approvals &amp; tracking — a complete guide for every role.</div>
   <div class="meta">
-    <strong>Audience:</strong> Requestors, Planning, Logistics, Management &amp; Receiving teams<br>
+    <strong>Audience:</strong> Planning, Logistics, Management &amp; Receiving teams — and anyone creating requests<br>
     <strong>Access:</strong> Available in-app under <code>/sto</code> · App Info page<br>
-    <strong>Version:</strong> Covers the current form &amp; workflow (multi-site, weekend ship-date shift, dual management approval)
+    <strong>Version:</strong> Covers the current form &amp; workflow (multi-site, weekend ship-date shift, dual management approval, distressed inventory, attachments)
   </div>
 </div>
 
@@ -131,7 +156,7 @@
     <li>The STO Lifecycle at a Glance
       <ul><li>Workflow diagram · Statuses explained</li></ul>
     </li>
-    <li>Creating &amp; Submitting a Request <span class="pill gray">Requestor</span>
+    <li>Creating &amp; Submitting a Request <span class="pill gray">Anyone</span>
       <ul><li>Form fields · Rush &amp; ship dates · Validation</li></ul>
     </li>
     <li>Planning Review <span class="pill gray">Shipping Planning</span></li>
@@ -140,7 +165,9 @@
     <li>Receiving &amp; Closeout <span class="pill gray">Receiving Logistics</span></li>
     <li>Dashboard &amp; Work Queues</li>
     <li>Finding STOs: List, Filters &amp; Export</li>
-    <li>Reading an STO: Detail, Timeline &amp; Audit</li>
+    <li>Reading an STO: Detail, Timeline &amp; Audit
+      <ul><li>Timeline · Action panel · Attachments · Audit log</li></ul>
+    </li>
     <li>Analytics</li>
     <li>Admin Tasks: Revert, Send Back &amp; Archive</li>
     <li>Multi-Site Access</li>
@@ -155,18 +182,18 @@
   <p class="lead">STO Management is a web app for creating, approving, and tracking Stock Transfer Orders between sites. This guide walks through every step, organized by the role you play.</p>
 
   <h3>Signing in</h3>
-  <p>Open the app in your browser at your organization's STO address (served under <code>/sto</code>). Sign in with your normal work credentials — access is granted through your Active Directory group for your <strong>site</strong> and <strong>role</strong> (for example <code>ABC_LOGISTICS</code>). If you can't sign in, see <em>Requesting Access</em> in Section 14.</p>
+  <p>Open the app in your browser at your organization's STO address (served under <code>/sto</code>). Sign in with your normal work credentials — access is granted through your Active Directory group for your <strong>site</strong> and <strong>role</strong> (for example <code>APP-ABC-STO_Management_Logistics</code>). If you can't sign in, see <em>Requesting Access</em> in Section 14.</p>
 
   <h3>Your role determines what you see</h3>
-  <p>The app is role-aware: your dashboard, queues, and available actions all depend on your role. You may hold more than one role or cover more than one site. The six roles are:</p>
+  <p>The app is role-aware: your dashboard, queues, and available actions all depend on your role. You may hold more than one role or cover more than one site. Creating and submitting a new STO needs <strong>no role at all</strong> — any signed-in user can. Beyond that, the six roles are:</p>
   <table>
     <tr><th>Role</th><th>What you do</th></tr>
-    <tr><td><span class="pill gray">Requestor</span> <code>receiving_site</code></td><td>Create and submit new STO requests; track your own drafts.</td></tr>
     <tr><td><span class="pill blue">Shipping Planning</span> <code>shipping_planning</code></td><td>Review requests for feasibility; add planning details; approve, revise, or reject.</td></tr>
     <tr><td><span class="pill blue">Shipping Logistics</span> <code>shipping_logistics</code></td><td>Add freight &amp; shipping details; route for management approval when required.</td></tr>
-    <tr><td><span class="pill amber">Management</span> <code>management</code></td><td>Approve high-value or cold-chain shipments at the shipping <em>and</em> receiving site.</td></tr>
+    <tr><td><span class="pill amber">Management</span> <code>management</code></td><td>Shipping-site sign-off on high-value, cold-chain, or otherwise flagged shipments.</td></tr>
+    <tr><td><span class="pill amber">Receiving Management</span> <code>receiving_management</code></td><td>Receiving-site sign-off on the same flagged shipments — a separate AD group from Management.</td></tr>
     <tr><td><span class="pill green">Receiving Logistics</span> <code>receiving_logistics</code></td><td>Confirm receipt and close out the delivery.</td></tr>
-    <tr><td><span class="pill red">Admin</span> <code>admin</code></td><td>Fix mistakes (revert / send back), manage archiving, oversee all sites.</td></tr>
+    <tr><td><span class="pill red">Admin</span> <code>admin</code></td><td>Fix mistakes (revert / send back), manage archiving — company-wide, not per-site.</td></tr>
   </table>
 
   <h3>Navigating the app</h3>
@@ -184,18 +211,109 @@
 <section>
   <span class="kicker">Section 2</span>
   <h2>The STO Lifecycle at a Glance</h2>
-  <p class="lead">Every STO moves through the same ordered path. Each hand-off is one role's responsibility. Management approval is only inserted when a shipment is high-value or cold-chain.</p>
+  <p class="lead">Every STO moves through the same ordered path, but it branches: most shipments skip both management steps entirely, and Planning or an Admin can send a request backward when something needs fixing.</p>
 
-  <div class="flow">
-    <span class="step">Draft</span><span class="arrow">→</span>
-    <span class="step">Planning Review</span><span class="arrow">→</span>
-    <span class="step">Shipping Logistics</span><span class="arrow">→</span>
-    <span class="step">Management Review*</span><span class="arrow">→</span>
-    <span class="step">Receiving Mgmt Review*</span><span class="arrow">→</span>
-    <span class="step">Receiving Logistics</span><span class="arrow">→</span>
-    <span class="step">Closed</span>
-  </div>
-  <p style="text-align:center; font-size:9pt; color:var(--muted);">* Management steps are skipped automatically when approval is not required (see Section 6).</p>
+  <figure class="flowchart">
+    <svg viewBox="0 0 620 700" role="img" aria-label="Flowchart of the STO lifecycle: Draft leads to Planning Review, which either advances to Shipping Logistics, returns to Draft for revision, or ends in Rejected. Shipping Logistics either goes straight to Receiving Logistics when management approval is not required, or to Management Review when it is. Management Review either advances to Receiving Management Review or ends in Rejected. Receiving Management Review either loops back to Shipping Logistics for a confirm pass, which then proceeds to Receiving Logistics, or ends in Rejected. Receiving Logistics ends in Closed.">
+      <defs>
+        <marker id="ug-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+        </marker>
+        <marker id="ug-arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/>
+        </marker>
+        <marker id="ug-arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+        </marker>
+        <marker id="ug-arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#047857"/>
+        </marker>
+      </defs>
+
+      <!-- Rejected: single terminal box, off to the right, fed by all three approval steps -->
+      <rect x="486" y="290" width="110" height="34" rx="7" fill="#fee2e2" stroke="#b91c1c" stroke-width="1.2"/>
+      <text x="541" y="311" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#991b1b">Rejected</text>
+
+      <!-- Draft -->
+      <rect x="220" y="10" width="120" height="34" rx="7" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.2"/>
+      <text x="280" y="31" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#374151">Draft</text>
+
+      <line x1="280" y1="44" x2="280" y2="70" stroke="#6b7280" stroke-width="1.3" marker-end="url(#ug-arrow)"/>
+      <text x="288" y="60" font-size="8.5" fill="#6b7280">submit</text>
+
+      <!-- Planning Review -->
+      <rect x="205" y="72" width="150" height="34" rx="7" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.2"/>
+      <text x="280" y="93" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#1e40af">Planning Review</text>
+
+      <!-- Planning -> revise (loop back to Draft, left side) -->
+      <path d="M205,89 C 60,89 60,27 218,27" fill="none" stroke="#b45309" stroke-width="1.2" marker-end="url(#ug-arrow-amber)"/>
+      <text x="60" y="60" font-size="8.5" fill="#b45309" text-anchor="middle">revise</text>
+
+      <!-- Planning -> reject -->
+      <path d="M355,89 C 460,89 486,230 500,288" fill="none" stroke="#b91c1c" stroke-width="1.2" marker-end="url(#ug-arrow-red)"/>
+      <text x="420" y="140" font-size="8.5" fill="#b91c1c">reject</text>
+
+      <!-- Planning -> Shipping Logistics -->
+      <line x1="280" y1="106" x2="280" y2="132" stroke="#6b7280" stroke-width="1.3" marker-end="url(#ug-arrow)"/>
+      <text x="288" y="122" font-size="8.5" fill="#6b7280">approve</text>
+
+      <!-- Shipping Logistics -->
+      <rect x="195" y="134" width="170" height="34" rx="7" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.2"/>
+      <text x="280" y="155" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#1e40af">Shipping Logistics</text>
+
+      <!-- Shipping Logistics -> Management Review (approval required, straight down) -->
+      <line x1="280" y1="168" x2="280" y2="194" stroke="#b45309" stroke-width="1.3" marker-end="url(#ug-arrow-amber)"/>
+      <text x="288" y="184" font-size="8.5" fill="#b45309">approval required</text>
+
+      <!-- Shipping Logistics -> Receiving Logistics (skip straight through, right side) -->
+      <path d="M365,150 C 470,150 470,470 366,494" fill="none" stroke="#047857" stroke-width="1.3" marker-end="url(#ug-arrow-green)"/>
+      <text x="475" y="320" font-size="8.5" fill="#047857" text-anchor="middle">approval not</text>
+      <text x="475" y="331" font-size="8.5" fill="#047857" text-anchor="middle">required</text>
+
+      <!-- Management Review -->
+      <rect x="190" y="196" width="180" height="34" rx="7" fill="#fef3c7" stroke="#b45309" stroke-width="1.2"/>
+      <text x="280" y="217" text-anchor="middle" font-size="11" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#92400e">Management Review</text>
+      <text x="280" y="192" text-anchor="middle" font-size="8" fill="#92400e" font-weight="600" font-family="'Segoe UI',Arial,sans-serif">shipping site</text>
+
+      <!-- Mgmt -> reject -->
+      <path d="M370,213 C 460,213 480,250 495,288" fill="none" stroke="#b91c1c" stroke-width="1.2" marker-end="url(#ug-arrow-red)"/>
+      <text x="415" y="235" font-size="8.5" fill="#b91c1c">reject</text>
+
+      <!-- Management -> Receiving Mgmt Review -->
+      <line x1="280" y1="230" x2="280" y2="256" stroke="#6b7280" stroke-width="1.3" marker-end="url(#ug-arrow)"/>
+      <text x="288" y="246" font-size="8.5" fill="#6b7280">approve</text>
+
+      <!-- Receiving Mgmt Review -->
+      <rect x="175" y="258" width="210" height="34" rx="7" fill="#fef3c7" stroke="#b45309" stroke-width="1.2"/>
+      <text x="280" y="279" text-anchor="middle" font-size="11" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#92400e">Receiving Mgmt Review</text>
+      <text x="280" y="254" text-anchor="middle" font-size="8" fill="#92400e" font-weight="600" font-family="'Segoe UI',Arial,sans-serif">receiving site</text>
+
+      <!-- Receiving Mgmt -> reject -->
+      <line x1="385" y1="275" x2="484" y2="298" stroke="#b91c1c" stroke-width="1.2" marker-end="url(#ug-arrow-red)"/>
+      <text x="435" y="270" font-size="8.5" fill="#b91c1c">reject</text>
+
+      <!-- Receiving Mgmt -> confirm pass, back UP to Shipping Logistics (left side, distinct from the skip path on the right) -->
+      <path d="M175,275 C 40,275 40,150 193,150" fill="none" stroke="#047857" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ug-arrow-green)"/>
+      <text x="40" y="212" font-size="8.5" fill="#047857" text-anchor="middle">both approved</text>
+      <text x="40" y="223" font-size="8.5" fill="#047857" text-anchor="middle">— confirm pass</text>
+
+      <!-- Receiving Logistics -->
+      <rect x="190" y="496" width="180" height="34" rx="7" fill="#d1fae5" stroke="#047857" stroke-width="1.2"/>
+      <text x="280" y="517" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#065f46">Receiving Logistics</text>
+
+      <!-- Receiving Logistics -> Closed -->
+      <line x1="280" y1="530" x2="280" y2="556" stroke="#6b7280" stroke-width="1.3" marker-end="url(#ug-arrow)"/>
+      <text x="288" y="546" font-size="8.5" fill="#6b7280">close out</text>
+
+      <!-- Closed -->
+      <rect x="220" y="558" width="120" height="34" rx="7" fill="#d1fae5" stroke="#047857" stroke-width="1.2"/>
+      <text x="280" y="579" text-anchor="middle" font-size="11.5" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="#065f46">Closed</text>
+
+    </svg>
+    <figcaption>
+      Grey = forward progress. Amber = routed into management review. Green = the two green paths both bypass the loop back into management — the top-right one skips it entirely, the dashed one is the confirm pass after both approvals are in. Red = rejection, a dead end from any of the three approval steps.
+    </figcaption>
+  </figure>
 
   <h3>What each status means</h3>
   <table>
@@ -214,9 +332,9 @@
 
 <!-- ============ 3. CREATING ============ -->
 <section>
-  <span class="kicker">Section 3 · Requestor</span>
+  <span class="kicker">Section 3 · Anyone</span>
   <h2>Creating &amp; Submitting a Request</h2>
-  <p class="lead">Requestors (and admins) create new STOs. From the <strong>STOs</strong> list or the Dashboard, click <strong>New STO</strong> to open the form.</p>
+  <p class="lead">Any signed-in user can create a new STO — there's no dedicated requestor role. From the <strong>STOs</strong> list or the Dashboard, click <strong>New STO</strong> to open the form.</p>
 
   <h3>Filling in the form</h3>
   <p>Fields are grouped into sections. Required fields are validated before you can submit.</p>
@@ -237,7 +355,10 @@
     <tr><th>Field</th><th>Notes</th></tr>
     <tr><td>Shipping site &amp; receiving site <span class="pill red">required</span></td><td>Where it ships from and to.</td></tr>
     <tr><td>Shipping conditions <span class="pill red">required</span></td><td>Ambient, Cold 2–8 °C, Cold below 0, Frozen, or <em>Other</em> (free text). Cold-chain choices trigger management approval later.</td></tr>
-    <tr><td>Controlled shipping</td><td>Check if controlled; add notes if needed.</td></tr>
+    <tr><td>Toll manufacturing</td><td>Check if this is a toll-manufacturing transfer.</td></tr>
+    <tr><td>Distressed inventory</td><td>Check if this is a distressed-inventory transfer, then enter the estimated saving value. Editable later by Requestor, Planning, and Logistics.</td></tr>
+    <tr><td>Controlled shipping</td><td>Check if controlled; add notes if needed. <strong>Controlled shipments always require management approval</strong> (Section 5).</td></tr>
+    <tr><td>Inco terms</td><td>Standard terms are FCA and DAP. Any other specified term triggers management approval (Section 5).</td></tr>
   </table>
 
   <h4>Dates &amp; urgency</h4>
@@ -316,30 +437,36 @@
     <li><strong>Freight cost</strong> and shipping details.</li>
     <li>STO number, shipment ID, and tracking information as they become available.</li>
   </ul>
+  <div class="callout note"><span class="label">Note</span><br>If the SAP STO# isn't available yet, click <strong>Request STO#</strong> — it flags a reminder on the record (visible to the requestor) rather than blocking your submission. Filling in the STO# later automatically clears the reminder.</div>
 
   <h3>What happens when you submit</h3>
-  <p>The app checks four conditions. If <strong>any</strong> is true, the STO is routed to <span class="pill amber">Management Review</span>; otherwise it goes straight to <span class="pill green">Receiving Logistics</span>.</p>
+  <p>The app checks six conditions. If <strong>any</strong> is true, the STO is routed to <span class="pill amber">Management Review</span>; otherwise it goes straight to <span class="pill green">Receiving Logistics</span>.</p>
   <table>
     <tr><th>Condition</th><th>Threshold (default)</th></tr>
     <tr><td>Material value is high</td><td>over $100,000</td></tr>
     <tr><td>Freight cost is high</td><td>over $20,000</td></tr>
     <tr><td>Freight is large relative to value</td><td>freight ÷ value &gt; 30%</td></tr>
     <tr><td>Cold-chain shipping conditions</td><td>Cold 2–8 °C, Cold below 0, or Frozen</td></tr>
+    <tr><td>Non-standard Inco term</td><td>anything other than FCA or DAP</td></tr>
+    <tr><td>Controlled shipping required</td><td>always triggers, regardless of value</td></tr>
   </table>
-  <div class="callout note"><span class="label">Note</span><br>The dollar thresholds are configured by your administrators and may differ at your organization. The behavior — high value / high freight / high ratio / cold-chain → management approval — is always the same.</div>
+  <div class="callout note"><span class="label">Note</span><br>The dollar thresholds are configured by your administrators and may differ at your organization. The behavior — any one condition true → management approval — is always the same.</div>
+
+  <h3>Ready to ship</h3>
+  <p>If none of the six conditions apply, you can check <strong>Ready to Ship</strong> directly on this submission — the STO advances straight to <span class="pill green">Receiving Logistics</span>. If management approval <em>is</em> required, Ready to Ship can't be checked yet — it becomes available on the confirm pass below.</p>
 
   <h3>The confirm pass</h3>
-  <p>When management approval <em>was</em> required, the STO comes back to you one more time after both management approvals. On this pass you finalize the shipment — <strong>actual ship date, estimated delivery date, PGI date, ready-to-ship</strong> — and it then advances to <span class="pill green">Receiving Logistics</span>. (It will not loop back to management again.)</p>
+  <p>When management approval <em>was</em> required, the STO comes back to you one more time after both management approvals. On this pass, <strong>actual ship date, estimated delivery date, PGI date, Ready to Ship, and the SAP STO#</strong> all become required before you can finalize — and it then advances to <span class="pill green">Receiving Logistics</span>. (It will not loop back to management again.)</p>
 </section>
 
 <!-- ============ 6. MANAGEMENT ============ -->
 <section>
   <span class="kicker">Section 6 · Management</span>
   <h2>Management Approval</h2>
-  <p class="lead">Management sign-off protects high-value and cold-chain shipments. It happens at <strong>both</strong> the shipping site and the receiving site.</p>
+  <p class="lead">Management sign-off protects high-value, cold-chain, controlled, and non-standard shipments. It happens at <strong>both</strong> the shipping site and the receiving site — two separate AD groups, so a user in only one cannot act on the other's step.</p>
 
   <h3>When it's required</h3>
-  <p>Management review only appears when logistics submits an STO that meets one of the four conditions in Section 5 (high value, high freight, high freight-to-value ratio, or cold-chain). Routine shipments skip both management steps entirely.</p>
+  <p>Management review only appears when logistics submits an STO that meets one of the six conditions in Section 5 (high value, high freight, high freight-to-value ratio, cold-chain, non-standard Inco term, or controlled shipping). Routine shipments skip both management steps entirely.</p>
 
   <h3>Two approvals, in order</h3>
   <ol>
@@ -435,8 +562,12 @@
     <li><strong>All request details</strong> — every field entered by the requestor, planning, and logistics.</li>
     <li><strong>Process timeline</strong> — the workflow steps with the current position highlighted, so you can see how far along it is and what's next.</li>
     <li><strong>Action panel</strong> — context-aware buttons for <em>your</em> role at the current step (approve, revise, reject, confirm, close, etc.). If it's not your turn, you'll simply see the read-only view.</li>
+    <li><strong>Attachments</strong> — any signed-in user can attach a file, at any point in the workflow.</li>
     <li><strong>Audit log</strong> — a complete, timestamped record of every action, who took it, and any notes or reasons.</li>
   </ul>
+
+  <h3>Adding an attachment</h3>
+  <p>Anyone can add a <strong>Certificate of Analysis</strong> or other supporting document — PDF, JPG, or PNG, up to <strong>10 MB</strong>. There's no restriction by role or workflow status, so it's available whether the STO is still a draft or already closed.</p>
 
   <h3>Spotting a hold-up</h3>
   <p>The current status and timeline tell you who the STO is waiting on. If it's been sitting a while, check the audit log for a <strong>revise</strong> or <strong>send-back</strong> reason — the request may be waiting on a fix from an earlier role.</p>
@@ -486,10 +617,10 @@
   <p class="lead">Many users cover more than one site. The app supports this throughout — your queues, lists, and approvals span all the sites you're assigned to.</p>
 
   <ul>
-    <li>Your access is defined by your Active Directory groups, one per <em>site + role</em> (e.g. <code>ABC_LOGISTICS</code> and <code>ABL_LOGISTICS</code>).</li>
+    <li>Your access is defined by your Active Directory groups, one per <em>site + role</em> (e.g. <code>APP-ABC-STO_Management_Logistics</code> and <code>APP-ABL-STO_Management_Logistics</code>).</li>
     <li>Dashboard queues automatically include work from <strong>every</strong> site you cover.</li>
     <li>On the STOs list, the shipping-site and receiving-site filters accept <strong>multiple sites at once</strong>.</li>
-    <li>Management users can act on both the shipping-site and receiving-site approval steps for their assigned sites.</li>
+    <li>Shipping-site Management and Receiving-site Management are <strong>separate</strong> AD groups. A user needs both to act on both sides of an approval — holding one does not grant the other.</li>
   </ul>
   <div class="callout note"><span class="label">Note</span><br>If you should see a site's STOs but don't, you may be missing that site's AD group. Request it via the App Info page (Section 14).</div>
 </section>
@@ -500,7 +631,7 @@
   <h2>Reference &amp; Troubleshooting</h2>
 
   <h3>Requesting access</h3>
-  <p>Access is granted by Active Directory group membership for your <strong>site</strong> and <strong>role</strong> (e.g. <code>ABC_PLANNING</code>). Use the <strong>Requesting Access</strong> link on the <strong>App Info</strong> page and include the site(s) and role you need. For help, contact an administrator (listed on the same page) or your IT service desk.</p>
+  <p>Access is granted by Active Directory group membership for your <strong>site</strong> and <strong>role</strong> (e.g. <code>APP-ABC-STO_Management_Planning</code>). Use the <strong>Requesting Access</strong> link on the <strong>App Info</strong> page and include the site(s) and role you need. For help, contact an administrator (listed on the same page) or your IT service desk. Creating a new STO needs no group membership at all.</p>
 
   <h3>Status quick reference</h3>
   <table>
@@ -519,7 +650,7 @@
   <p>Once submitted, an STO is read-only to the requestor. Ask Planning to <em>revise</em> it back to Draft, or an Admin to <em>send it back</em>.</p>
 
   <h4>My STO went to management approval — why?</h4>
-  <p>It met a threshold: high material value, high freight cost, a high freight-to-value ratio, or cold-chain shipping conditions (Section 5).</p>
+  <p>It met one of six conditions: high material value, high freight cost, a high freight-to-value ratio, cold-chain shipping conditions, a non-standard Inco term, or controlled shipping (Section 5).</p>
 
   <h4>The estimated ship date isn't what I expected.</h4>
   <p>It's calculated from priority (15 / 30 / 45 days) and shifts to Monday if it lands on a weekend (Section 3).</p>

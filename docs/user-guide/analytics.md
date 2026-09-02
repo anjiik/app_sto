@@ -14,6 +14,11 @@ planning.
 - **Monthly trends** — volume and value over time.
 - **Site flows** — how many STOs move from each site to each other site.
 - **Rush split** — rush vs. normal volume month by month.
+- **Avg days in each stage (cycle time)** — how long STOs typically spend at each
+  workflow stage.
+- **Aging** — how long currently-active STOs have been sitting in their current stage.
+- **Rejections & revisions** — how often, and at which stage, requests are rejected or
+  sent back for revision.
 - **Raw data table** — searchable and exportable underlying rows.
 
 Use the filters (status, rush, date range) to focus a chart on a period or category.

@@ -15,6 +15,10 @@ Logistics** for your site.
 - **Freight cost** and shipping details.
 - STO number, shipment ID, and tracking information as they become available.
 
+If the SAP STO# isn't available yet, click **Request STO#** — it flags a reminder on
+the record for the requestor rather than blocking your submission. Filling in the
+STO# later clears the reminder automatically.
+
 ## What happens when you submit
 
 The app checks the [approval rules](../reference/approval-rules.md). If **any** is

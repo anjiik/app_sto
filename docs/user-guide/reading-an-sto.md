@@ -12,6 +12,9 @@ Click any STO to open its detail page — the single source of truth for that re
   (approve, revise, reject, confirm, close, etc.). If it's not your turn, you'll see
   the read-only view. A [multi-role](multi-site.md) user sees the panel for whichever
   of their roles is active at this step.
+- **Attachments** — any signed-in user can add a Certificate of Analysis or other
+  document (PDF, JPG, or PNG, up to 10MB) at any point in the workflow — not
+  restricted by role or status.
 - **Audit log** — a complete, timestamped record of every action, who took it, and
   any notes or reasons.
 
