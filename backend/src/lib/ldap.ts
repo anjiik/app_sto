@@ -298,9 +298,13 @@ export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> 
     }
     const groupDN = groupEntries[0].dn as string;
 
+    // LDAP_MATCHING_RULE_IN_CHAIN (1.2.840.113556.1.4.1941) makes AD walk
+    // nested group membership transitively — a plain `memberOf=<groupDN>`
+    // filter only matches users added DIRECTLY to this group, and silently
+    // misses anyone added via a nested group (a common real-AD setup).
     const { searchEntries: memberEntries } = await client.search(LDAP_BASE_DN, {
       scope: 'sub',
-      filter: `(memberOf=${escapeLdap(groupDN)})`,
+      filter: `(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)})`,
       attributes: ['displayName', 'mail', 'sAMAccountName'],
     });
 
