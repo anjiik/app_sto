@@ -185,47 +185,62 @@ export async function authenticateWithAD(
   // ── Service-account search + user bind (preferred for production) ─────────
   if (LDAP_BIND_DN && LDAP_BIND_PASS) {
     const searchClient = new Client(CLIENT_OPTS());
+    let serviceAccountBindFailed = false;
     try {
-      await searchClient.bind(LDAP_BIND_DN, LDAP_BIND_PASS);
+      try {
+        await searchClient.bind(LDAP_BIND_DN, LDAP_BIND_PASS);
+      } catch (err: any) {
+        // A bad/misconfigured service account must never take down login for
+        // everyone — fall through to the direct user-bind path below instead
+        // of failing the whole request. Only the admin-list lookup actually
+        // requires a working service account; login doesn't.
+        console.error(
+          `[AD auth] Service account bind failed (${err?.message || err}) — falling back to direct user bind`,
+        );
+        serviceAccountBindFailed = true;
+      }
 
-      let entry: Record<string, unknown> | null = null;
+      if (!serviceAccountBindFailed) {
+        let entry: Record<string, unknown> | null = null;
 
-      const { searchEntries } = await searchClient.search(LDAP_BASE_DN, {
-        scope: 'sub',
-        filter: `(userPrincipalName=${escapeLdap(upn)})`,
-        attributes: attrs,
-      });
-      if (searchEntries.length > 0) {
-        entry = searchEntries[0] as Record<string, unknown>;
-      } else {
-        const { searchEntries: bySam } = await searchClient.search(LDAP_BASE_DN, {
+        const { searchEntries } = await searchClient.search(LDAP_BASE_DN, {
           scope: 'sub',
-          filter: `(sAMAccountName=${escapeLdap(sam)})`,
+          filter: `(userPrincipalName=${escapeLdap(upn)})`,
           attributes: attrs,
         });
-        if (!bySam.length) throw new Error('User account not found in Active Directory');
-        entry = bySam[0] as Record<string, unknown>;
-      }
-
-      const authClient = new Client(CLIENT_OPTS());
-      try {
-        await authClient.bind(entry.dn as string, password);
-      } catch (err: any) {
-        if (err?.code === 49 || err?.message?.includes('Invalid Credentials')) {
-          throw new Error('Invalid username or password');
+        if (searchEntries.length > 0) {
+          entry = searchEntries[0] as Record<string, unknown>;
+        } else {
+          const { searchEntries: bySam } = await searchClient.search(LDAP_BASE_DN, {
+            scope: 'sub',
+            filter: `(sAMAccountName=${escapeLdap(sam)})`,
+            attributes: attrs,
+          });
+          if (!bySam.length) throw new Error('User account not found in Active Directory');
+          entry = bySam[0] as Record<string, unknown>;
         }
-        throw err;
-      } finally {
-        await authClient.unbind().catch(() => {});
-      }
 
-      return buildResult(entry, sam);
+        const authClient = new Client(CLIENT_OPTS());
+        try {
+          await authClient.bind(entry.dn as string, password);
+        } catch (err: any) {
+          if (err?.code === 49 || err?.message?.includes('Invalid Credentials')) {
+            throw new Error('Invalid username or password');
+          }
+          throw err;
+        } finally {
+          await authClient.unbind().catch(() => {});
+        }
+
+        return buildResult(entry, sam);
+      }
     } finally {
       await searchClient.unbind().catch(() => {});
     }
   }
 
-  // ── Direct user bind (fallback when no service account is configured) ─────
+  // ── Direct user bind (used when no service account is configured, or the
+  // service account bind above failed) ──────────────────────────────────────
   const client = new Client(CLIENT_OPTS());
   try {
     await client.bind(upn, password);
