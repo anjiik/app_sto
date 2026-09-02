@@ -18,7 +18,8 @@ initial site codes.
 
 !!! note "Check it worked"
     In Object Explorer, expand `sto_management → Tables`. You should see
-    `sto_requests`, `sto_audit_log`, `sites`, `demo_users`, and `sto_config`.
+    `sto_requests`, `sto_audit_log`, `sto_attachments`, `sites`, `demo_users`,
+    `sto_config`, and `schema_migrations`.
 
 ## Run the migrations
 

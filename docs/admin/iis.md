@@ -77,35 +77,8 @@ iisreset
 
 ## Serving these docs at `/sto/docs`
 
-The documentation is a static site — build it and let IIS serve it as a sub-folder.
-
-1. **Build the docs** (on any machine with the docs toolchain):
-   ```bash
-   pip install -r docs-requirements.txt
-   mkdocs build          # produces the site/ folder
-   ```
-2. **Copy** the generated `site\` folder to the server as
-   `C:\sto-management\frontend\dist\docs`.
-3. Because the docs live *inside* the site's physical path, the existing SPA-fallback
-   rule would try to hand `/docs/*` to the app. Add a rule **above** the SPA fallback
-   so real doc files are served directly:
-
-   ```xml
-   <!-- Serve the docs folder as static files (place ABOVE the SPA Fallback rule) -->
-   <rule name="Docs Passthrough" stopProcessing="true">
-     <match url="^docs/(.*)" />
-     <conditions logicalGrouping="MatchAll">
-       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-       <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-     </conditions>
-     <action type="Rewrite" url="/docs/index.html" />
-   </rule>
-   ```
-
-The docs are then browsable at **`https://<host>/sto/docs/`** — reachable by anyone who
-can reach the app.
-
-!!! note "Base path"
-    The docs' `mkdocs.yml` sets `site_url` to the `/sto/docs/` path. Update it to your
-    real host before building. In-page links are relative, so the site works even if
-    the base path differs.
+Build the docs (`pip install -r docs-requirements.txt && mkdocs build`) and copy the
+generated `site\` folder to `C:\sto-management\frontend\dist\docs`. Add a "Docs
+Passthrough" rewrite rule above the SPA Fallback rule so `/docs/*` serves those static
+files instead of the SPA — see the existing `web.config` above for the rule pattern.
+The docs are then browsable at `https://<host>/sto/docs/`.

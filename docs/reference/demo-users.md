@@ -21,6 +21,16 @@ ABC; ABL uses the `abl.*` prefix, ABS uses `abs.*`, and MBM uses `mbm.*`.
 | `abc.rmgmt` | Emma Hayes | ABC | receiving_management |
 | `abc.rlog` | Frank Lopez | ABC | receiving_logistics |
 
+ABL's accounts:
+
+| Username | Name | Site | Role |
+|----------|------|------|------|
+| `abl.plan` | Henry Wu | ABL | shipping_planning |
+| `abl.slog` | Isabel Cruz | ABL | shipping_logistics |
+| `abl.mgmt` | James Ford | ABL | management (shipping side) |
+| `abl.rmgmt` | Karen Vance | ABL | receiving_management |
+| `abl.rlog` | Leo Singh | ABL | receiving_logistics |
+
 MBM's accounts (added alongside the MBM site itself):
 
 | Username | Name | Site | Role |
