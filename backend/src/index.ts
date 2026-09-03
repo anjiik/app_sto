@@ -5,7 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
-import { dbQueryOne, closePool } from './db/connection';
+import { dbQueryOne, closePool, warmPool } from './db/connection';
 import logger from './lib/logger';
 import { apiLimit } from './middleware/rateLimits';
 import authRoutes from './routes/auth';
@@ -130,14 +130,26 @@ app.use((err: unknown, req: express.Request, res: express.Response, _next: expre
   res.status(500).json({ message: 'Internal server error' });
 });
 
-const server = app.listen(PORT, () => {
-  logger.info(
-    { port: PORT, cors: FRONTEND_ORIGIN, db: process.env.DB_SERVER },
-    'STO backend started',
-  );
-});
+let server: ReturnType<typeof app.listen>;
+warmPool()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      logger.info(
+        { port: PORT, cors: FRONTEND_ORIGIN, db: process.env.DB_SERVER },
+        'STO backend started',
+      );
+    });
+  })
+  .catch(err => {
+    logger.error({ err }, 'Failed to connect to the database at startup');
+    process.exit(1);
+  });
 
 function shutdown() {
+  if (!server) {
+    process.exit(0);
+    return;
+  }
   server.close(async () => {
     await closePool();
     process.exit(0);

@@ -90,6 +90,16 @@ export async function withTransaction(fn: (execute: TxExecutor) => Promise<void>
   }
 }
 
+// Establishes the pool connection immediately, instead of waiting for the
+// first request to trigger it lazily. Call this once at startup, before the
+// server starts accepting traffic — otherwise a burst of concurrent requests
+// right after a fresh start (e.g. a browser refresh loading several API
+// calls at once) can all race into the same slow first connect() and time
+// out at the IIS/ARR proxy as 502s.
+export async function warmPool(): Promise<void> {
+  await getPool();
+}
+
 export async function closePool(): Promise<void> {
   if (poolPromise) {
     const pool = await poolPromise;
