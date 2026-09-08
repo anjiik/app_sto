@@ -4,7 +4,7 @@ dotenv.config();
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { JwtPayload, Group, Grant } from '../types';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { dbQuery, dbQueryOne } from '../db/connection';
@@ -12,12 +12,21 @@ import { authenticateWithAD, listGroupMembers, ADMIN_GROUP_CN } from '../lib/lda
 
 const router = Router();
 
+// Keyed by the username being attempted, not by IP — the whole office shares
+// one outbound IP behind the corporate network, so an IP-keyed limit would
+// let one person's mistyped password lock out everyone else's login too.
+// Falls back to IP only for the rare request with no username at all (e.g. a
+// malformed/empty body), so that case still can't be hammered unbounded.
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { message: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: req => {
+    const username = (req.body as { username?: string } | undefined)?.username;
+    return username ? `user:${username.toLowerCase()}` : ipKeyGenerator(req.ip ?? '');
+  },
 });
 
 // true  → dev/test mode: login validates against the demo_users table (run npm run seed first)
