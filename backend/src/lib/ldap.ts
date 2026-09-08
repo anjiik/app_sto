@@ -321,17 +321,29 @@ export async function listGroupMembers(groupCN: string): Promise<GroupMember[]> 
     // misses anyone added via a nested group (a common real-AD setup).
     // objectCategory=user (not objectClass=group/etc.) matches the filter
     // shape confirmed working against this AD by a separate, known-good script.
+    // LDAP_MATCHING_RULE_IN_CHAIN is expensive for AD to compute (walks the
+    // whole nested-group graph) and some domain controllers are slow enough
+    // that it exceeds CLIENT_OPTS's timeout — catch that (and any other
+    // search error) and fall through to the cheaper direct-membership filter
+    // below, rather than failing the whole lookup outright.
     const chainFilter = `(&(objectCategory=user)(memberOf:1.2.840.113556.1.4.1941:=${escapeLdap(groupDN)}))`;
-    const { searchEntries: chainEntries } = await client.search(LDAP_BASE_DN, {
-      scope: 'sub',
-      filter: chainFilter,
-      attributes: ['displayName', 'mail', 'sAMAccountName'],
-    });
-    console.log(`[admins] Transitive-match filter "${chainFilter}" → ${chainEntries.length} member(s)`);
+    let chainEntries: Record<string, unknown>[] = [];
+    try {
+      const result = await client.search(LDAP_BASE_DN, {
+        scope: 'sub',
+        filter: chainFilter,
+        attributes: ['displayName', 'mail', 'sAMAccountName'],
+      });
+      chainEntries = result.searchEntries;
+      console.log(`[admins] Transitive-match filter "${chainFilter}" → ${chainEntries.length} member(s)`);
+    } catch (err) {
+      console.error(`[admins] Transitive-match search failed/timed out — falling back to direct filter:`, err);
+    }
 
     // Fall back to a plain direct-membership filter if the transitive match
-    // returned nothing — some AD/LDAP configurations restrict or don't
-    // support LDAP_MATCHING_RULE_IN_CHAIN for the bind account being used.
+    // returned nothing (including when it failed/timed out above) — some
+    // AD/LDAP configurations restrict or don't support
+    // LDAP_MATCHING_RULE_IN_CHAIN for the bind account being used.
     let memberEntries = chainEntries;
     if (memberEntries.length === 0) {
       const directFilter = `(&(objectCategory=user)(memberOf=${escapeLdap(groupDN)}))`;
