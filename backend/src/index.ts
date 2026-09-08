@@ -50,6 +50,14 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '4000');
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
+// Behind the IIS/ARR reverse proxy every request arrives with an
+// X-Forwarded-For header. Without this, express-rate-limit sees the proxy's own
+// address as the client IP for every request (so all users share one bucket)
+// and emits a validation warning on each call — and when stdout is a dead pipe
+// (running as a service), that warning's console.error throws EPIPE and kills
+// the process. Trusting exactly one hop makes req.ip the real client address.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
@@ -168,6 +176,16 @@ process.on('unhandledRejection', (reason) => {
   logger.error({ err: reason }, 'unhandled promise rejection');
 });
 process.on('uncaughtException', (err) => {
+  // EPIPE means a write to stdout/stderr failed because nothing is reading the
+  // other end of the pipe — normal when running as a Windows service, where the
+  // console the process was started with is gone. It says nothing about the
+  // app's own health, so log it and keep serving rather than exiting: a library
+  // that logs a warning (e.g. express-rate-limit's proxy validation) must not be
+  // able to take the whole backend down, which previously caused a crash loop.
+  if ((err as NodeJS.ErrnoException)?.code === 'EPIPE') {
+    logger.warn({ err }, 'EPIPE writing to stdout/stderr — ignoring');
+    return;
+  }
   logger.error({ err }, 'uncaught exception — shutting down');
   shutdown();
 });
