@@ -17,8 +17,9 @@ admin group. These are the real group names, not placeholders.
 | `APP-ABC-STO_Management_Logistics_Receiving` | ABC | Receiving Logistics — closes out deliveries |
 | `APP-ABC-STO_Management_Management` | ABC | Management — shipping-site approval |
 | `APP-ABC-STO_Management_Management_Receiving` | ABC | Receiving Management — receiving-site approval |
+| `APP-ABC-STO_Management_Site` | ABC | Site — basic access: create/view own site's STOs only, no approvals |
 
-Repeat the five per-site groups for each site: ABC, ABL, ABS, MBM. The **site
+Repeat the six per-site groups for each site: ABC, ABL, ABS, MBM. The **site
 prefix must match a code in your `sites` table**. There is no per-site admin
 group and no group for creating an STO — any authenticated user can create one.
 
@@ -34,6 +35,8 @@ group and no group for creating an STO — any authenticated user can create one
 - `Logistics_Receiving` and `Management_Receiving` act on STOs where
   **receiving_site = their site**.
 - `admin` is company-wide and bypasses site scoping.
+- `Site` grants no approval powers at any step — it only allows creating and
+  viewing STOs for the user's own site.
 
 ## Multi-site & multi-role
 
@@ -56,6 +59,6 @@ See [Troubleshooting](troubleshooting.md) for diagnosing that message.
 ## Ask IT to create the groups
 
 Provide your directory team with the full list of group names (the admin group plus
-five per site) and ask them to create the groups and add the appropriate users. Then
+six per site) and ask them to create the groups and add the appropriate users. Then
 confirm each real group name matches `GROUP_MAP` and
 [rebuild/restart](build-run.md) if you had to change any.

@@ -76,6 +76,7 @@ APP-{SITE}-STO_Management_Logistics
 APP-{SITE}-STO_Management_Logistics_Receiving
 APP-{SITE}-STO_Management_Management
 APP-{SITE}-STO_Management_Management_Receiving
+APP-{SITE}-STO_Management_Site
 
 APP-STO_MANAGEMENT_ADMIN   (company-wide, one group total)
 ```

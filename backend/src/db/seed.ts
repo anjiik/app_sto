@@ -611,6 +611,8 @@ const DEMO_USERS: DemoUser[] = [
     group_key: 'management',
     grants: 'management@ABC;receiving_management@ABC',
   },
+  // Basic site access: create/view STOs for ABC only, no approval powers.
+  { username: 'abc.site', display_name: 'Amy Cortez', site: 'ABC', group_key: 'site' },
 
   // ── Site ABL ──────────────────────────────────────────────────────────────
   { username: 'abl.plan', display_name: 'Henry Wu', site: 'ABL', group_key: 'shipping_planning' },
@@ -633,6 +635,7 @@ const DEMO_USERS: DemoUser[] = [
     site: 'ABL',
     group_key: 'receiving_logistics',
   },
+  { username: 'abl.site', display_name: 'Nora Bennett', site: 'ABL', group_key: 'site' },
 
   // ── Site MBM ──────────────────────────────────────────────────────────────
   {
@@ -660,6 +663,7 @@ const DEMO_USERS: DemoUser[] = [
     site: 'MBM',
     group_key: 'receiving_logistics',
   },
+  { username: 'mbm.site', display_name: 'Owen Baptiste', site: 'MBM', group_key: 'site' },
 
   // ── Site ABS ──────────────────────────────────────────────────────────────
   {
@@ -687,6 +691,7 @@ const DEMO_USERS: DemoUser[] = [
     site: 'ABS',
     group_key: 'receiving_logistics',
   },
+  { username: 'abs.site', display_name: 'Priya Nair', site: 'ABS', group_key: 'site' },
 
   // ── Admin (cross-site; can act on any step and send STOs back) ──────────────
   { username: 'admin', display_name: 'Demo Admin', site: 'ABC', group_key: 'admin' },

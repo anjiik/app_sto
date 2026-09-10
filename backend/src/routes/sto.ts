@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { authenticate, AuthRequest, can, isAdmin, userHasSite } from '../middleware/auth';
+import { authenticate, AuthRequest, can, isAdmin } from '../middleware/auth';
 import { dbQuery, dbQueryOne, dbExecute } from '../db/connection';
 import { logAudit } from '../db/audit';
 import logger from '../lib/logger';
@@ -602,8 +602,8 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
   }
 
   try {
-    const existing = await dbQueryOne<{ receiving_site: string; status: string }>(
-      'SELECT receiving_site, status FROM sto_requests WHERE id = @id',
+    const existing = await dbQueryOne<{ receiving_site: string; status: string; requestor_name: string }>(
+      'SELECT receiving_site, status, requestor_name FROM sto_requests WHERE id = @id',
       { id },
     );
     if (!existing) {
@@ -614,8 +614,11 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
       res.status(400).json({ message: 'Only DRAFT STOs can be edited' });
       return;
     }
-    if (!can(user, 'admin') && !userHasSite(user, existing.receiving_site)) {
-      res.status(403).json({ message: 'You can only edit STOs at your site' });
+    // Site membership alone isn't enough here — it would let anyone sharing a
+    // site with the STO edit someone else's draft, not just their own. Only
+    // the requestor (or an admin) may edit a DRAFT.
+    if (!can(user, 'admin') && existing.requestor_name !== user.name) {
+      res.status(403).json({ message: 'You can only edit your own draft STOs' });
       return;
     }
 

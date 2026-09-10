@@ -1,6 +1,6 @@
 # Roles & access
 
-## The six roles
+## The seven roles
 
 | Role | Responsibility |
 |------|----------------|
@@ -10,6 +10,7 @@
 | `receiving_management` | Receiving-site management sign-off on the same shipments |
 | `receiving_logistics` | Confirms receipt and closes out delivery |
 | `admin` | Fixes mistakes (revert / send-back), archiving, oversight — company-wide, not per-site |
+| `site` | Basic access: create and view STOs for their own site only — no approval powers at any workflow stage |
 
 There is no `finance` role — management is the only approval tier beyond planning.
 
@@ -27,8 +28,9 @@ There is no `finance` role — management is the only approval tier beyond plann
 
 ## Per-site vs company-wide
 
-- **The five non-admin roles are per-site.** A `shipping_planning` grant at ABC
+- **The six non-admin roles are per-site.** A `shipping_planning` grant at ABC
   lets you plan for ABC only. To act at another site you need a grant for that site.
+  `site` follows the same rule — it only covers the holder's own site.
 - **`admin` is company-wide only** — there is no per-site admin tier. A single
   admin grant confers access across every site; admins bypass all per-site checks.
 

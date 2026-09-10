@@ -4,6 +4,7 @@ export type Group =
   | 'management' // shipping-site management review
   | 'receiving_management' // receiving-site management review (distinct AD group)
   | 'receiving_logistics'
+  | 'site' // basic site access: create/view STOs only, no approval powers
   | 'admin';
 
 export type STOStatus =

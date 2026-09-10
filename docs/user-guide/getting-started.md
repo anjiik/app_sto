@@ -17,7 +17,7 @@ Active Directory group for your **site** and **role** (for example
 The app is role-aware: your dashboard, queues, and available actions all depend on
 your role. You may hold **more than one role** or cover **more than one site**.
 Creating a request needs no role at all — any signed-in user can. Beyond that, the
-six roles are:
+seven roles are:
 
 | Role | What you do |
 |------|-------------|
@@ -27,6 +27,7 @@ six roles are:
 | Receiving Management (`receiving_management`) | Approve flagged shipments at the **receiving** site. |
 | Receiving Logistics (`receiving_logistics`) | Confirm receipt and close out the delivery. |
 | Admin (`admin`) | Fix mistakes (revert / send back), manage archiving, oversee all sites. |
+| Site (`site`) | Basic access: create and view STOs for your own site only — no approval powers at any stage. |
 
 See [Reference → Roles & access](../reference/roles.md) for how holding multiple
 roles and sites works.

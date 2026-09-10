@@ -28,8 +28,9 @@ Each entry is `AD group CN → { role, site }`. Naming convention:
 | `APP-ABC-STO_Management_Logistics_Receiving` | receiving_logistics | ABC |
 | `APP-ABC-STO_Management_Management` | management | ABC |
 | `APP-ABC-STO_Management_Management_Receiving` | receiving_management | ABC |
+| `APP-ABC-STO_Management_Site` | site | ABC |
 
-The same five-per-site pattern repeats for each additional site: `APP-ABL-...`,
+The same six-per-site pattern repeats for each additional site: `APP-ABL-...`,
 `APP-ABS-...`, `APP-MBM-...`.
 
 !!! important "Two management groups per site"
@@ -42,6 +43,11 @@ The same five-per-site pattern repeats for each additional site: `APP-ABL-...`,
     Admin access is company-wide only (`APP-STO_MANAGEMENT_ADMIN`) — there is no
     per-site admin group. There is also no group for creating an STO: any
     authenticated user, in any of the groups above (or none), can create one.
+
+!!! note "`site` has no approval powers"
+    The `site` role (`APP-{SITE}-STO_Management_Site`) grants basic access only —
+    create and view STOs for the holder's own site. It does not grant any approval
+    step at any workflow stage (planning, logistics, management, or receiving).
 
 !!! note "These are the real group names"
     Unlike some earlier drafts of this table, the `APP-{SITE}-STO_Management_*`

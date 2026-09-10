@@ -37,25 +37,44 @@ const GROUP_MAP: Record<string, { group: Group; site: string }> = {
   // A user in only the receiving group cannot act on shipping-mgmt steps.
   'APP-ABC-STO_Management_Management': { group: 'management', site: 'ABC' },
   'APP-ABC-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABC' },
+  // Basic site access: create/view STOs for this site only, no approval
+  // powers at any workflow stage (see requireGroup/hasRoleAtSite checks).
+  'APP-ABC-STO_Management_Site': { group: 'site', site: 'ABC' },
   // ── Site: ABL ─────────────────────────────────────────────────────────────
   'APP-ABL-STO_Management_Planning': { group: 'shipping_planning', site: 'ABL' },
   'APP-ABL-STO_Management_Logistics': { group: 'shipping_logistics', site: 'ABL' },
   'APP-ABL-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'ABL' },
   'APP-ABL-STO_Management_Management': { group: 'management', site: 'ABL' },
   'APP-ABL-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABL' },
+  'APP-ABL-STO_Management_Site': { group: 'site', site: 'ABL' },
   // ── Site: ABS ─────────────────────────────────────────────────────────────
   'APP-ABS-STO_Management_Planning': { group: 'shipping_planning', site: 'ABS' },
   'APP-ABS-STO_Management_Logistics': { group: 'shipping_logistics', site: 'ABS' },
   'APP-ABS-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'ABS' },
   'APP-ABS-STO_Management_Management': { group: 'management', site: 'ABS' },
   'APP-ABS-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'ABS' },
+  'APP-ABS-STO_Management_Site': { group: 'site', site: 'ABS' },
   // ── Site: MBM ─────────────────────────────────────────────────────────────
   'APP-MBM-STO_Management_Planning': { group: 'shipping_planning', site: 'MBM' },
   'APP-MBM-STO_Management_Logistics': { group: 'shipping_logistics', site: 'MBM' },
   'APP-MBM-STO_Management_Logistics_Receiving': { group: 'receiving_logistics', site: 'MBM' },
   'APP-MBM-STO_Management_Management': { group: 'management', site: 'MBM' },
   'APP-MBM-STO_Management_Management_Receiving': { group: 'receiving_management', site: 'MBM' },
+  'APP-MBM-STO_Management_Site': { group: 'site', site: 'MBM' },
 };
+
+// Reverse of GROUP_MAP — given a role + site, find the AD group CN that
+// grants it. Derived from GROUP_MAP once at module load so there's a single
+// source of truth for the role+site <-> AD group CN mapping in both
+// directions, rather than a second hardcoded list that can drift out of sync.
+// Returns undefined for admin (company-wide, no site) or an unmapped pair.
+const REVERSE_GROUP_MAP = new Map<string, string>(
+  Object.entries(GROUP_MAP).map(([cn, { group, site }]) => [`${group}@${site}`, cn]),
+);
+
+export function groupCNFor(group: Group, site: string): string | undefined {
+  return REVERSE_GROUP_MAP.get(`${group}@${site}`);
+}
 
 export interface LdapAuthResult {
   displayName: string;
