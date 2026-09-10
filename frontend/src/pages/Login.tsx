@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { Group } from '../types';
+import { ACCESS_REQUEST_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
 
 interface DemoUser {
   username: string;
@@ -69,12 +70,54 @@ export function Login() {
   const sites = ['ALL', ...Array.from(new Set(demoUsers.map(u => u.site))).sort()];
   const filtered = filterSite === 'ALL' ? demoUsers : demoUsers.filter(u => u.site === filterSite);
 
+  const hasDemoPanel = demoUsers.length > 0;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-start justify-center p-6 pt-16">
-      <div className="w-full max-w-5xl flex gap-6 items-start">
-        {/* Login card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-80 flex-shrink-0">
-          <div className="text-center mb-8">
+    <div
+      className={`min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex justify-center p-6 ${
+        hasDemoPanel ? 'items-start pt-16' : 'items-center'
+      }`}
+    >
+      <div className={`w-full max-w-5xl flex items-start justify-center ${hasDemoPanel ? 'gap-6' : ''}`}>
+        {/* Header/brand panel — transparent glass, matching the demo panel's
+            bg-white/10 + backdrop-blur treatment, rather than a solid card.
+            Fused directly against the login card (no gap, rounded on the
+            outer edge only) so the two read as one piece. Only shown when
+            there's no demo panel to occupy this side instead. */}
+        {!hasDemoPanel && (
+          <div className="hidden md:flex flex-col items-center justify-center bg-white/10 backdrop-blur-sm rounded-l-2xl p-8 text-white w-64 flex-shrink-0 self-stretch text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-white/10 rounded-full mb-5">
+              <svg
+                className="w-7 h-7 text-blue-100"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
+              </svg>
+            </div>
+            <h1 className="text-xl font-bold">STO Management</h1>
+            <p className="text-blue-200 text-sm mt-2">
+              Stock transfer orders, from request to receipt.
+            </p>
+          </div>
+        )}
+
+        {/* Login card — wider now that the header lives in its own panel;
+            rounded only on the right edge when fused with that panel. */}
+        <div
+          className={`bg-white shadow-2xl p-8 w-full max-w-lg flex-shrink-0 ${
+            hasDemoPanel ? 'rounded-2xl' : 'rounded-2xl md:rounded-l-none md:rounded-r-2xl'
+          }`}
+        >
+          {/* On narrow screens (no side panel) or when the demo panel is
+              showing instead, the heading repeats here so context isn't lost. */}
+          <div className={`text-center mb-6 ${!hasDemoPanel ? 'md:hidden' : ''}`}>
             <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-full mb-4">
               <svg
                 className="w-7 h-7 text-blue-800"
@@ -94,7 +137,14 @@ export function Login() {
             <p className="text-gray-400 text-sm mt-1">Stock Transfer Order System</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <h2 className={`text-lg font-semibold text-gray-900 mb-1 ${!hasDemoPanel ? 'hidden md:block' : 'hidden'}`}>
+            Sign in
+          </h2>
+          <p className={`text-sm text-gray-400 mb-5 ${!hasDemoPanel ? 'hidden md:block' : 'hidden'}`}>
+            {ldapMode ? 'Use your Active Directory credentials.' : 'Dev mode sign-in.'}
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2.5 rounded-lg text-sm">
                 {error}
@@ -107,7 +157,7 @@ export function Login() {
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={ldapMode ? 'e.g. john.doe or john.doe@company.com' : 'e.g. abc.recv'}
+                placeholder={ldapMode ? 'your 511' : 'e.g. abc.recv'}
                 autoComplete="username"
                 required
               />
@@ -133,25 +183,41 @@ export function Login() {
             </button>
           </form>
 
-          <p className="text-xs text-center text-gray-400 mt-6">
+          <p className="text-xs text-center text-gray-400 mt-4">
             {ldapMode
               ? 'Sign in with your Active Directory credentials'
               : 'Dev mode — click any account on the right to auto-fill'}
           </p>
 
-          <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400">Implemented by Anj K — Digital System</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Questions?{' '}
-              <a href="mailto:tempemail@gmail.com" className="text-blue-600 hover:underline">
-                tempemail@gmail.com
+          {/* Brand/info footer — shown when there's no demo panel to fill
+              the space instead (DEV_BYPASS off, so demoUsers is always []). */}
+          {!hasDemoPanel && ldapMode && (
+            <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+              <a
+                href={ACCESS_REQUEST_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-sm font-medium bg-blue-50 hover:bg-blue-100 text-blue-800 transition-colors px-5 py-2 rounded-full"
+              >
+                Request Access
               </a>
-            </p>
-          </div>
+
+              <p className="text-xs text-gray-400 mt-4">Implemented by {DEVELOPER_TEAM}</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Questions?{' '}
+                <a
+                  href={`mailto:${DEVELOPER_CONTACTS[0].email}`}
+                  className="text-blue-600 hover:underline"
+                >
+                  {DEVELOPER_CONTACTS[0].email}
+                </a>
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Demo accounts panel */}
-        {demoUsers.length > 0 && (
+        {hasDemoPanel && (
           <div className="flex-1 bg-white/10 backdrop-blur-sm rounded-2xl p-5 text-white min-w-0">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-base">Demo Accounts</h2>

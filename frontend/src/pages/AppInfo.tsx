@@ -1,18 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { Layout } from '../components/Layout';
-
-// URL where users request access to the app (AD group membership). Update this
-// to your real access-request form / ticketing link.
-const ACCESS_REQUEST_URL = 'https://your-company/access-request?app=STO-Management';
-
-// Development team contacts, shown at the bottom of this page. TEMP placeholder
-// values — replace with the real team/contact details before go-live.
-const DEVELOPER_TEAM = 'ABC Digital Systems';
-const DEVELOPER_CONTACTS = [
-  { name: 'Contact 1', role: 'Developer', email: 'contact1@example.com' },
-  { name: 'Contact 2', role: 'Developer', email: 'contact2@example.com' },
-];
+import { ACCESS_REQUEST_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
 
 // Path to the user guide. It lives in the frontend public/ folder so it is
 // copied verbatim into the build under the app base path. Served as HTML
