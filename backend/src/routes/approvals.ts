@@ -238,13 +238,17 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
     sendPlanningReviewEmail(outcome, {
       sto_id: sto.sto_id as string,
       requestor_email: sto.requestor_email as string | null,
+      shipping_site: sto.shipping_site as string | undefined,
       mpn_number: mpn_number ?? null,
       batch_number: batch_number ?? null,
       expiration_date: expiration_date ?? null,
       notes: notes ?? null,
     });
     if (outcome === 'approve') {
-      sendLogisticsInProgressEmail({ sto_id: sto.sto_id as string });
+      sendLogisticsInProgressEmail({
+        sto_id: sto.sto_id as string,
+        shipping_site: sto.shipping_site as string | undefined,
+      });
     }
     const msg =
       outcome === 'approve'
@@ -426,6 +430,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
         .join('; ');
       sendManagementRequestedEmail({
         sto_id: sto.sto_id as string,
+        shipping_site: sto.shipping_site as string | undefined,
         approval_reasons: reasons,
         freight_cost: freightCost,
         material_value: materialValue,
@@ -437,6 +442,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     } else if (body.ready_to_ship) {
       sendReadyToShipAndExecutedEmails({
         sto_id: sto.sto_id as string,
+        receiving_site: sto.receiving_site as string | undefined,
         sto_number: (body.sto_number || sto.sto_number) as string | null,
         shipment_id: (body.shipment_id || sto.shipment_id) as string | null,
         scheduled_ship_date: body.actual_ship_date || null,
@@ -577,6 +583,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     if (approved) {
       sendManagementGrantedEmail({
         sto_id: sto.sto_id as string,
+        requestor_email: sto.requestor_email as string | null,
         approving_group: 'Shipping Site Management',
         approval_date: new Date().toISOString().slice(0, 10),
         notes: notes ?? null,
@@ -584,6 +591,7 @@ router.post('/:id/management', async (req: AuthRequest, res: Response): Promise<
     } else {
       sendManagementDeniedEmail({
         sto_id: sto.sto_id as string,
+        requestor_email: sto.requestor_email as string | null,
         denial_reason: notes ?? null,
         approving_site: sto.shipping_site as string | undefined,
       });
@@ -674,13 +682,16 @@ router.post('/:id/receiving-management', async (req: AuthRequest, res: Response)
     if (approved) {
       sendManagementGrantedEmail({
         sto_id: sto.sto_id as string,
+        requestor_email: sto.requestor_email as string | null,
         approving_group: 'Receiving Site Management',
         approval_date: new Date().toISOString().slice(0, 10),
         notes: notes ?? null,
+        notify_logistics_at_shipping_site: sto.shipping_site as string | undefined,
       });
     } else {
       sendManagementDeniedEmail({
         sto_id: sto.sto_id as string,
+        requestor_email: sto.requestor_email as string | null,
         denial_reason: notes ?? null,
         approving_site: sto.receiving_site as string | undefined,
       });
@@ -760,6 +771,9 @@ router.post('/:id/receiving-logistics', async (req: AuthRequest, res: Response):
     if (newStatus === 'CLOSED') {
       sendReceiptClosedEmail({
         sto_id: sto.sto_id as string,
+        requestor_email: sto.requestor_email as string | null,
+        shipping_site: sto.shipping_site as string | undefined,
+        receiving_site: sto.receiving_site as string | undefined,
         actual_receipt_date: body.actual_receipt_date || null,
         sto_number: sto.sto_number as string | null,
         delivery_closed_out: true,

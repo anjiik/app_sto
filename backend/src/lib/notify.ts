@@ -1,4 +1,6 @@
 import logger from './logger';
+import { Group } from '../types';
+import { groupCNFor, listGroupMembers } from './ldap';
 
 const RELAY_URL = process.env.NOTIFICATION_RELAY_URL;
 const RELAY_USER = process.env.NOTIFICATION_RELAY_USER;
@@ -42,14 +44,41 @@ function configured(): boolean {
   return Boolean(RELAY_URL && RELAY_USER && RELAY_PASS);
 }
 
-// Resolves who a notification should actually go to. In test mode, always
-// the override. Otherwise the real address if one was given — some events
-// (see the per-function comments below) have no real per-role/per-site
-// recipient on file yet, only the requestor's own email, so those pass
-// `undefined` here and get skipped rather than guessing at a fake target.
+// Resolves a single known real address (e.g. the requestor's own email) to
+// an actual destination. In test mode, always the override; otherwise the
+// real address if one was given, or null (skip) if not. For a whole
+// role/site group instead of one known address, see
+// resolveGroupDestinations() below.
 function resolveDestination(realEmail: string | undefined | null): string | null {
   if (TEST_MODE) return TEST_NOTIFICATION_OVERRIDE;
   return realEmail || null;
+}
+
+// Resolves every real email address for a role+site (e.g. "Shipping
+// Planning at ABC") by looking up the matching AD group and querying its
+// members — reuses the same listGroupMembers() the App Info page's admin
+// contacts list already relies on, via the group's CN from GROUP_MAP's
+// reverse index (groupCNFor). In test mode, returns just the override
+// address (one notification, not one per real group member) — this also
+// means the group->AD lookup is skipped entirely in test mode, so it works
+// the same in DEV_BYPASS/no-LDAP setups as every other notification here.
+// Returns [] (skip, not throw) if the group can't be resolved or the AD
+// query fails — a notification going out late/never is preferable to a
+// workflow action failing because a distribution list lookup broke.
+async function resolveGroupDestinations(group: Group, site: string): Promise<string[]> {
+  if (TEST_MODE) return [TEST_NOTIFICATION_OVERRIDE];
+  const groupCN = groupCNFor(group, site);
+  if (!groupCN) {
+    logger.warn({ group, site }, 'no AD group mapped for this role+site — notification skipped');
+    return [];
+  }
+  try {
+    const members = await listGroupMembers(groupCN);
+    return members.map(m => m.email).filter((email): email is string => Boolean(email));
+  } catch (err) {
+    logger.error({ group, site, groupCN, err }, 'failed to resolve group members for notification');
+    return [];
+  }
 }
 
 // Shared POST to the relay's /notifications endpoint — fire-and-forget (no
@@ -90,6 +119,26 @@ function postNotification(
     .catch(err => logger.error({ ...logCtx, err }, 'notification relay unreachable'));
 }
 
+// Same as postNotification, but for a whole group of recipients — sends one
+// notification per address rather than a single call with multiple
+// destinations, since the relay's /notifications endpoint (per the payload
+// shape above) takes one destination per call. If the group resolves to zero
+// addresses (unmapped role+site, or an AD lookup failure — see
+// resolveGroupDestinations), this is a no-op, same as a single skipped send.
+function postGroupNotification(
+  destinations: string[],
+  payload: Record<string, unknown>,
+  logCtx: Record<string, unknown>,
+): void {
+  if (destinations.length === 0) {
+    logger.info({ ...logCtx }, 'group notification skipped — no recipients resolved');
+    return;
+  }
+  for (const destination of destinations) {
+    postNotification(destination, payload, logCtx);
+  }
+}
+
 // "STO Receipt Confirmed and Closed" — sent when Receiving Site Logistics
 // confirms actual receipt and closes out delivery (5) Receiving Site
 // Logistics / Receipt Closeout). Replaces the previous STO-completion email;
@@ -98,17 +147,30 @@ function postNotification(
 // Requires an "sto-receipt-closed" template on the relay (subject: "STO
 // Receipt Confirmed and Closed").
 //
-// No per-role distribution list exists yet for Receiving/Shipping
-// Logistics/Planning — outside test mode this is skipped until one does.
-export function sendReceiptClosedEmail(sto: {
+// Sent to the requestor plus every member of Receiving Logistics (at
+// receiving_site), Shipping Logistics (at shipping_site), and Planning (at
+// shipping_site) — resolved via resolveGroupDestinations() for the three
+// groups, matching the spec recipients in the comment above.
+export async function sendReceiptClosedEmail(sto: {
   sto_id: string;
+  requestor_email?: string | null;
+  shipping_site?: string;
+  receiving_site?: string;
   actual_receipt_date?: string | null;
   sto_number?: string | null;
   delivery_closed_out?: boolean;
-}): void {
-  const destination = resolveDestination(undefined);
-  postNotification(
-    destination,
+}): Promise<void> {
+  const groupLookups: Promise<string[]>[] = [];
+  if (sto.receiving_site) groupLookups.push(resolveGroupDestinations('receiving_logistics', sto.receiving_site));
+  if (sto.shipping_site) groupLookups.push(resolveGroupDestinations('shipping_logistics', sto.shipping_site));
+  if (sto.shipping_site) groupLookups.push(resolveGroupDestinations('shipping_planning', sto.shipping_site));
+  const groupResults = await Promise.all(groupLookups);
+  const destinations = [
+    resolveDestination(sto.requestor_email),
+    ...groupResults.flat(),
+  ].filter((d): d is string => Boolean(d));
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-receipt-closed-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} receipt confirmed and closed`,
@@ -164,10 +226,9 @@ export function sendStoSubmittedEmail(sto: {
 // and is ready for Shipping Site Planning review.", referencing the
 // email_vars below (sto_id plus every field in the spec's "key details" list).
 //
-// No per-role distribution list exists yet for Shipping Planning/Logistics —
-// outside test mode this is skipped until one does (see requestor_email on
-// the payload for a human to manually loop them in, in the meantime).
-export function sendStoAwaitingPlanningEmail(sto: {
+// Sent to every member of the shipping site's Planning and Logistics AD
+// groups outside test mode, resolved via resolveGroupDestinations().
+export async function sendStoAwaitingPlanningEmail(sto: {
   sto_id: string;
   requestor_name?: string;
   requestor_email?: string;
@@ -193,10 +254,14 @@ export function sendStoAwaitingPlanningEmail(sto: {
   sto_number?: string | null;
   shipment_id?: string | null;
   corporate_sto_tracker_status?: string | null;
-}): void {
-  const destination = resolveDestination(undefined);
-  postNotification(
-    destination,
+}): Promise<void> {
+  if (!sto.shipping_site) return;
+  const [planning, logistics] = await Promise.all([
+    resolveGroupDestinations('shipping_planning', sto.shipping_site),
+    resolveGroupDestinations('shipping_logistics', sto.shipping_site),
+  ]);
+  postGroupNotification(
+    [...planning, ...logistics],
     {
       event_id: `sto-planning-queue-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} submitted for review`,
@@ -243,19 +308,22 @@ export function sendStoAwaitingPlanningEmail(sto: {
 //   sto-planning-revision — "STO Request Requires Revision"
 //   sto-planning-rejected — "STO Request Rejected by Shipping Site Planning"
 //
-// Sent to the requestor's own email outside test mode (Shipping
-// Logistics/other stakeholders have no distribution list yet).
-export function sendPlanningReviewEmail(
+// Always sent to the requestor. On approval, also fans out to Shipping
+// Logistics at shipping_site — that's who the STO moves to next; revise/
+// reject are dead ends back to the requestor only, so no group lookup runs
+// for those outcomes.
+export async function sendPlanningReviewEmail(
   outcome: 'approve' | 'revise' | 'reject',
   sto: {
     sto_id: string;
     requestor_email?: string | null;
+    shipping_site?: string;
     mpn_number?: string | null;
     batch_number?: string | null;
     expiration_date?: string | null;
     notes?: string | null;
   },
-): void {
+): Promise<void> {
   const byOutcome = {
     approve: {
       template: RELAY_PLANNING_APPROVED_TEMPLATE,
@@ -275,9 +343,14 @@ export function sendPlanningReviewEmail(
     },
   }[outcome];
 
-  const destination = resolveDestination(sto.requestor_email);
-  postNotification(
-    destination,
+  const destinations = [resolveDestination(sto.requestor_email)].filter(
+    (d): d is string => Boolean(d),
+  );
+  if (outcome === 'approve' && sto.shipping_site) {
+    destinations.push(...(await resolveGroupDestinations('shipping_logistics', sto.shipping_site)));
+  }
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-planning-${byOutcome.eventSuffix}-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} planning ${byOutcome.eventSuffix}`,
@@ -300,10 +373,11 @@ export function sendPlanningReviewEmail(
 // approval is required). Requires an "sto-management-requested" template
 // (subject: "STO Request Requires Management Approval").
 //
-// No per-role distribution list exists yet for Management — outside test
-// mode this is skipped until one does.
-export function sendManagementRequestedEmail(sto: {
+// Sent to every member of the shipping site's Management AD group outside
+// test mode, resolved via resolveGroupDestinations().
+export async function sendManagementRequestedEmail(sto: {
   sto_id: string;
+  shipping_site?: string;
   approval_reasons?: string;
   freight_cost?: number | null;
   material_value?: number | null;
@@ -311,10 +385,11 @@ export function sendManagementRequestedEmail(sto: {
   shipping_conditions?: string;
   rush_reason?: string | null;
   controlled_shipping_required?: boolean;
-}): void {
-  const destination = resolveDestination(undefined);
-  postNotification(
-    destination,
+}): Promise<void> {
+  if (!sto.shipping_site) return;
+  const destinations = await resolveGroupDestinations('management', sto.shipping_site);
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-management-requested-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} requires management approval`,
@@ -339,17 +414,30 @@ export function sendManagementRequestedEmail(sto: {
 // receiving-site management approves. Requires an "sto-management-granted"
 // template (subject: "STO Request Approved by Management").
 //
-// No per-role distribution list exists yet — outside test mode this is
-// skipped until one does.
-export function sendManagementGrantedEmail(sto: {
+// Always sent to the requestor. When the RECEIVING-side management approval
+// is what just happened (both managements have now signed off), also fans
+// out to Shipping Logistics at shipping_site — the STO returns there next.
+// Pass notify_logistics_at_shipping_site only for that second approval; the
+// first (shipping-side) approval just informs the requestor, since the next
+// actor (Receiving Management) is a human approval step, not a notification.
+export async function sendManagementGrantedEmail(sto: {
   sto_id: string;
+  requestor_email?: string | null;
   approving_group: string;
   approval_date?: string;
   notes?: string | null;
-}): void {
-  const destination = resolveDestination(undefined);
-  postNotification(
-    destination,
+  notify_logistics_at_shipping_site?: string;
+}): Promise<void> {
+  const destinations = [resolveDestination(sto.requestor_email)].filter(
+    (d): d is string => Boolean(d),
+  );
+  if (sto.notify_logistics_at_shipping_site) {
+    destinations.push(
+      ...(await resolveGroupDestinations('shipping_logistics', sto.notify_logistics_at_shipping_site)),
+    );
+  }
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-management-granted-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} management approval granted`,
@@ -370,14 +458,15 @@ export function sendManagementGrantedEmail(sto: {
 // receiving-site management rejects. Requires an "sto-management-denied"
 // template (subject: "STO Request Denied by Management").
 //
-// No per-role distribution list exists yet — outside test mode this is
-// skipped until one does.
+// Sent to the requestor — a denial is a dead end, so they're the only one
+// who needs to know.
 export function sendManagementDeniedEmail(sto: {
   sto_id: string;
+  requestor_email?: string | null;
   denial_reason?: string | null;
   approving_site?: string;
 }): void {
-  const destination = resolveDestination(undefined);
+  const destination = resolveDestination(sto.requestor_email);
   postNotification(
     destination,
     {
@@ -399,12 +488,16 @@ export function sendManagementDeniedEmail(sto: {
 // Planning approves it). Requires an "sto-logistics-in-progress" template
 // (subject: "STO Request in Shipping Logistics Processing").
 //
-// No per-role distribution list exists yet — outside test mode this is
-// skipped until one does.
-export function sendLogisticsInProgressEmail(sto: { sto_id: string }): void {
-  const destination = resolveDestination(undefined);
-  postNotification(
-    destination,
+// Sent to every member of the shipping site's Logistics AD group outside
+// test mode, resolved via resolveGroupDestinations().
+export async function sendLogisticsInProgressEmail(sto: {
+  sto_id: string;
+  shipping_site?: string;
+}): Promise<void> {
+  if (!sto.shipping_site) return;
+  const destinations = await resolveGroupDestinations('shipping_logistics', sto.shipping_site);
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-logistics-in-progress-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} in shipping logistics processing`,
@@ -423,19 +516,22 @@ export function sendLogisticsInProgressEmail(sto: { sto_id: string }): void {
 // Ready to Ship") and "sto-shipment-executed" (subject: "STO Shipment
 // Executed") templates on the relay.
 //
-// No per-role distribution list exists yet — outside test mode both are
-// skipped until one does.
-export function sendReadyToShipAndExecutedEmails(sto: {
+// Sent to every member of the receiving site's Logistics AD group outside
+// test mode, resolved via resolveGroupDestinations() — that's who the STO
+// moves on to.
+export async function sendReadyToShipAndExecutedEmails(sto: {
   sto_id: string;
+  receiving_site?: string;
   sto_number?: string | null;
   shipment_id?: string | null;
   scheduled_ship_date?: string | null;
   actual_ship_date?: string | null;
-}): void {
-  const destination = resolveDestination(undefined);
+}): Promise<void> {
+  if (!sto.receiving_site) return;
+  const destinations = await resolveGroupDestinations('receiving_logistics', sto.receiving_site);
 
-  postNotification(
-    destination,
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-ready-to-ship-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} ready to ship`,
@@ -453,8 +549,8 @@ export function sendReadyToShipAndExecutedEmails(sto: {
     { sto_id: sto.sto_id },
   );
 
-  postNotification(
-    destination,
+  postGroupNotification(
+    destinations,
     {
       event_id: `sto-shipment-executed-${sto.sto_id}-${Date.now()}`,
       event_name: `STO ${sto.sto_id} shipment executed`,
