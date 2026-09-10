@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>STO Management — Requesting Access</title>
+<style>
+  :root {
+    --blue: #1d4ed8;
+    --blue-dark: #1e3a8a;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg-soft: #f9fafb;
+    --amber: #b45309;
+    --green: #047857;
+    --red: #b91c1c;
+  }
+  @page {
+    size: A4;
+    margin: 20mm 16mm 18mm 16mm;
+    @bottom-center { content: counter(page); }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.5;
+    margin: 0;
+  }
+  @media screen {
+    body { background: #eef0f3; }
+    section, .cover { max-width: 780px; margin: 0 auto; padding: 0 24px; background: #fff; }
+    .cover { padding-top: 48px; }
+  }
+  h1, h2, h3 { color: var(--blue-dark); line-height: 1.25; }
+  h1 { font-size: 26pt; margin: 0 0 4pt; }
+  h2 {
+    font-size: 15pt;
+    margin: 22pt 0 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 2px solid var(--blue);
+    page-break-after: avoid;
+  }
+  h3 { font-size: 12pt; margin: 14pt 0 4pt; page-break-after: avoid; }
+  p { margin: 4pt 0; }
+  ul, ol { margin: 4pt 0 4pt; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  code {
+    background: #eef2ff; color: var(--blue-dark);
+    padding: 0 3px; border-radius: 3px; font-size: 9.5pt;
+    font-family: "Consolas", "SF Mono", Menlo, monospace;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); color: var(--blue-dark); font-weight: 600; }
+  tr { page-break-inside: avoid; }
+  .cover {
+    height: 170mm; display: flex; flex-direction: column;
+    justify-content: center; page-break-after: always;
+  }
+  @media screen {
+    .cover { height: auto; min-height: 30vh; padding-top: 48px; padding-bottom: 32px; }
+  }
+  .cover .badge {
+    display: inline-block; background: var(--blue); color: #fff;
+    font-size: 9pt; letter-spacing: 2px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 4px; align-self: flex-start;
+  }
+  .cover h1 { font-size: 34pt; margin: 16pt 0 6pt; }
+  .cover .sub { font-size: 13pt; color: var(--muted); }
+  .lead { font-size: 11.5pt; color: var(--muted); margin-bottom: 10pt; }
+  .callout {
+    border-left: 4px solid var(--blue); background: var(--bg-soft);
+    padding: 8px 12px; margin: 8pt 0; border-radius: 0 6px 6px 0;
+    page-break-inside: avoid;
+  }
+  .callout.tip { border-color: var(--green); }
+  .callout.warn { border-color: var(--amber); }
+  .callout .label { font-weight: 700; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  .callout.tip .label { color: var(--green); }
+  .callout.warn .label { color: var(--amber); }
+  .callout.note .label { color: var(--blue); }
+  .pill {
+    display: inline-block; font-size: 8.5pt; font-weight: 600;
+    padding: 1px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .pill.gray { background: #f3f4f6; color: #374151; }
+  .pill.blue { background: #dbeafe; color: #1e40af; }
+  .role-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8pt 0; page-break-inside: avoid; }
+  .role-card h3 { margin-top: 0; }
+  .kicker { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 1px; color: var(--blue); font-weight: 700; }
+  section { page-break-before: always; }
+  section:first-of-type { page-break-before: auto; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <span class="badge">Quick Guide</span>
+  <h1>Requesting Access</h1>
+  <div class="sub">How to sign in for the first time, and which group to ask for.</div>
+</div>
+
+<!-- ============ WHAT TO DO ============ -->
+<section>
+  <span class="kicker">Before you start</span>
+  <h2>You need an Active Directory group, not an app account</h2>
+  <p class="lead">
+    There's no separate username or password for STO Management — access is controlled
+    entirely through Active Directory group membership. Once you're in the right group,
+    signing in with your normal company credentials just works.
+  </p>
+
+  <div class="callout note">
+    <div class="label">How to request</div>
+    Use the <strong>Request Access</strong> link on the app's login page (or the App Info
+    page once you're signed in), and name the exact group from the table on the next page
+    that matches what you need to do.
+  </div>
+
+  <h3>Groups are per site</h3>
+  <p>
+    Every group below applies to <strong>one site</strong> — ABC, ABL, ABS, or MBM. Make sure
+    to say which site you need when you submit your request. If your job touches more than
+    one site (e.g. you plan shipments for both ABC and ABL), ask for the group at each site
+    separately — you can hold more than one.
+  </p>
+
+  <div class="callout warn">
+    <div class="label">One request, one group</div>
+    If you're not sure which group fits, look at what you'll actually be doing day to day in
+    the table on the next page — not your job title. A planner who also occasionally
+    approves receiving needs <em>two</em> groups, not one broader one.
+  </div>
+</section>
+
+<!-- ============ GROUP TABLE ============ -->
+<section>
+  <span class="kicker">Pick your group</span>
+  <h2>What each group can do</h2>
+
+  <div class="role-card">
+    <span class="pill blue">Most common</span>
+    <h3>Basic access — <code>APP-{SITE}-STO_Management_Site</code></h3>
+    <p>
+      Create new STO requests and view requests for your site. <strong>Cannot approve,
+      reject, or edit anything</strong> once a request moves past your own draft. This is
+      the right group if you just need to submit requests and check their status — most
+      people who aren't part of Planning, Logistics, or Management fall here.
+    </p>
+  </div>
+
+  <table>
+    <tr><th>Group suffix</th><th>What it's for</th></tr>
+    <tr>
+      <td><code>_Planning</code></td>
+      <td>Reviews new requests first; can approve, send back for revision, or reject.</td>
+    </tr>
+    <tr>
+      <td><code>_Logistics</code></td>
+      <td>Adds freight and shipping details after Planning approves; routes the request onward.</td>
+    </tr>
+    <tr>
+      <td><code>_Management</code></td>
+      <td>
+        Shipping-site sign-off — only required for high-value, cold-chain, controlled, or
+        otherwise flagged shipments.
+      </td>
+    </tr>
+    <tr>
+      <td><code>_Management_Receiving</code></td>
+      <td>Same as above, but the receiving-site sign-off. A distinct group — one doesn't grant the other.</td>
+    </tr>
+    <tr>
+      <td><code>_Logistics_Receiving</code></td>
+      <td>Confirms receipt at the destination site and closes out the delivery.</td>
+    </tr>
+    <tr>
+      <td><code>_Site</code></td>
+      <td>Basic access — create and view only, no approvals at any stage. See above.</td>
+    </tr>
+  </table>
+
+  <p>
+    Every group name follows the same pattern:
+    <code>APP-{SITE}-STO_Management_{suffix}</code> — e.g.
+    <code>APP-ABC-STO_Management_Planning</code> for Planning at site ABC.
+  </p>
+
+  <div class="callout tip">
+    <div class="label">Company-wide admin</div>
+    There's also a single company-wide <code>APP-STO_MANAGEMENT_ADMIN</code> group, not tied
+    to any one site — reserved for app administrators, not requested for day-to-day use.
+  </div>
+</section>
+
+</body>
+</html>

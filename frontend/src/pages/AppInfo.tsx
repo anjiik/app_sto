@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { Layout } from '../components/Layout';
-import { ACCESS_REQUEST_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
+import { ACCESS_REQUEST_URL, ACCESS_GUIDE_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
 
 // Path to the user guide. It lives in the frontend public/ folder so it is
 // copied verbatim into the build under the app base path. Served as HTML
@@ -89,6 +89,7 @@ export function AppInfo() {
                   ['Logistics_Receiving', 'Receiving Logistics'],
                   ['Management', 'Management (shipping site)'],
                   ['Management_Receiving', 'Receiving Management'],
+                  ['Site', 'Basic access — create/view only, no approvals'],
                 ].map(([suffix, role]) => (
                   <tr key={suffix}>
                     <td className="px-3 py-2">
@@ -107,6 +108,18 @@ export function AppInfo() {
             </p>
           </div>
 
+          <p className="text-sm text-gray-600 mb-3">
+            Not sure which group fits?{' '}
+            <a
+              href={ACCESS_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 font-medium underline"
+            >
+              Download the quick guide
+            </a>{' '}
+            — a one-page reference for picking the right group.
+          </p>
           <p className="text-sm text-gray-600 mb-3">
             Submit a request using the link below and include your site(s) and the role(s) you need.
           </p>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { Group } from '../types';
-import { ACCESS_REQUEST_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
+import { ACCESS_REQUEST_URL, ACCESS_GUIDE_URL, DEVELOPER_TEAM, DEVELOPER_CONTACTS } from '../lib/appInfo';
 
 interface DemoUser {
   username: string;
@@ -20,6 +20,7 @@ const GROUP_COLORS: Record<Group, string> = {
   management: 'bg-purple-100 text-purple-800',
   receiving_management: 'bg-fuchsia-100 text-fuchsia-800',
   receiving_logistics: 'bg-orange-100 text-orange-800',
+  site: 'bg-slate-100 text-slate-800',
   admin: 'bg-red-100 text-red-800',
 };
 
@@ -193,6 +194,18 @@ export function Login() {
               the space instead (DEV_BYPASS off, so demoUsers is always []). */}
           {!hasDemoPanel && ldapMode && (
             <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+              <p className="text-xs text-gray-500 mb-3">
+                Don't have access yet? Check the{' '}
+                <a
+                  href={ACCESS_GUIDE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  quick guide
+                </a>{' '}
+                to find your group, then request it below.
+              </p>
               <a
                 href={ACCESS_REQUEST_URL}
                 target="_blank"
