@@ -1,23 +1,23 @@
 <!--
-  notification_relay template body for "sto-logistics-in-progress".
+  notification_relay template body for "sto-submitted".
   Paste as the "body" via /ui/templates, with:
-    template_name:  sto-logistics-in-progress
-    subject:        STO Request in Shipping Logistics Processing
+    template_name:  sto-submitted
+    subject:        STO {{.sto_id}} Submitted
     required_vars:  (leave empty)
-  Sent by sendLogisticsInProgressEmail() in ../src/lib/notify.ts, fired from
-  POST /api/sto/:id/planning when Planning approves (status becomes
-  SHIPPING_LOGISTICS).
+  Sent by sendStoSubmittedEmail() in ../src/lib/notify.ts, fired when a DRAFT
+  is submitted and enters PLANNING_REVIEW.
 -->
 <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
   <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
     <span style="color:#4A90D9; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
-    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">STO Request in Shipping Logistics Processing</h2>
+    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">STO Submitted</h2>
   </div>
   <div style="border:1px solid #d6dce5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
     <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
-      Your STO request is now with Shipping Site Logistics for execution planning.
+      Hi {{.requestor_name}}, your Stock Transfer Order has been submitted and is now under Shipping Site Planning review.
     </p>
     <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #0068B3; color:#0068B3; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Details</td></tr>
       <tr><td style="padding:6px 0; color:#4a5364; width:45%;">STO Number</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.sto_id}}</td></tr>
     </table>
   </div>

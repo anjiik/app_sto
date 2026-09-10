@@ -1,0 +1,33 @@
+<!--
+  notification_relay template body for "sto-completion".
+  Paste as the "body" via /ui/templates, with:
+    template_name:  sto-completion
+    subject:        Your STO {{.sto_id}} has been completed
+    required_vars:  sto_id, requestor_name, shipping_site, receiving_site
+
+  NOTE: not currently sent by the app — notify.ts has no call site for this
+  template. It previously existed only inline inside
+  ../scripts/register-notify-template.ts (a one-off registration script,
+  with the old pre-rebrand color palette). Moved here and re-themed to match
+  the rest of the templates, in case a "delivery completed" notification is
+  wired up later; register-notify-template.ts should be updated to read this
+  file's body instead of the hardcoded template string once that happens.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#4A90D9; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">STO Delivery Completed</h2>
+  </div>
+  <div style="border:1px solid #d6dce5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      Hi {{.requestor_name}}, your Stock Transfer Order has been delivered and closed out.
+    </p>
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #3f6b4f; color:#3f6b4f; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Details</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:45%;">STO Number</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.sto_id}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Material</td><td style="padding:6px 0; color:#1a2029;">{{.material_sap}} — {{.material_description}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">From</td><td style="padding:6px 0; color:#1a2029;">{{.shipping_site}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">To</td><td style="padding:6px 0; color:#1a2029;">{{.receiving_site}}</td></tr>
+    </table>
+  </div>
+</div>
