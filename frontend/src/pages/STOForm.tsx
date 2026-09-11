@@ -507,15 +507,14 @@ export function STOForm() {
                   </p>
                 )}
               </Field>
-              <Field label="Quantity" required hint="Whole number of units">
+              <Field label="Quantity" required hint="Number of units">
                 <input
                   type="number"
-                  step="1"
-                  min="1"
+                  step="0.0001"
+                  min="0"
                   {...register('quantity', {
                     required: 'Quantity is required',
-                    min: { value: 1, message: 'Must be at least 1' },
-                    validate: v => Number.isInteger(Number(v)) || 'Quantity must be a whole number',
+                    min: { value: 0.0001, message: 'Must be greater than 0' },
                   })}
                   className={INPUT}
                   placeholder="0"

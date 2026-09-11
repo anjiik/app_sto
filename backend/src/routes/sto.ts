@@ -48,10 +48,7 @@ const stoBaseObject = z.object({
   receiving_site: z.string().min(1, 'Receiving site is required'),
   material_sap: z.string().regex(/^\d{8}$/, 'SAP material number must be exactly 8 digits'),
   material_description: z.string().min(1, 'Material description is required'),
-  quantity: z.coerce
-    .number()
-    .int('Quantity must be a whole number')
-    .positive('Quantity must be a positive number'),
+  quantity: z.coerce.number().positive('Quantity must be a positive number'),
   uom: z.string().min(1, 'Unit of measure is required'),
 
   // Optional fields

@@ -2,6 +2,21 @@ import logger from './logger';
 import { Group } from '../types';
 import { groupCNFor, listGroupMembers } from './ldap';
 
+// Formats a DECIMAL column value (freight_cost, material_value, quantity,
+// etc.) for a plain-text/HTML email — mssql/msnodesqlv8 can hand back
+// DECIMAL columns as either a string or a number depending on the value's
+// magnitude, and passing the raw value straight into email_vars risks the
+// relay's own template substitution rendering it in scientific notation
+// (e.g. "1.2345678e+07" instead of "12,345,678") for larger amounts.
+// toLocaleString() always produces a plain, comma-grouped decimal string
+// regardless of the input's original type or magnitude.
+function formatDecimal(value: number | string | null | undefined, maxDecimals = 2): string {
+  if (value === null || value === undefined || value === '') return '';
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (Number.isNaN(n)) return '';
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
+}
+
 const RELAY_URL = process.env.NOTIFICATION_RELAY_URL;
 const RELAY_USER = process.env.NOTIFICATION_RELAY_USER;
 const RELAY_PASS = process.env.NOTIFICATION_RELAY_PASSWORD;
@@ -280,15 +295,15 @@ export async function sendStoAwaitingPlanningEmail(sto: {
         rush_reason: sto.rush_reason ?? '',
         need_by_date: sto.receiving_site_need_by_date ?? '',
         distressed_inventory: sto.distressed_inventory ? 'Yes' : 'No',
-        di_value: sto.di_value ?? '',
+        di_value: formatDecimal(sto.di_value),
         material_sap: sto.material_sap ?? '',
         material_description: sto.material_description ?? '',
         brand_at_receiving_site: sto.brand_at_receiving_site ?? '',
         inco_terms: sto.inco_terms ?? '',
-        quantity: sto.quantity ?? '',
+        quantity: formatDecimal(sto.quantity, 4),
         uom: sto.uom ?? '',
         shipping_conditions: sto.shipping_conditions ?? '',
-        material_value: sto.material_value ?? '',
+        material_value: formatDecimal(sto.material_value),
         controlled_shipping: sto.controlled_shipping_required ? 'Yes' : 'No',
         sto_number: sto.sto_number ?? '',
         shipment_id: sto.shipment_id ?? '',
@@ -398,8 +413,8 @@ export async function sendManagementRequestedEmail(sto: {
       email_vars: {
         sto_id: sto.sto_id,
         approval_reasons: sto.approval_reasons ?? '',
-        freight_cost: sto.freight_cost ?? '',
-        material_value: sto.material_value ?? '',
+        freight_cost: formatDecimal(sto.freight_cost),
+        material_value: formatDecimal(sto.material_value),
         shipment_ratio: sto.shipment_ratio ?? '',
         shipping_conditions: sto.shipping_conditions ?? '',
         rush_reason: sto.rush_reason ?? '',
