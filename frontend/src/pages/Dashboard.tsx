@@ -552,6 +552,14 @@ export function Dashboard() {
     return 'Good evening';
   };
 
+  // AD's displayName attribute is commonly "Last, First" rather than
+  // "First Last" — take the piece after the comma when there is one, so this
+  // always shows the first name regardless of which format AD uses.
+  function firstName(name: string): string {
+    const [before, after] = name.split(',');
+    return (after ?? before).trim().split(' ')[0];
+  }
+
   const groupLabel: Record<Group, string> = {
     shipping_planning: 'Shipping Planning',
     shipping_logistics: 'Shipping Logistics',
@@ -573,7 +581,7 @@ export function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               {greeting()}
-              {user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+              {user?.name ? `, ${firstName(user.name)}` : ''}
             </h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {myRoles.map(r => (
