@@ -117,6 +117,7 @@ function actionLabel(action: string): string {
     CREATED: 'Created',
     SUBMITTED: 'Submitted for planning',
     PLANNING_APPROVED: 'Planning approved',
+    PLANNING_REVISION_REQUESTED: 'Returned to requestor for revision',
     PLANNING_REJECTED: 'Planning rejected',
     LOGISTICS_SUBMITTED: 'Logistics submitted',
     MANAGEMENT_APPROVED: 'Shipping mgmt approved',
@@ -752,6 +753,11 @@ export function Dashboard() {
                           <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
                             Priority
                           </th>
+                          {sec.role === 'shipping_planning' && (
+                            <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
+                              DI Value
+                            </th>
+                          )}
                           <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
                             Need-By
                           </th>
@@ -790,6 +796,17 @@ export function Dashboard() {
                               <td className="px-4 py-3">
                                 <PriorityBadge priority={sto.priority} />
                               </td>
+                              {sec.role === 'shipping_planning' && (
+                                <td className="px-4 py-3">
+                                  {sto.distressed_inventory && sto.di_value != null ? (
+                                    <span className="text-amber-700 font-medium">
+                                      ${sto.di_value.toLocaleString()}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-300">—</span>
+                                  )}
+                                </td>
+                              )}
                               <td className="px-4 py-3">
                                 {sto.receiving_site_need_by_date ? (
                                   <span className={needByColor(sto.receiving_site_need_by_date)}>
