@@ -18,6 +18,18 @@
 -- so every insert failed on a fresh install until that was caught and fixed).
 -- Check migrations for ALTER COLUMN, not just ADD, when reconciling.
 
+-- A handful of STOs that physically ship on the same pallet/consignment and
+-- share one combined carrier freight invoice (see sto_requests.shipment_group_id).
+-- The group's combined material value for threshold/ratio calculations is
+-- computed on the fly (SUM(material_value) across non-rejected members), not
+-- stored here — see getShipmentGroupMaterialValue() in routes/approvals.ts.
+CREATE TABLE sto_shipment_groups (
+    id                      INT IDENTITY PRIMARY KEY,
+    combined_freight_cost   DECIMAL(18,2) NOT NULL,
+    created_at              DATETIME DEFAULT GETDATE(),
+    created_by              NVARCHAR(200)
+);
+
 CREATE TABLE sto_requests (
     id                              INT PRIMARY KEY IDENTITY(1,1),
     sto_id                          VARCHAR(50) UNIQUE,
@@ -59,6 +71,10 @@ CREATE TABLE sto_requests (
 
     material_value                  DECIMAL(18,2),
     freight_cost                    DECIMAL(18,2),
+    -- Set when this STO ships on the same pallet/consignment as one or more
+    -- others and shares one combined freight invoice — see sto_shipment_groups.
+    -- NULL means this STO is not part of any group (the common case).
+    shipment_group_id               INT NULL REFERENCES sto_shipment_groups(id),
     insurance_loss_required         BIT DEFAULT 0,
 
     rush_reason                     NVARCHAR(MAX),
@@ -110,6 +126,11 @@ CREATE TABLE sto_requests (
     rejection_reason                NVARCHAR(MAX),
     created_at                      DATETIME DEFAULT GETDATE(),
     updated_at                      DATETIME DEFAULT GETDATE(),
+
+    -- When the last "sitting untouched 48h+" reminder email went out for the
+    -- CURRENT status. NULL = none sent yet. See migration 020 and
+    -- src/jobs/staleReminders.ts.
+    last_stale_reminder_at          DATETIME NULL,
 
     -- Soft-archive: CLOSED/REJECTED rows older than the retention window are
     -- flagged archived=1 by the admin archive job and excluded from every

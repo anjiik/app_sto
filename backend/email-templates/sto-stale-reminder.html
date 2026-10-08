@@ -1,0 +1,27 @@
+<!--
+  notification_relay template body for "sto-stale-reminder".
+  Paste as the "body" via /ui/templates, with:
+    template_name:  sto-stale-reminder
+    subject:        STO {{.sto_id}} Needs Attention — {{.days_waiting}}+ Days Waiting
+    required_vars:  (leave empty)
+  Sent by sendStaleQueueReminder() in ../src/lib/notify.ts, fired by the daily
+  cron job in ../src/jobs/staleReminders.ts for any STO that's been sitting
+  untouched in its current status for 48h+, repeating every 48h until it moves.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#4A90D9; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">Waiting on You</h2>
+  </div>
+  <div style="border:1px solid #d6dce5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      This STO has been sitting in your queue for <strong>{{.days_waiting}}+ day(s)</strong> without action.
+    </p>
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #b45309; color:#b45309; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Details</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:45%;">STO Number</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.sto_id}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Current Status</td><td style="padding:6px 0; color:#1a2029;">{{.status}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Days Waiting</td><td style="padding:6px 0; color:#1a2029;">{{.days_waiting}}</td></tr>
+    </table>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest, can, isAdmin, hasRoleAtSite } from '../middleware/auth';
-import { dbQueryOne, withTransaction } from '../db/connection';
+import { dbQuery, dbQueryOne, withTransaction } from '../db/connection';
 import { logAudit } from '../db/audit';
 import { STOStatus } from '../types';
 import logger from '../lib/logger';
@@ -23,6 +23,23 @@ router.use(writeLimit);
 
 async function getSto(id: number): Promise<Record<string, unknown> | undefined> {
   return dbQueryOne<Record<string, unknown>>('SELECT * FROM sto_requests WHERE id = @id', { id });
+}
+
+// The combined material value across every non-rejected member of a shipment
+// group (several STOs sharing one pallet/consignment and one combined
+// freight invoice — see sto_shipment_groups). Computed fresh on every call
+// rather than cached/stored, so a member being rejected automatically drops
+// out of the total the next time this is called — no separate "recompute"
+// step to keep in sync. Returns null if the STO isn't grouped, so callers
+// can fall back to that STO's own material_value.
+async function getGroupMaterialValue(groupId: number | null | undefined): Promise<number | null> {
+  if (!groupId) return null;
+  const row = await dbQueryOne<{ total: number | null }>(
+    `SELECT SUM(material_value) AS total FROM sto_requests
+     WHERE shipment_group_id = @groupId AND status != 'REJECTED'`,
+    { groupId },
+  );
+  return row?.total ?? 0;
 }
 
 // Canonical forward order of workflow steps. "Back one step" for the admin
@@ -296,7 +313,59 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
     const body = req.body;
     const rawFreightCost = body.freight_cost;
     const freightCost = parseFloat(rawFreightCost || '0');
-    const materialValue = parseFloat(String(sto.material_value || '0'));
+
+    // Optional: this STO ships combined with one or more others on the same
+    // pallet/consignment, sharing this one freight_cost. shipment_group_sto_ids
+    // is the OTHER STO ids to link (not including this one) — only accepted
+    // when this STO doesn't already belong to a group, so re-submitting an
+    // already-grouped STO doesn't silently create a second overlapping group.
+    const newGroupStoIds: number[] = Array.isArray(body.shipment_group_sto_ids)
+      ? body.shipment_group_sto_ids
+          .map((n: unknown) => parseInt(String(n), 10))
+          .filter((n: number) => Number.isFinite(n) && n > 0 && n !== id)
+      : [];
+    const existingGroupId = sto.shipment_group_id as number | null;
+    if (newGroupStoIds.length > 0 && existingGroupId) {
+      res.status(400).json({ message: 'This STO is already part of a shipment group' });
+      return;
+    }
+
+    // Combined material value for the threshold/ratio check: if this STO is
+    // (or is about to become) part of a group, use the group's total instead
+    // of this STO's own material_value. For a brand-new group being created
+    // right now, the other member STOs aren't linked in the DB yet, so their
+    // material_value is pulled directly by id rather than via
+    // getGroupMaterialValue() (which only works once shipment_group_id is set).
+    let materialValue = parseFloat(String(sto.material_value || '0'));
+    if (newGroupStoIds.length > 0) {
+      const others = await dbQuery<{
+        id: number;
+        material_value: number | null;
+        status: string;
+        shipping_site: string;
+        shipment_group_id: number | null;
+      }>(
+        `SELECT id, material_value, status, shipping_site, shipment_group_id
+         FROM sto_requests WHERE id IN (${newGroupStoIds.join(',')})`,
+      );
+      const invalid = others.find(
+        o =>
+          o.status !== 'SHIPPING_LOGISTICS' ||
+          o.shipping_site !== sto.shipping_site ||
+          o.shipment_group_id !== null,
+      );
+      if (others.length !== newGroupStoIds.length || invalid) {
+        res.status(400).json({
+          message:
+            'All combined STOs must exist, be in Shipping Logistics at the same shipping site, and not already be grouped.',
+        });
+        return;
+      }
+      materialValue += others.reduce((sum, o) => sum + (o.material_value ?? 0), 0);
+    } else if (existingGroupId) {
+      materialValue = (await getGroupMaterialValue(existingGroupId)) ?? materialValue;
+    }
+
     const matThreshold = parseFloat(process.env.MANAGEMENT_APPROVAL_MATERIAL_THRESHOLD || '100000');
     const freightThreshold = parseFloat(
       process.env.MANAGEMENT_APPROVAL_FREIGHT_THRESHOLD || '20000',
@@ -361,12 +430,28 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
+    // Create the shipment group now (outside the transaction below — an
+    // orphaned group row if the transaction then fails is a harmless, rare
+    // edge case, far simpler than threading an INSERT's generated id through
+    // withTransaction's execute(), which discards query results entirely).
+    let newGroupId: number | null = null;
+    if (newGroupStoIds.length > 0) {
+      const group = await dbQueryOne<{ id: number }>(
+        `INSERT INTO sto_shipment_groups (combined_freight_cost, created_by)
+         OUTPUT inserted.id
+         VALUES (@freightCost, @createdBy)`,
+        { freightCost, createdBy: user.name },
+      );
+      newGroupId = group!.id;
+    }
+
     await withTransaction(async execute => {
       await execute(
         `
         UPDATE sto_requests SET
           container_information = @container_information,
           freight_cost = @freight_cost,
+          shipment_group_id = COALESCE(@shipment_group_id, shipment_group_id),
           ready_to_ship = @ready_to_ship,
           pgi_date = @pgi_date,
           sto_number = COALESCE(@sto_number, sto_number),
@@ -382,6 +467,7 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           id: sto.id,
           container_information: body.container_information || null,
           freight_cost: rawFreightCost != null && rawFreightCost !== '' ? freightCost : null,
+          shipment_group_id: newGroupId,
           ready_to_ship: body.ready_to_ship ? 1 : 0,
           pgi_date: body.pgi_date || null,
           sto_number: body.sto_number || null,
@@ -392,6 +478,17 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           status: newStatus,
         },
       );
+
+      // Link the other group members too, so they share this same freight
+      // cost (each still goes through its own separate Logistics submission
+      // afterward — this only shares/locks the cost, it doesn't advance them).
+      if (newGroupId) {
+        await execute(
+          `UPDATE sto_requests SET shipment_group_id = @groupId, freight_cost = @freightCost
+           WHERE id IN (${newGroupStoIds.join(',')})`,
+          { groupId: newGroupId, freightCost },
+        );
+      }
       const reasons = [
         materialValue > matThreshold && `material $${materialValue.toLocaleString()} > threshold`,
         freightCost > freightThreshold && `freight $${freightCost.toLocaleString()} > threshold`,

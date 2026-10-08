@@ -43,6 +43,8 @@ const RELAY_SHIPMENT_EXECUTED_TEMPLATE =
   process.env.NOTIFICATION_RELAY_SHIPMENT_EXECUTED_TEMPLATE || 'sto-shipment-executed';
 const RELAY_RECEIPT_CLOSED_TEMPLATE =
   process.env.NOTIFICATION_RELAY_RECEIPT_CLOSED_TEMPLATE || 'sto-receipt-closed';
+const RELAY_STALE_REMINDER_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_STALE_REMINDER_TEMPLATE || 'sto-stale-reminder';
 
 // Test mode toggle. When on, EVERY notification this module would send is
 // redirected to TEST_NOTIFICATION_OVERRIDE instead of the real recipient —
@@ -579,5 +581,33 @@ export async function sendReadyToShipAndExecutedEmails(sto: {
       },
     },
     { sto_id: sto.sto_id },
+  );
+}
+
+// "Sitting in your queue" reminder — sent by the daily stale-queue job (see
+// jobs/staleReminders.ts) to the group that owns the STO's current status,
+// e.g. Shipping Planning for a PLANNING_REVIEW STO that's been untouched 48h+.
+export async function sendStaleQueueReminder(sto: {
+  sto_id: string;
+  status: string;
+  hours_waiting: number;
+  group: Group;
+  site: string;
+}): Promise<void> {
+  const destinations = await resolveGroupDestinations(sto.group, sto.site);
+  postGroupNotification(
+    destinations,
+    {
+      event_id: `sto-stale-reminder-${sto.sto_id}-${Date.now()}`,
+      event_name: `STO ${sto.sto_id} waiting ${Math.floor(sto.hours_waiting / 24)}+ days`,
+      message: `This STO has been sitting in your queue for over ${Math.floor(sto.hours_waiting / 24)} day(s) without action.`,
+      email_template: RELAY_STALE_REMINDER_TEMPLATE,
+      email_vars: {
+        sto_id: sto.sto_id,
+        status: sto.status,
+        days_waiting: String(Math.floor(sto.hours_waiting / 24)),
+      },
+    },
+    { sto_id: sto.sto_id, status: sto.status },
   );
 }

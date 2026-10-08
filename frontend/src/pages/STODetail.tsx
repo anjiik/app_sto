@@ -164,13 +164,30 @@ function ApprovalResult({
   approved,
   by,
   notes,
+  revised,
 }: {
   approved?: boolean | null;
   by?: string;
   notes?: string;
+  // True when this is a "sent back for revision" outcome rather than a true
+  // reject — approved is still false/0 in the DB either way (planning_approved
+  // is a plain BIT with no third state), so the caller derives this from
+  // status === 'DRAFT' with notes present, the only reliable signal.
+  revised?: boolean;
 }) {
   if (approved === undefined || approved === null)
     return <div className="text-sm text-gray-400 italic">Pending</div>;
+  if (revised) {
+    return (
+      <div className="rounded-xl p-3 bg-amber-50 border border-amber-200">
+        <div className="font-medium text-sm text-amber-800">
+          ↩ Returned to Requestor
+          {by ? ` by ${by}` : ''}
+        </div>
+        {notes && <div className="text-xs mt-1 text-amber-700">{notes}</div>}
+      </div>
+    );
+  }
   return (
     <div
       className={`rounded-xl p-3 ${approved ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
@@ -388,6 +405,10 @@ export function STODetail() {
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [planningForm, setPlanningForm] = useState<Record<string, string>>({});
   const [logisticsForm, setLogisticsForm] = useState<Record<string, string | boolean>>({});
+  // Other STOs to combine this one's freight cost with (same pallet/
+  // consignment, one combined invoice) — see "Combine with other STOs" below.
+  const [combineCandidates, setCombineCandidates] = useState<STORequest[]>([]);
+  const [combineWith, setCombineWith] = useState<number[]>([]);
   const [recvForm, setRecvForm] = useState<Record<string, string | boolean>>({});
   const [trackingForm, setTrackingForm] = useState<Record<string, string>>({});
   const [editTracking, setEditTracking] = useState(false);
@@ -419,6 +440,24 @@ export function STODetail() {
       .then(r => setThresholds(r.data))
       .catch(() => {});
   }, []);
+
+  // Candidates for "Combine with other STOs" — other STOs at the same
+  // shipping site, currently in Shipping Logistics, not already grouped. Only
+  // relevant before this STO has its own group (matches the backend's own
+  // "already grouped" guard on POST /logistics).
+  useEffect(() => {
+    if (!sto || sto.status !== 'SHIPPING_LOGISTICS' || sto.shipment_group_id) {
+      setCombineCandidates([]);
+      return;
+    }
+    api
+      .get(`/sto?status=SHIPPING_LOGISTICS&shipping_site=${encodeURIComponent(sto.shipping_site ?? '')}&limit=100`)
+      .then(r => {
+        const items = r.data.data as STORequest[];
+        setCombineCandidates(items.filter(s => s.id !== sto.id && !s.shipment_group_id));
+      })
+      .catch(() => setCombineCandidates([]));
+  }, [sto?.id, sto?.status, sto?.shipment_group_id, sto?.shipping_site]);
 
   async function doAction(endpoint: string, body: object) {
     setActionLoading(true);
@@ -761,7 +800,11 @@ export function STODetail() {
                   {fmt(sto.expiration_date)}
                 </div>
               </div>
-              <ApprovalResult approved={sto.planning_approved} notes={sto.planning_notes} />
+              <ApprovalResult
+                approved={sto.planning_approved}
+                notes={sto.planning_notes}
+                revised={sto.status === 'DRAFT' && !!sto.planning_notes}
+              />
             </div>
           )}
         </Section>
@@ -860,6 +903,44 @@ export function STODetail() {
                     Management approval required if &gt;$20,000 or &gt;30% of material value
                   </p>
                 </div>
+                {sto.shipment_group_id ? (
+                  <div className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+                    <p className="text-xs text-teal-800">
+                      This STO shares its freight cost with a combined shipment group — editing
+                      the Freight Cost above only affects this STO.
+                    </p>
+                  </div>
+                ) : (
+                  combineCandidates.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Combine with other STOs{' '}
+                        <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <select
+                        multiple
+                        value={combineWith.map(String)}
+                        onChange={e =>
+                          setCombineWith(
+                            Array.from(e.target.selectedOptions, o => parseInt(o.value, 10)),
+                          )
+                        }
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 h-28"
+                      >
+                        {combineCandidates.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.sto_id} — {c.material_description || c.material_sap || 'No description'}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {combineWith.length > 0
+                          ? `Selected ${combineWith.length} STO(s) — they'll share this freight cost; each still needs its own separate Logistics submission.`
+                          : 'Select other STOs shipping on the same pallet/consignment to share this freight cost.'}
+                      </p>
+                    </div>
+                  )
+                )}
                 {[
                   {
                     key: 'pgi_date',
@@ -976,7 +1057,10 @@ export function STODetail() {
                       return;
                     }
                   }
-                  doAction('logistics', logisticsForm);
+                  doAction('logistics', {
+                    ...logisticsForm,
+                    ...(combineWith.length > 0 ? { shipment_group_sto_ids: combineWith } : {}),
+                  });
                 }}
                 disabled={actionLoading}
                 className="bg-teal-700 text-white px-5 py-2 rounded-lg hover:bg-teal-800 font-medium text-sm disabled:opacity-50"
@@ -993,6 +1077,11 @@ export function STODetail() {
               <div>
                 <span className="text-xs text-gray-400 block">Freight Cost</span>
                 {sto.freight_cost != null ? `$${Number(sto.freight_cost).toLocaleString()}` : '–'}
+                {sto.shipment_group_id && (
+                  <span className="block text-xs text-teal-600 mt-0.5">
+                    Combined shipment group #{sto.shipment_group_id}
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-xs text-gray-400 block">Ready to Ship</span>

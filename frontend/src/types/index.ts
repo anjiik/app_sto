@@ -66,6 +66,9 @@ export interface STORequest {
   brand_at_receiving_site?: string;
   material_value?: number;
   freight_cost?: number;
+  // Set when this STO ships combined with others on the same pallet,
+  // sharing one freight invoice — see backend sto_shipment_groups.
+  shipment_group_id?: number | null;
   insurance_loss_required: boolean;
   rush_reason?: string;
   receiving_site_need_by_date?: string;
