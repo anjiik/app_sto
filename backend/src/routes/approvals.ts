@@ -489,6 +489,22 @@ router.post('/:id/logistics', async (req: AuthRequest, res: Response): Promise<v
           { groupId: newGroupId, freightCost },
         );
       }
+
+      // This STO was already part of a group (linked by an earlier member's
+      // submission) and its own freight_cost input was changed before THIS
+      // submission — propagate the new combined cost to every other member
+      // too, so the group never drifts out of sync with what was just
+      // entered. (If the value is unchanged, this is a harmless no-op write.)
+      if (existingGroupId && rawFreightCost != null && rawFreightCost !== '') {
+        await execute(
+          'UPDATE sto_shipment_groups SET combined_freight_cost = @freightCost WHERE id = @groupId',
+          { freightCost, groupId: existingGroupId },
+        );
+        await execute(
+          'UPDATE sto_requests SET freight_cost = @freightCost WHERE shipment_group_id = @groupId AND id != @id',
+          { freightCost, groupId: existingGroupId, id: sto.id },
+        );
+      }
       const reasons = [
         materialValue > matThreshold && `material $${materialValue.toLocaleString()} > threshold`,
         freightCost > freightThreshold && `freight $${freightCost.toLocaleString()} > threshold`,

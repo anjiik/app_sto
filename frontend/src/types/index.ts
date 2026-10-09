@@ -69,6 +69,15 @@ export interface STORequest {
   // Set when this STO ships combined with others on the same pallet,
   // sharing one freight invoice — see backend sto_shipment_groups.
   shipment_group_id?: number | null;
+  // The OTHER STOs in this one's shipment group (excludes this STO itself).
+  // Only populated by GET /sto/:id when shipment_group_id is set.
+  shipment_group_members?: {
+    id: number;
+    sto_id: string;
+    status: STOStatus;
+    material_description?: string;
+    material_sap?: string;
+  }[];
   insurance_loss_required: boolean;
   rush_reason?: string;
   receiving_site_need_by_date?: string;

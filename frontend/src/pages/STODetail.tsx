@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
 import { STORequest, STOStatus } from '../types';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge';
@@ -761,6 +761,12 @@ export function STODetail() {
                     ' — Management approval will be required (value > $100,000)'}
                 </div>
               )}
+              {sto.distressed_inventory && sto.di_value != null && (
+                <div className="px-4 py-2 rounded-lg text-sm bg-amber-50 border border-amber-200 text-amber-800">
+                  Distressed Inventory — DI Value:{' '}
+                  <strong>${Number(sto.di_value).toLocaleString()}</strong>
+                </div>
+              )}
               <ApprovalPanel
                 title="Inventory Request"
                 loading={actionLoading}
@@ -800,6 +806,12 @@ export function STODetail() {
                   {fmt(sto.expiration_date)}
                 </div>
               </div>
+              {sto.distressed_inventory && sto.di_value != null && (
+                <div className="px-4 py-2 rounded-lg text-sm bg-amber-50 border border-amber-200 text-amber-800">
+                  Distressed Inventory — DI Value:{' '}
+                  <strong>${Number(sto.di_value).toLocaleString()}</strong>
+                </div>
+              )}
               <ApprovalResult
                 approved={sto.planning_approved}
                 notes={sto.planning_notes}
@@ -895,7 +907,10 @@ export function STODetail() {
                     type="number"
                     step="0.01"
                     placeholder="0.00"
-                    defaultValue={sto.freight_cost != null ? String(sto.freight_cost) : ''}
+                    value={
+                      (logisticsForm.freight_cost as string) ??
+                      (sto.freight_cost != null ? String(sto.freight_cost) : '')
+                    }
                     onChange={e => setLogisticsForm(p => ({ ...p, freight_cost: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
@@ -906,8 +921,11 @@ export function STODetail() {
                 {sto.shipment_group_id ? (
                   <div className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
                     <p className="text-xs text-teal-800">
-                      This STO shares its freight cost with a combined shipment group — editing
-                      the Freight Cost above only affects this STO.
+                      This STO shares its freight cost with{' '}
+                      {sto.shipment_group_members && sto.shipment_group_members.length > 0
+                        ? sto.shipment_group_members.map(m => m.sto_id).join(', ')
+                        : 'other STOs'}
+                      . Changing the Freight Cost above updates it for all of them.
                     </p>
                   </div>
                 ) : (
@@ -920,16 +938,34 @@ export function STODetail() {
                       <select
                         multiple
                         value={combineWith.map(String)}
-                        onChange={e =>
-                          setCombineWith(
-                            Array.from(e.target.selectedOptions, o => parseInt(o.value, 10)),
-                          )
-                        }
+                        onChange={e => {
+                          const ids = Array.from(e.target.selectedOptions, o =>
+                            parseInt(o.value, 10),
+                          );
+                          setCombineWith(ids);
+                          // Auto-populate the freight cost from a selected candidate
+                          // that already has one recorded, so the user isn't stuck
+                          // retyping a number that's already on file — only when
+                          // this STO's own freight cost field hasn't been typed into
+                          // yet, so it never overwrites a value the user entered.
+                          if (!logisticsForm.freight_cost) {
+                            const withCost = combineCandidates.find(
+                              c => ids.includes(c.id) && c.freight_cost != null,
+                            );
+                            if (withCost) {
+                              setLogisticsForm(p => ({
+                                ...p,
+                                freight_cost: String(withCost.freight_cost),
+                              }));
+                            }
+                          }
+                        }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 h-28"
                       >
                         {combineCandidates.map(c => (
                           <option key={c.id} value={c.id}>
                             {c.sto_id} — {c.material_description || c.material_sap || 'No description'}
+                            {c.freight_cost != null ? ` ($${c.freight_cost.toLocaleString()})` : ''}
                           </option>
                         ))}
                       </select>
@@ -1079,7 +1115,17 @@ export function STODetail() {
                 {sto.freight_cost != null ? `$${Number(sto.freight_cost).toLocaleString()}` : '–'}
                 {sto.shipment_group_id && (
                   <span className="block text-xs text-teal-600 mt-0.5">
-                    Combined shipment group #{sto.shipment_group_id}
+                    Combined with:{' '}
+                    {sto.shipment_group_members && sto.shipment_group_members.length > 0
+                      ? sto.shipment_group_members.map((m, i) => (
+                          <span key={m.id}>
+                            {i > 0 && ', '}
+                            <Link to={`/sto/${m.id}`} className="underline hover:text-teal-800">
+                              {m.sto_id}
+                            </Link>
+                          </span>
+                        ))
+                      : `group #${sto.shipment_group_id}`}
                   </span>
                 )}
               </div>

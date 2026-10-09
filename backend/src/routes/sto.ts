@@ -213,7 +213,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
              management_approval_required, planning_approved, management_approved,
              receiving_mgmt_approved, ready_to_ship, tracking_id, corporate_sto_tracker_status,
              rejection_reason, sto_number, sto_number_requested_at, created_at, updated_at,
-             shipment_group_id
+             shipment_group_id, freight_cost
       FROM sto_requests${where}
       ${orderBy}
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
@@ -477,7 +477,19 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       { stoId: sto.id },
     );
 
-    res.json({ ...normalizeSto(sto), audit_log: auditLog });
+    // Other STOs sharing this one's combined freight cost (see
+    // sto_shipment_groups) — included so the detail page can show exactly
+    // which STOs are grouped together, not just a group number.
+    let shipmentGroupMembers: Record<string, unknown>[] = [];
+    if (sto.shipment_group_id) {
+      shipmentGroupMembers = await dbQuery<Record<string, unknown>>(
+        `SELECT id, sto_id, status, material_description, material_sap
+         FROM sto_requests WHERE shipment_group_id = @groupId AND id != @id`,
+        { groupId: sto.shipment_group_id, id: sto.id },
+      );
+    }
+
+    res.json({ ...normalizeSto(sto), audit_log: auditLog, shipment_group_members: shipmentGroupMembers });
   } catch (err) {
     logger.error({ err }, 'sto/:id GET error');
     res.status(500).json({ message: 'Internal server error' });
