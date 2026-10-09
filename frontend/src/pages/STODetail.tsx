@@ -403,7 +403,7 @@ export function STODetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const [planningForm, setPlanningForm] = useState<Record<string, string>>({});
+  const [planningForm, setPlanningForm] = useState<Record<string, string | boolean>>({});
   const [logisticsForm, setLogisticsForm] = useState<Record<string, string | boolean>>({});
   // Other STOs to combine this one's freight cost with (same pallet/
   // consignment, one combined invoice) — see "Combine with other STOs" below.
@@ -761,12 +761,41 @@ export function STODetail() {
                     ' — Management approval will be required (value > $100,000)'}
                 </div>
               )}
-              {sto.distressed_inventory && sto.di_value != null && (
-                <div className="px-4 py-2 rounded-lg text-sm bg-amber-50 border border-amber-200 text-amber-800">
-                  Distressed Inventory — DI Value:{' '}
-                  <strong>${Number(sto.di_value).toLocaleString()}</strong>
-                </div>
-              )}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(planningForm.distressed_inventory)}
+                    onChange={e =>
+                      setPlanningForm(p => ({ ...p, distressed_inventory: e.target.checked }))
+                    }
+                    className="w-4 h-4 text-amber-600 rounded"
+                  />
+                  <span className="text-sm text-amber-900 font-medium">Distressed Inventory</span>
+                </label>
+                {planningForm.distressed_inventory && (
+                  <div className="max-w-xs">
+                    <label className="block text-xs font-medium text-amber-800 mb-1">
+                      DI Value (USD)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 text-sm">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        onChange={e =>
+                          setPlanningForm(p => ({ ...p, di_value: e.target.value }))
+                        }
+                        className="w-full border border-amber-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
               <ApprovalPanel
                 title="Inventory Request"
                 loading={actionLoading}

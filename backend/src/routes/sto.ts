@@ -61,8 +61,10 @@ const stoBaseObject = z.object({
   public_holiday: z.boolean().optional().default(false),
   requesting_plant: z.string().optional(),
   toll_mfg: z.boolean().optional().default(false),
-  // Distressed Inventory: flag + estimated saving value. di_value is editable by
-  // the requestor, shipping planning, and shipping logistics.
+  // Distressed Inventory: flag + estimated saving value. Not set at creation —
+  // the requestor doesn't flag this; Shipping Planning decides it during their
+  // review (see POST /:id/planning in routes/approvals.ts). Defaults false/null
+  // here so a fresh STO simply starts unset until Planning reviews it.
   distressed_inventory: z.boolean().optional().default(false),
   di_value: z.coerce.number().min(0).nullish(),
   requestor_name: z.string().optional(),

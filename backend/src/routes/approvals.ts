@@ -148,13 +148,27 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
     res.status(400).json({ message: 'Invalid STO id' });
     return;
   }
-  const { approved, decision, notes, mpn_number, batch_number, expiration_date } = req.body as {
+  const {
+    approved,
+    decision,
+    notes,
+    mpn_number,
+    batch_number,
+    expiration_date,
+    distressed_inventory,
+    di_value,
+  } = req.body as {
     approved?: boolean;
     decision?: 'approve' | 'reject' | 'revise';
     notes?: string;
     mpn_number?: string;
     batch_number?: string;
     expiration_date?: string;
+    // Set by Shipping Planning during review — the requestor no longer flags
+    // this at creation time (see STOForm.tsx); Planning decides whether an
+    // item is distressed inventory and what its value is.
+    distressed_inventory?: boolean;
+    di_value?: number | string | null;
   };
 
   // Resolve the outcome. `decision` is the new tri-state API; `approved` is kept
@@ -218,6 +232,8 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
           mpn_number = @mpn_number,
           batch_number = @batch_number,
           expiration_date = @expiration_date,
+          distressed_inventory = @distressed_inventory,
+          di_value = @di_value,
           status = @status,
           rejection_reason = @rejectionReason,
           updated_at = GETDATE()
@@ -231,6 +247,8 @@ router.post('/:id/planning', async (req: AuthRequest, res: Response): Promise<vo
           mpn_number: mpn_number || null,
           batch_number: batch_number || null,
           expiration_date: expiration_date || null,
+          distressed_inventory: distressed_inventory ? 1 : 0,
+          di_value: distressed_inventory ? (di_value ?? null) : null,
           status: newStatus,
           // For revise, surface the note to the requestor as the reason shown on
           // the draft; for reject, the rejection reason; for approve, clear it.

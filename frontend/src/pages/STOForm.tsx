@@ -85,7 +85,6 @@ export function STOForm() {
   const incoTerms = watch('inco_terms') as string | undefined;
   const materialValue = watch('material_value');
   const controlledShipping = watch('controlled_shipping_required');
-  const distressedInventory = watch('distressed_inventory');
   const needByDate = watch('receiving_site_need_by_date') as string | undefined;
   const estShipDate = watch('standard_estimated_ship_date') as string | undefined;
   const [shiftedToMonday, setShiftedToMonday] = useState(false);
@@ -383,7 +382,6 @@ export function STOForm() {
                 { name: 'rush_request', label: 'Rush Request' },
                 { name: 'public_holiday', label: 'Public Holiday at Shipping/Receiving Site' },
                 { name: 'toll_mfg', label: 'Toll MFG (Contract Manufacturing)' },
-                { name: 'distressed_inventory', label: 'Distressed Inventory (DI)' },
               ].map(cb => (
                 <label key={cb.name} className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -395,30 +393,6 @@ export function STOForm() {
                 </label>
               ))}
             </div>
-
-            {distressedInventory && (
-              <Field
-                label="DI Value (USD)"
-                hint="Estimated distressed-inventory saving. Can be entered by the requestor, shipping planning, or shipping logistics."
-              >
-                <div className="relative max-w-xs">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    {...register('di_value', { min: { value: 0, message: 'Must be 0 or greater' } })}
-                    className={`${INPUT} pl-7`}
-                    placeholder="0.00"
-                  />
-                </div>
-                {errors.di_value && (
-                  <p className="text-red-500 text-xs mt-1">{String(errors.di_value.message)}</p>
-                )}
-              </Field>
-            )}
 
             {rushRequest && (
               <Field label="Rush Reason" required hint="Required for rush requests">
