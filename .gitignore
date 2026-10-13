@@ -19,5 +19,6 @@ site/
 # Notification relay — kept out of this repo
 notification_relay-main/
 
-# Unrelated reference doc, not part of the app
+# Unrelated reference docs, not part of the app
 Inbound_Data_Layer_Proposal.docx
+Supply_Chain_Data_Layer_Proposal.docx
