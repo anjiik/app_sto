@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { authenticate, AuthRequest, can, isAdmin } from '../middleware/auth';
+import { authenticate, AuthRequest, can, isAdmin, userGrants } from '../middleware/auth';
 import { dbQuery, dbQueryOne, dbExecute } from '../db/connection';
 import { logAudit } from '../db/audit';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
+import { getUserGrants } from '../lib/ldap';
 
 const router = Router();
 router.use(authenticate);
@@ -614,8 +615,14 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
   }
 
   try {
-    const existing = await dbQueryOne<{ receiving_site: string; status: string; requestor_name: string }>(
-      'SELECT receiving_site, status, requestor_name FROM sto_requests WHERE id = @id',
+    const existing = await dbQueryOne<{
+      shipping_site: string;
+      receiving_site: string;
+      status: string;
+      requestor_name: string;
+      requestor_email: string;
+    }>(
+      'SELECT shipping_site, receiving_site, status, requestor_name, requestor_email FROM sto_requests WHERE id = @id',
       { id },
     );
     if (!existing) {
@@ -627,11 +634,32 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
       return;
     }
     // Site membership alone isn't enough here — it would let anyone sharing a
-    // site with the STO edit someone else's draft, not just their own. Only
-    // the requestor (or an admin) may edit a DRAFT.
+    // site with the STO edit someone else's draft, not just their own. The
+    // requestor and admins can always edit; anyone else must share at least
+    // one role+site grant with the requestor (e.g. another Shipping Planning
+    // person at the same site), checked via a live AD lookup since the
+    // requestor's roles aren't stored on the STO and can change over time.
+    // If that lookup fails for any reason, fail closed — deny the edit.
     if (!can(user, 'admin') && existing.requestor_name !== user.name) {
-      res.status(403).json({ message: 'You can only edit your own draft STOs' });
-      return;
+      let sharesGrant = false;
+      try {
+        const requestorGrants = await getUserGrants(existing.requestor_email || existing.requestor_name);
+        const siteOptions = [existing.shipping_site, existing.receiving_site].filter(Boolean);
+        sharesGrant = userGrants(user).some(g =>
+          requestorGrants.some(rg => rg.group === g.group && rg.site === g.site) &&
+          siteOptions.includes(g.site),
+        );
+      } catch (err: any) {
+        logger.warn(
+          { id, user: user.adUsername, requestor: existing.requestor_email, err: err?.message },
+          'sto PUT: requestor grants lookup failed, denying shared-role edit',
+        );
+        sharesGrant = false;
+      }
+      if (!sharesGrant) {
+        res.status(403).json({ message: 'You can only edit your own draft STOs' });
+        return;
+      }
     }
 
     const body = parsed.data;

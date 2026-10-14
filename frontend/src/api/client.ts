@@ -21,7 +21,18 @@ api.interceptors.response.use(
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('sto_token');
-      window.location.href = '/sto/login';
+      // Carry the page the user was on (e.g. a specific STO from an email
+      // link, if their session had already expired when they clicked it) so
+      // a successful re-login can return them there instead of the Dashboard.
+      // window.location.pathname is the real browser URL (includes the /sto/
+      // base); strip it so the redirect param matches what react-router's
+      // basename-relative navigate() in Login.tsx expects — same hardcoded
+      // /sto/ this file already uses elsewhere, not import.meta.env.BASE_URL
+      // (unreliable in this app's production builds, per vite config comment
+      // on the baseURL above).
+      const path = window.location.pathname.replace(/^\/sto\//, '/');
+      const current = path + window.location.search;
+      window.location.href = `/sto/login?redirect=${encodeURIComponent(current)}`;
     }
     return Promise.reject(err);
   },

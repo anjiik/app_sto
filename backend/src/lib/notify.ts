@@ -17,6 +17,16 @@ function formatDecimal(value: number | string | null | undefined, maxDecimals = 
   return n.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
 }
 
+// FRONTEND_ORIGIN is the bare origin used for CORS (e.g.
+// https://your-server-name.company.com) — it does NOT include the app's
+// /sto base path, so that's appended here. Every email template gets this
+// as {{.sto_link}} so "View this request" can go straight to it instead of
+// making the recipient search for the STO by hand.
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+function stoLink(id: number): string {
+  return `${FRONTEND_ORIGIN}/sto/${id}`;
+}
+
 const RELAY_URL = process.env.NOTIFICATION_RELAY_URL;
 const RELAY_USER = process.env.NOTIFICATION_RELAY_USER;
 const RELAY_PASS = process.env.NOTIFICATION_RELAY_PASSWORD;
@@ -169,6 +179,7 @@ function postGroupNotification(
 // shipping_site) — resolved via resolveGroupDestinations() for the three
 // groups, matching the spec recipients in the comment above.
 export async function sendReceiptClosedEmail(sto: {
+  id: number;
   sto_id: string;
   requestor_email?: string | null;
   shipping_site?: string;
@@ -195,6 +206,7 @@ export async function sendReceiptClosedEmail(sto: {
       email_template: RELAY_RECEIPT_CLOSED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         actual_receipt_date: sto.actual_receipt_date ?? '',
         sto_number: sto.sto_number ?? '',
         delivery_closeout_status: sto.delivery_closed_out ? 'Closed' : '',
@@ -212,6 +224,7 @@ export async function sendReceiptClosedEmail(sto: {
 //
 // Sent to the requestor's own email outside test mode.
 export function sendStoSubmittedEmail(sto: {
+  id: number;
   sto_id: string;
   requestor_name: string;
   requestor_email?: string | null;
@@ -226,6 +239,7 @@ export function sendStoSubmittedEmail(sto: {
       email_template: RELAY_SUBMITTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         requestor_name: sto.requestor_name,
       },
     },
@@ -246,6 +260,7 @@ export function sendStoSubmittedEmail(sto: {
 // Sent to every member of the shipping site's Planning and Logistics AD
 // groups outside test mode, resolved via resolveGroupDestinations().
 export async function sendStoAwaitingPlanningEmail(sto: {
+  id: number;
   sto_id: string;
   requestor_name?: string;
   requestor_email?: string;
@@ -286,6 +301,7 @@ export async function sendStoAwaitingPlanningEmail(sto: {
       email_template: RELAY_PLANNING_QUEUE_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         requestor_name: sto.requestor_name ?? '',
         requestor_email: sto.requestor_email ?? '',
         requesting_plant: sto.requesting_plant ?? '',
@@ -332,6 +348,7 @@ export async function sendStoAwaitingPlanningEmail(sto: {
 export async function sendPlanningReviewEmail(
   outcome: 'approve' | 'revise' | 'reject',
   sto: {
+    id: number;
     sto_id: string;
     requestor_email?: string | null;
     shipping_site?: string;
@@ -375,6 +392,7 @@ export async function sendPlanningReviewEmail(
       email_template: byOutcome.template,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         mpn_number: sto.mpn_number ?? '',
         batch_number: sto.batch_number ?? '',
         expiration_date: sto.expiration_date ?? '',
@@ -393,6 +411,7 @@ export async function sendPlanningReviewEmail(
 // Sent to every member of the shipping site's Management AD group outside
 // test mode, resolved via resolveGroupDestinations().
 export async function sendManagementRequestedEmail(sto: {
+  id: number;
   sto_id: string;
   shipping_site?: string;
   approval_reasons?: string;
@@ -414,6 +433,7 @@ export async function sendManagementRequestedEmail(sto: {
       email_template: RELAY_MANAGEMENT_REQUESTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         approval_reasons: sto.approval_reasons ?? '',
         freight_cost: formatDecimal(sto.freight_cost),
         material_value: formatDecimal(sto.material_value),
@@ -438,6 +458,7 @@ export async function sendManagementRequestedEmail(sto: {
 // first (shipping-side) approval just informs the requestor, since the next
 // actor (Receiving Management) is a human approval step, not a notification.
 export async function sendManagementGrantedEmail(sto: {
+  id: number;
   sto_id: string;
   requestor_email?: string | null;
   approving_group: string;
@@ -462,6 +483,7 @@ export async function sendManagementGrantedEmail(sto: {
       email_template: RELAY_MANAGEMENT_GRANTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         approving_group: sto.approving_group,
         approval_date: sto.approval_date ?? '',
         notes: sto.notes ?? '',
@@ -478,6 +500,7 @@ export async function sendManagementGrantedEmail(sto: {
 // Sent to the requestor — a denial is a dead end, so they're the only one
 // who needs to know.
 export function sendManagementDeniedEmail(sto: {
+  id: number;
   sto_id: string;
   requestor_email?: string | null;
   denial_reason?: string | null;
@@ -493,6 +516,7 @@ export function sendManagementDeniedEmail(sto: {
       email_template: RELAY_MANAGEMENT_DENIED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         denial_reason: sto.denial_reason ?? '',
         approving_site: sto.approving_site ?? '',
       },
@@ -508,6 +532,7 @@ export function sendManagementDeniedEmail(sto: {
 // Sent to every member of the shipping site's Logistics AD group outside
 // test mode, resolved via resolveGroupDestinations().
 export async function sendLogisticsInProgressEmail(sto: {
+  id: number;
   sto_id: string;
   shipping_site?: string;
 }): Promise<void> {
@@ -520,7 +545,7 @@ export async function sendLogisticsInProgressEmail(sto: {
       event_name: `STO ${sto.sto_id} in shipping logistics processing`,
       message: 'Your STO request is now with Shipping Site Logistics for execution planning.',
       email_template: RELAY_LOGISTICS_IN_PROGRESS_TEMPLATE,
-      email_vars: { sto_id: sto.sto_id },
+      email_vars: { sto_id: sto.sto_id, sto_link: stoLink(sto.id) },
     },
     { sto_id: sto.sto_id },
   );
@@ -537,6 +562,7 @@ export async function sendLogisticsInProgressEmail(sto: {
 // test mode, resolved via resolveGroupDestinations() — that's who the STO
 // moves on to.
 export async function sendReadyToShipAndExecutedEmails(sto: {
+  id: number;
   sto_id: string;
   receiving_site?: string;
   sto_number?: string | null;
@@ -557,6 +583,7 @@ export async function sendReadyToShipAndExecutedEmails(sto: {
       email_template: RELAY_READY_TO_SHIP_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         sto_number: sto.sto_number ?? '',
         shipment_id: sto.shipment_id ?? '',
         scheduled_ship_date: sto.scheduled_ship_date ?? '',
@@ -575,6 +602,7 @@ export async function sendReadyToShipAndExecutedEmails(sto: {
       email_template: RELAY_SHIPMENT_EXECUTED_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         actual_ship_date: sto.actual_ship_date ?? '',
         shipment_id: sto.shipment_id ?? '',
         tracking_reference: sto.sto_number ?? '',
@@ -588,6 +616,7 @@ export async function sendReadyToShipAndExecutedEmails(sto: {
 // jobs/staleReminders.ts) to the group that owns the STO's current status,
 // e.g. Shipping Planning for a PLANNING_REVIEW STO that's been untouched 48h+.
 export async function sendStaleQueueReminder(sto: {
+  id: number;
   sto_id: string;
   status: string;
   hours_waiting: number;
@@ -604,6 +633,7 @@ export async function sendStaleQueueReminder(sto: {
       email_template: RELAY_STALE_REMINDER_TEMPLATE,
       email_vars: {
         sto_id: sto.sto_id,
+        sto_link: stoLink(sto.id),
         status: sto.status,
         days_waiting: String(Math.floor(sto.hours_waiting / 24)),
       },

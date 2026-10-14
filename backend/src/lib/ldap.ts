@@ -298,6 +298,67 @@ export interface GroupMember {
   username: string;
 }
 
+// Live lookup of a user's CURRENT role+site grants, by email (the only AD-
+// resolvable identifier stored on an STO's requestor_email column) or, if no
+// email is on file, by username. Used to let someone who shares a grant with
+// a DRAFT's original requestor edit it, without storing roles on the STO
+// itself (they can change after the STO was created).
+//
+// Requires a service account bind, same as listGroupMembers — there's no
+// signed-in requestor to search with here, only a stored identifier for
+// someone else's account.
+export async function getUserGrants(identifier: string): Promise<Grant[]> {
+  if (!LDAP_URL || !LDAP_DOMAIN || !LDAP_BASE_DN) {
+    throw new Error('LDAP not configured — set LDAP_URL, LDAP_DOMAIN, and LDAP_BASE_DN in .env');
+  }
+  if (!LDAP_BIND_DN || !LDAP_BIND_PASS) {
+    throw new Error(
+      'LDAP_BIND_DN/LDAP_BIND_PASSWORD are required to look up another user\'s grants (no per-user credentials available for this lookup)',
+    );
+  }
+  if (!identifier) {
+    throw new Error('No identifier (email/username) given for grants lookup');
+  }
+
+  const client = new Client(CLIENT_OPTS());
+  try {
+    await client.bind(LDAP_BIND_DN, LDAP_BIND_PASS);
+
+    const filter = identifier.includes('@')
+      ? `(mail=${escapeLdap(identifier)})`
+      : `(sAMAccountName=${escapeLdap(toSAM(identifier))})`;
+    const { searchEntries } = await client.search(LDAP_BASE_DN, {
+      scope: 'sub',
+      filter,
+      attributes: ['memberOf'],
+    });
+    if (!searchEntries.length) {
+      throw new Error(`User "${identifier}" not found in Active Directory`);
+    }
+    const entry = searchEntries[0] as Record<string, unknown>;
+    const memberOf = entry.memberOf
+      ? ((Array.isArray(entry.memberOf) ? entry.memberOf : [entry.memberOf]) as string[])
+      : [];
+    const cns = memberOf.map(extractCN);
+    const matches = cns
+      .map(cn => GROUP_MAP[cn.toUpperCase()])
+      .filter((m): m is { group: Group; site: string } => !!m);
+
+    const seen = new Set<string>();
+    const grants: Grant[] = [];
+    for (const m of matches) {
+      const key = `${m.group}@${m.site}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        grants.push({ group: m.group, site: m.site });
+      }
+    }
+    return grants;
+  } finally {
+    await client.unbind().catch(() => {});
+  }
+}
+
 // Looks up every user whose memberOf includes the given group CN. Used to
 // populate the Administrators list on the App Info page from the real
 // APP-STO_MANAGEMENT_ADMIN group, rather than hardcoding names.

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { Group } from '../types';
@@ -31,9 +31,20 @@ const SITE_COLORS: Record<string, string> = {
   MBM: 'bg-emerald-600',
 };
 
+// Only accept a redirect target that's a path within this app — never an
+// absolute URL. Without this check, a crafted link like
+// /sto/login?redirect=https://evil.example could send a user who just
+// authenticated off to an external site (an open-redirect vulnerability).
+function safeRedirectTarget(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+  return raw;
+}
+
 export function Login() {
   const { login, ldapMode } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -54,7 +65,8 @@ export function Login() {
     setLoading(true);
     try {
       await login(username, password);
-      navigate('/dashboard', { replace: true });
+      const redirect = safeRedirectTarget(searchParams.get('redirect'));
+      navigate(redirect ?? '/dashboard', { replace: true });
     } catch {
       setError('Invalid username or password');
     } finally {

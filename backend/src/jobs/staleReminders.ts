@@ -86,6 +86,7 @@ export async function runStaleReminderCheck(): Promise<void> {
 
     try {
       await sendStaleQueueReminder({
+        id: row.id,
         sto_id: row.sto_id,
         status: row.status,
         hours_waiting: hoursWaiting,
