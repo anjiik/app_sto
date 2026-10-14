@@ -27,6 +27,7 @@ interface Summary {
   rejected: number;
   totalValue: number;
   monthValue: number;
+  totalFreightCost: number;
   rushCount: number;
   totalCount: number;
   avgCloseDays: number;
@@ -104,11 +105,15 @@ interface RawRow {
   receiving_site: string | null;
   status: string;
   rush_request: boolean;
+  request_type: string | null;
   material_description: string | null;
   material_sap: string | null;
   quantity: number | null;
   uom: string | null;
   material_value: number;
+  freight_cost: number | null;
+  shipment_group_id: number | null;
+  grouped_with: string[];
 }
 
 interface Filters {
@@ -116,7 +121,10 @@ interface Filters {
   rush: string;
   dateFrom: string;
   dateTo: string;
+  requestTypes: string[];
 }
+
+const REQUEST_TYPES = ['Raw Material', 'Commodity', 'Consumable', 'Cell Bank', 'mAb', 'Toxin'] as const;
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
 
@@ -264,7 +272,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
-const EMPTY_FILTERS: Filters = { status: '', rush: '', dateFrom: '', dateTo: '' };
+const EMPTY_FILTERS: Filters = { status: '', rush: '', dateFrom: '', dateTo: '', requestTypes: [] };
 
 export function Analytics() {
   const navigate = useNavigate();
@@ -292,15 +300,39 @@ export function Analytics() {
 
   const isFirstLoad = useRef(true);
 
-  const hasFilters = Object.values(filters).some(Boolean);
+  const [requestTypeOpen, setRequestTypeOpen] = useState(false);
+  const requestTypeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (requestTypeRef.current && !requestTypeRef.current.contains(e.target as Node)) {
+        setRequestTypeOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
 
-  function setFilter(key: keyof Filters, value: string) {
+  const hasFilters =
+    Boolean(filters.status || filters.rush || filters.dateFrom || filters.dateTo) ||
+    filters.requestTypes.length > 0;
+
+  function setFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo', value: string) {
     setFilters(prev => ({ ...prev, [key]: value }));
     setRawPage(1);
   }
 
-  function toggleFilter(key: keyof Filters, value: string) {
+  function toggleFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo', value: string) {
     setFilter(key, filters[key] === value ? '' : value);
+  }
+
+  function toggleRequestType(value: string) {
+    setFilters(prev => ({
+      ...prev,
+      requestTypes: prev.requestTypes.includes(value)
+        ? prev.requestTypes.filter(t => t !== value)
+        : [...prev.requestTypes, value],
+    }));
+    setRawPage(1);
   }
 
   function resetFilters() {
@@ -317,6 +349,7 @@ export function Analytics() {
       if (filters.rush) p.set('rush', filters.rush);
       if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
       if (filters.dateTo) p.set('dateTo', filters.dateTo);
+      if (filters.requestTypes.length) p.set('requestTypes', filters.requestTypes.join(','));
       Object.entries(extra).forEach(([k, v]) => p.set(k, v));
       return p.toString();
     },
@@ -488,6 +521,45 @@ export function Analytics() {
               />
             </div>
 
+            {/* Request Type (multi-select) */}
+            <div className="relative" ref={requestTypeRef}>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Request Type
+              </label>
+              <button
+                type="button"
+                onClick={() => setRequestTypeOpen(o => !o)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[170px] text-left flex items-center justify-between gap-2"
+              >
+                <span className="truncate">
+                  {filters.requestTypes.length === 0
+                    ? 'All Types'
+                    : filters.requestTypes.length === 1
+                      ? filters.requestTypes[0]
+                      : `${filters.requestTypes.length} selected`}
+                </span>
+                <span className="text-gray-400 text-xs">▾</span>
+              </button>
+              {requestTypeOpen && (
+                <div className="absolute z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                  {REQUEST_TYPES.map(t => (
+                    <label
+                      key={t}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filters.requestTypes.includes(t)}
+                        onChange={() => toggleRequestType(t)}
+                        className="rounded border-gray-300"
+                      />
+                      {t}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {hasFilters && (
               <button
                 onClick={resetFilters}
@@ -525,13 +597,16 @@ export function Analytics() {
                   onRemove={() => setFilter('dateTo', '')}
                 />
               )}
+              {filters.requestTypes.map(t => (
+                <FilterChip key={t} label={t} onRemove={() => toggleRequestType(t)} />
+              ))}
             </div>
           )}
         </div>
 
         {/* ── KPI row ──────────────────────────────────────────────────────────── */}
         {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <KPI
               label="Total STOs"
               value={summary.total}
@@ -549,6 +624,12 @@ export function Analytics() {
               value={fmt$(summary.totalValue)}
               sub={`${fmt$(summary.monthValue)} this month`}
               color="border-purple-500"
+            />
+            <KPI
+              label="Total Freight Cost"
+              value={fmt$(summary.totalFreightCost)}
+              sub="Counted once per shared shipment"
+              color="border-cyan-500"
             />
             <KPI
               label="Rush Requests"
@@ -1002,7 +1083,7 @@ export function Analytics() {
           ) : (
             <>
               <div className="overflow-x-auto -mx-6 px-6">
-                <table className="w-full text-sm min-w-[900px]">
+                <table className="w-full text-sm min-w-[1100px]">
                   <thead>
                     <tr className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-100">
                       <th className="px-4 py-3 text-left font-medium">STO ID</th>
@@ -1011,9 +1092,11 @@ export function Analytics() {
                       <th className="px-4 py-3 text-left font-medium">To</th>
                       <th className="px-4 py-3 text-left font-medium">Status</th>
                       <th className="px-4 py-3 text-left font-medium">Priority</th>
+                      <th className="px-4 py-3 text-left font-medium">Type</th>
                       <th className="px-4 py-3 text-left font-medium">Material</th>
                       <th className="px-4 py-3 text-right font-medium">Qty</th>
                       <th className="px-4 py-3 text-right font-medium">Value</th>
+                      <th className="px-4 py-3 text-right font-medium">Freight</th>
                       <th className="px-4 py-3 text-left font-medium">Requestor</th>
                     </tr>
                   </thead>
@@ -1025,8 +1108,18 @@ export function Analytics() {
                         onClick={() => navigate(`/sto/${row.id}`)}
                       >
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs font-semibold text-blue-600 group-hover:underline">
-                            {row.sto_id}
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-semibold text-blue-600 group-hover:underline">
+                              {row.sto_id}
+                            </span>
+                            {row.grouped_with.length > 0 && (
+                              <span
+                                title={`Shares freight cost with: ${row.grouped_with.join(', ')}`}
+                                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-cyan-100 text-cyan-700 text-[10px] leading-none cursor-help"
+                              >
+                                🔗
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
@@ -1058,6 +1151,9 @@ export function Analytics() {
                             <span className="text-gray-400 text-xs">Normal</span>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                          {row.request_type || <span className="text-gray-300">—</span>}
+                        </td>
                         <td className="px-4 py-3 text-gray-600 max-w-[200px]">
                           <span className="truncate block" title={row.material_description ?? ''}>
                             {row.material_description || row.material_sap || (
@@ -1073,6 +1169,18 @@ export function Analytics() {
                         <td className="px-4 py-3 text-right font-medium text-gray-800 whitespace-nowrap">
                           {row.material_value > 0 ? (
                             fmt$(row.material_value)
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">
+                          {row.freight_cost != null ? (
+                            <span title={row.grouped_with.length > 0 ? 'Shared across the group' : ''}>
+                              {fmt$(row.freight_cost)}
+                              {row.grouped_with.length > 0 && (
+                                <span className="text-cyan-500"> *</span>
+                              )}
+                            </span>
                           ) : (
                             <span className="text-gray-300">—</span>
                           )}

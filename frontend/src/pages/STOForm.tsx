@@ -61,6 +61,7 @@ const INCO_TERMS = [...STANDARD_INCO_TERMS, 'Other'] as const;
 // Cold-chain conditions that require management approval from both sites.
 const COLD_MGMT_CONDITIONS = new Set(['Cold 2-8C', 'Cold below 0', 'Frozen']);
 const SITES = ['ABC', 'ABL', 'ABS', 'MBM', 'Toll MFG'] as const;
+const REQUEST_TYPES = ['Raw Material', 'Commodity', 'Consumable', 'Cell Bank', 'mAb', 'Toxin'] as const;
 
 export function STOForm() {
   const { id } = useParams<{ id?: string }>();
@@ -163,6 +164,7 @@ export function STOForm() {
           distressed_inventory: Boolean(s.distressed_inventory),
           di_value: s.di_value ?? '',
           rush_reason: s.rush_reason ?? '',
+          request_type: s.request_type ?? '',
           material_sap: s.material_sap ?? '',
           material_description: s.material_description ?? '',
           brand_at_receiving_site: s.brand_at_receiving_site ?? '',
@@ -413,6 +415,22 @@ export function STOForm() {
           <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="font-semibold text-gray-800 border-b pb-2">Material Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Request Type" required>
+                <select
+                  {...register('request_type', { required: 'Request type is required' })}
+                  className={INPUT}
+                >
+                  <option value="">— Select —</option>
+                  {REQUEST_TYPES.map(t => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                {errors.request_type && (
+                  <p className="text-red-500 text-xs mt-1">{String(errors.request_type.message)}</p>
+                )}
+              </Field>
               <Field label="Material SAP #" required hint="Must be exactly 8 digits">
                 <input
                   {...register('material_sap', {

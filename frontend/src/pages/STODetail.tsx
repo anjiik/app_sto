@@ -659,6 +659,7 @@ export function STODetail() {
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
                 Material
               </p>
+              <Row label="Request Type" value={sto.request_type} />
               <Row label="SAP Material #" value={sto.material_sap} />
               <Row label="MPN #" value={sto.mpn_number} />
               <Row label="Description" value={sto.material_description} />

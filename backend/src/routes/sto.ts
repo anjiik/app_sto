@@ -43,10 +43,20 @@ function normalizeSto(row: Record<string, unknown>): Record<string, unknown> {
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
+export const REQUEST_TYPES = [
+  'Raw Material',
+  'Commodity',
+  'Consumable',
+  'Cell Bank',
+  'mAb',
+  'Toxin',
+] as const;
+
 const stoBaseObject = z.object({
   // Required on create, optional on update (schema is .partial()-ed for PUT)
   shipping_site: z.string().min(1, 'Shipping site is required'),
   receiving_site: z.string().min(1, 'Receiving site is required'),
+  request_type: z.enum(REQUEST_TYPES, { error: 'Request type is required' }),
   material_sap: z.string().regex(/^\d{8}$/, 'SAP material number must be exactly 8 digits'),
   material_description: z.string().min(1, 'Material description is required'),
   quantity: z.coerce.number().positive('Quantity must be a positive number'),
@@ -210,7 +220,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const rows = await dbQuery<Record<string, unknown>>(
       `
       SELECT id, sto_id, status, request_date, requestor_name, requestor_email,
-             material_sap, material_description, quantity, uom, priority,
+             request_type, material_sap, material_description, quantity, uom, priority,
              rush_request, shipping_site, receiving_site, requesting_plant,
              receiving_site_need_by_date, estimated_ship_by_date,
              management_approval_required, planning_approved, management_approved,
@@ -525,7 +535,7 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
         requesting_plant, shipping_site, receiving_site, toll_mfg,
         distressed_inventory, di_value,
         requestor_user_id, requestor_name, requestor_email,
-        material_sap, material_description, quantity, uom,
+        request_type, material_sap, material_description, quantity, uom,
         shipping_conditions, controlled_shipping_required, controlled_shipping_notes, brand_at_receiving_site,
         material_value, insurance_loss_required,
         rush_reason, receiving_site_need_by_date, estimated_ship_by_date,
@@ -539,7 +549,7 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
         @requesting_plant, @shipping_site, @receiving_site, @toll_mfg,
         @distressed_inventory, @di_value,
         @requestor_user_id, @requestor_name, @requestor_email,
-        @material_sap, @material_description, @quantity, @uom,
+        @request_type, @material_sap, @material_description, @quantity, @uom,
         @shipping_conditions, @controlled_shipping_required, @controlled_shipping_notes, @brand_at_receiving_site,
         @material_value, @insurance_loss_required,
         @rush_reason, @receiving_site_need_by_date, @estimated_ship_by_date,
@@ -564,6 +574,7 @@ router.post('/', writeLimit, async (req: AuthRequest, res: Response): Promise<vo
         requestor_user_id: null,
         requestor_name: body.requestor_name || user.name,
         requestor_email: body.requestor_email ?? '',
+        request_type: body.request_type,
         material_sap: body.material_sap,
         material_description: body.material_description,
         quantity: body.quantity,
@@ -677,6 +688,7 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
         toll_mfg                          = @toll_mfg,
         distressed_inventory              = @distressed_inventory,
         di_value                          = @di_value,
+        request_type                      = @request_type,
         material_sap                      = @material_sap,
         material_description              = @material_description,
         quantity                          = @quantity,
@@ -713,6 +725,7 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
         toll_mfg: body.toll_mfg ? 1 : 0,
         distressed_inventory: body.distressed_inventory ? 1 : 0,
         di_value: body.distressed_inventory ? (body.di_value ?? null) : null,
+        request_type: body.request_type ?? null,
         material_sap: body.material_sap ?? null,
         material_description: body.material_description ?? null,
         quantity: body.quantity ?? null,

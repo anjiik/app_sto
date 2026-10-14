@@ -56,6 +56,9 @@ CREATE TABLE sto_requests (
     requestor_name                  VARCHAR(200),
     requestor_email                 VARCHAR(200),
 
+    -- Material category: Raw Material, Commodity, Consumable, Cell Bank, mAb,
+    -- Toxin. NULL on rows created before this field existed (migration 022).
+    request_type                    VARCHAR(50) NULL,
     material_sap                    VARCHAR(100),
     material_description            VARCHAR(500),
     mpn_number                      VARCHAR(100),

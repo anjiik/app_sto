@@ -19,6 +19,16 @@ function buildFilters(q: Record<string, string>): {
   }
   if (q.rush === '1') conds.push('rush_request = 1');
   else if (q.rush === '0') conds.push('rush_request = 0');
+  if (q.requestTypes) {
+    const types = q.requestTypes.split(',').filter(Boolean);
+    if (types.length) {
+      const placeholders = types.map((_, i) => `@requestType${i}`);
+      conds.push(`request_type IN (${placeholders.join(', ')})`);
+      types.forEach((t, i) => {
+        params[`requestType${i}`] = t;
+      });
+    }
+  }
   if (q.dateFrom) {
     conds.push('request_date >= @dateFrom');
     params.dateFrom = q.dateFrom + '-01';
@@ -41,7 +51,7 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
     const where = toWhere(conds);
     const closedWhere = toWhere([...conds, "status = 'CLOSED'"]);
 
-    const [counts, value, rush, avgClose, di, onTime] = await Promise.all([
+    const [counts, value, freight, rush, avgClose, di, onTime] = await Promise.all([
       dbQuery<{ status: string; cnt: number }>(
         `
         SELECT status, COUNT(*) AS cnt FROM sto_requests ${where} GROUP BY status
@@ -54,6 +64,29 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
                SUM(CASE WHEN MONTH(request_date) = MONTH(GETDATE()) AND YEAR(request_date) = YEAR(GETDATE())
                     THEN material_value ELSE 0 END) AS this_month
         FROM sto_requests ${where}
+      `,
+        params,
+      ),
+      // Freight cost, counted once per shipment group rather than once per
+      // member STO — several STOs can share one combined freight invoice
+      // (see sto_shipment_groups), so summing freight_cost per row would
+      // multiply it by however many STOs are in the group.
+      dbQueryOne<{ total: number }>(
+        `
+        SELECT
+          COALESCE((
+            SELECT SUM(g.combined_freight_cost)
+            FROM sto_shipment_groups g
+            WHERE g.id IN (
+              SELECT DISTINCT shipment_group_id FROM sto_requests
+              ${toWhere([...conds, 'shipment_group_id IS NOT NULL'])}
+            )
+          ), 0)
+          +
+          COALESCE((
+            SELECT SUM(freight_cost) FROM sto_requests
+            ${toWhere([...conds, 'shipment_group_id IS NULL'])}
+          ), 0) AS total
       `,
         params,
       ),
@@ -114,6 +147,7 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
       rejected: statusMap['REJECTED'] ?? 0,
       totalValue: Number(value?.total ?? 0),
       monthValue: Number(value?.this_month ?? 0),
+      totalFreightCost: Number(freight?.total ?? 0),
       rushCount: Number(rush?.rush ?? 0),
       totalCount: Number(rush?.total ?? 0),
       avgCloseDays: Math.round(Number(avgClose?.avg_days ?? 0)),
@@ -294,7 +328,8 @@ router.get('/raw-data', async (req: AuthRequest, res: Response): Promise<void> =
       dbQuery<Record<string, unknown>>(
         `
         SELECT id, sto_id, request_date, requestor_name, shipping_site, receiving_site,
-               status, rush_request, material_description, material_sap, quantity, uom, material_value
+               status, rush_request, request_type, material_description, material_sap, quantity, uom,
+               material_value, freight_cost, shipment_group_id
         FROM sto_requests ${where}
         ORDER BY request_date DESC
         OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
@@ -304,13 +339,47 @@ router.get('/raw-data', async (req: AuthRequest, res: Response): Promise<void> =
       dbQueryOne<{ total: number }>(`SELECT COUNT(*) AS total FROM sto_requests ${where}`, params),
     ]);
 
+    // For any grouped STOs on this page, fetch every member's sto_id so the
+    // table can show which other STOs they're linked with (shared freight
+    // cost) without a separate lookup per row.
+    const groupIds = Array.from(
+      new Set(rows.map(r => r.shipment_group_id).filter((g): g is number => g != null)),
+    );
+    const groupMembers = new Map<number, string[]>();
+    if (groupIds.length) {
+      const placeholders = groupIds.map((_, i) => `@groupId${i}`);
+      const memberParams: Record<string, unknown> = {};
+      groupIds.forEach((g, i) => {
+        memberParams[`groupId${i}`] = g;
+      });
+      const memberRows = await dbQuery<{ shipment_group_id: number; sto_id: string }>(
+        `
+        SELECT shipment_group_id, sto_id FROM sto_requests
+        WHERE shipment_group_id IN (${placeholders.join(', ')})
+      `,
+        memberParams,
+      );
+      for (const m of memberRows) {
+        const list = groupMembers.get(m.shipment_group_id) ?? [];
+        list.push(m.sto_id);
+        groupMembers.set(m.shipment_group_id, list);
+      }
+    }
+
     res.json({
-      rows: rows.map(r => ({
-        ...r,
-        rush_request: Boolean(r.rush_request),
-        material_value: Number(r.material_value ?? 0),
-        quantity: r.quantity != null ? Number(r.quantity) : null,
-      })),
+      rows: rows.map(r => {
+        const groupId = r.shipment_group_id as number | null;
+        const members = groupId != null ? groupMembers.get(groupId) ?? [] : [];
+        return {
+          ...r,
+          rush_request: Boolean(r.rush_request),
+          material_value: Number(r.material_value ?? 0),
+          freight_cost: r.freight_cost != null ? Number(r.freight_cost) : null,
+          quantity: r.quantity != null ? Number(r.quantity) : null,
+          // Other STOs sharing this one's shipment group (excludes self).
+          grouped_with: members.filter(sid => sid !== (r.sto_id as string)),
+        };
+      }),
       total: Number(countRow?.total ?? 0),
       page,
       pageSize,

@@ -52,6 +52,7 @@ export interface STORequest {
   di_value?: number | null;
   requestor_name: string;
   requestor_email: string;
+  request_type?: string | null;
   material_sap?: string;
   material_description?: string;
   mpn_number?: string;
