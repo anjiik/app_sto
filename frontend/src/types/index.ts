@@ -53,6 +53,12 @@ export interface STORequest {
   requestor_name: string;
   requestor_email: string;
   request_type?: string | null;
+  // Whether the CURRENT user may edit this STO's DRAFT — computed server-side
+  // (admin, the requestor, or anyone sharing a role+site grant with the
+  // requestor, via a live AD lookup). Use this instead of comparing
+  // requestor_name client-side, since the frontend has no way to do that
+  // grant lookup itself.
+  can_edit?: boolean;
   material_sap?: string;
   material_description?: string;
   mpn_number?: string;

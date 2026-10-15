@@ -502,9 +502,12 @@ export function STODetail() {
   const canRecvMgmt = hasRoleAtSite(user, 'receiving_management', sto.receiving_site);
   const canRecvLog = hasRoleAtSite(user, 'receiving_logistics', sto.receiving_site);
 
-  // Who is active right now?
+  // Who is active right now? For DRAFT, defer to the server's can_edit (it
+  // already covers admin/requestor/shared-role via a live AD lookup — see
+  // canEditDraft in routes/sto.ts) rather than re-deriving admin/isRequestor
+  // here, since the frontend has no way to do that grant lookup itself.
   const myTurn =
-    ((isRequestor || admin) && sto.status === 'DRAFT') ||
+    (!!sto.can_edit && sto.status === 'DRAFT') ||
     (canPlan && sto.status === 'PLANNING_REVIEW') ||
     (canShipLog && sto.status === 'SHIPPING_LOGISTICS') ||
     (canShipMgmt && sto.status === 'MANAGEMENT_REVIEW') ||
@@ -554,9 +557,9 @@ export function STODetail() {
                 Submit for Planning Review →
               </button>
             )}
-            {/* Admin can edit any STO; the requestor can edit their own while it's
-                still a DRAFT (initial request + material information). */}
-            {(admin || (isRequestor && sto.status === 'DRAFT')) && (
+            {/* Server-computed: admin, the requestor, or anyone sharing a
+                role+site grant with the requestor while it's still a DRAFT. */}
+            {!!sto.can_edit && sto.status === 'DRAFT' && (
               <button
                 onClick={() => navigate(`/sto/${id}/edit`)}
                 className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 font-medium text-sm"
@@ -634,7 +637,7 @@ export function STODetail() {
         <Section
           title="Request &amp; Material Information"
           icon="📋"
-          active={isRequestor && sto.status === 'DRAFT'}
+          active={!!sto.can_edit && sto.status === 'DRAFT'}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>

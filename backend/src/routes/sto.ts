@@ -6,9 +6,42 @@ import { logAudit } from '../db/audit';
 import logger from '../lib/logger';
 import { writeLimit } from '../middleware/rateLimits';
 import { getUserGrants } from '../lib/ldap';
+import { JwtPayload } from '../types';
 
 const router = Router();
 router.use(authenticate);
+
+// A DRAFT may be edited by an admin, by the original requestor, or by anyone
+// who shares at least one role+site grant with the requestor (e.g. another
+// Shipping Planning person at the same site) — checked via a live AD lookup
+// since the requestor's roles aren't stored on the STO and can change over
+// time. If that lookup fails for any reason, fail closed (deny). Shared by
+// GET /:id (to tell the frontend whether to show the Edit button) and
+// PUT /:id (to actually authorize the edit) so the two can't drift apart.
+async function canEditDraft(
+  user: JwtPayload,
+  sto: { status: string; requestor_name: string; requestor_email: string; shipping_site: string; receiving_site: string },
+): Promise<boolean> {
+  if (can(user, 'admin')) return true;
+  if (sto.status !== 'DRAFT') return false;
+  if (sto.requestor_name === user.name) return true;
+
+  try {
+    const requestorGrants = await getUserGrants(sto.requestor_email || sto.requestor_name);
+    const siteOptions = [sto.shipping_site, sto.receiving_site].filter(Boolean);
+    return userGrants(user).some(
+      g =>
+        requestorGrants.some(rg => rg.group === g.group && rg.site === g.site) &&
+        siteOptions.includes(g.site),
+    );
+  } catch (err: any) {
+    logger.warn(
+      { user: user.adUsername, requestor: sto.requestor_email, err: err?.message },
+      'canEditDraft: requestor grants lookup failed, denying shared-role edit',
+    );
+    return false;
+  }
+}
 
 // ── BIT → boolean normalisation ───────────────────────────────────────────────
 // SQL Server returns BIT columns as 1 / 0.  Centralising the conversion here
@@ -502,7 +535,20 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       );
     }
 
-    res.json({ ...normalizeSto(sto), audit_log: auditLog, shipment_group_members: shipmentGroupMembers });
+    const canEdit = await canEditDraft(req.user!, {
+      status: sto.status as string,
+      requestor_name: sto.requestor_name as string,
+      requestor_email: sto.requestor_email as string,
+      shipping_site: sto.shipping_site as string,
+      receiving_site: sto.receiving_site as string,
+    });
+
+    res.json({
+      ...normalizeSto(sto),
+      audit_log: auditLog,
+      shipment_group_members: shipmentGroupMembers,
+      can_edit: canEdit,
+    });
   } catch (err) {
     logger.error({ err }, 'sto/:id GET error');
     res.status(500).json({ message: 'Internal server error' });
@@ -644,33 +690,9 @@ router.put('/:id', writeLimit, async (req: AuthRequest, res: Response): Promise<
       res.status(400).json({ message: 'Only DRAFT STOs can be edited' });
       return;
     }
-    // Site membership alone isn't enough here — it would let anyone sharing a
-    // site with the STO edit someone else's draft, not just their own. The
-    // requestor and admins can always edit; anyone else must share at least
-    // one role+site grant with the requestor (e.g. another Shipping Planning
-    // person at the same site), checked via a live AD lookup since the
-    // requestor's roles aren't stored on the STO and can change over time.
-    // If that lookup fails for any reason, fail closed — deny the edit.
-    if (!can(user, 'admin') && existing.requestor_name !== user.name) {
-      let sharesGrant = false;
-      try {
-        const requestorGrants = await getUserGrants(existing.requestor_email || existing.requestor_name);
-        const siteOptions = [existing.shipping_site, existing.receiving_site].filter(Boolean);
-        sharesGrant = userGrants(user).some(g =>
-          requestorGrants.some(rg => rg.group === g.group && rg.site === g.site) &&
-          siteOptions.includes(g.site),
-        );
-      } catch (err: any) {
-        logger.warn(
-          { id, user: user.adUsername, requestor: existing.requestor_email, err: err?.message },
-          'sto PUT: requestor grants lookup failed, denying shared-role edit',
-        );
-        sharesGrant = false;
-      }
-      if (!sharesGrant) {
-        res.status(403).json({ message: 'You can only edit your own draft STOs' });
-        return;
-      }
+    if (!(await canEditDraft(user, existing))) {
+      res.status(403).json({ message: 'You can only edit your own draft STOs' });
+      return;
     }
 
     const body = parsed.data;
