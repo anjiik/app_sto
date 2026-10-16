@@ -9,7 +9,11 @@ const STALE_HOURS = 48;
 // Mirrors frontend/src/pages/Dashboard.tsx's GROUP_QUEUE — which role owns
 // each in-progress status, and whether that role acts on the shipping or
 // receiving side (determines which site column to scope the AD group by).
-const STAGE_OWNERS: Partial<Record<STOStatus, { group: Group; siteColumn: 'shipping_site' | 'receiving_site' }>> = {
+// Exported so the weekly digest job (jobs/weeklyDigest.ts) can reuse the same
+// mapping rather than redefining it a second time.
+export const STAGE_OWNERS: Partial<
+  Record<STOStatus, { group: Group; siteColumn: 'shipping_site' | 'receiving_site' }>
+> = {
   PLANNING_REVIEW: { group: 'shipping_planning', siteColumn: 'shipping_site' },
   SHIPPING_LOGISTICS: { group: 'shipping_logistics', siteColumn: 'shipping_site' },
   MANAGEMENT_REVIEW: { group: 'management', siteColumn: 'shipping_site' },

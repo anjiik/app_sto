@@ -1,0 +1,50 @@
+<!--
+  notification_relay template body for "sto-admin-weekly-digest".
+
+  This is NOT deployed automatically — it's reference source for the relay's
+  own template store. To (re)create it there, paste this file's contents as
+  the "body" field via the relay UI (/ui/templates) or its API, with:
+
+    template_name:  sto-admin-weekly-digest
+    subject:        Weekly STO Summary — Admin
+    required_vars:  (leave empty)
+
+  Sent by sendAdminWeeklyDigest() in ../src/lib/notify.ts, fired every Monday
+  08:00 by the same weekly digest cron job as sto-group-weekly-digest.html,
+  to every member of the company-wide admin AD group
+  (APP-STO_MANAGEMENT_ADMIN).
+
+  breakdown_html is a pre-rendered HTML fragment (table rows), built
+  server-side in notify.ts for the same reason as the group digest's
+  queue_list_html — see that template's note. Insert it verbatim, unescaped.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#4A90D9; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">Weekly Summary — Company-Wide</h2>
+  </div>
+  <div style="border:1px solid #d6dce5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      Full picture across every site and stage for the past 7 days.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px; margin-bottom:20px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #0068B3; color:#0068B3; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Last 7 Days</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:55%;">Submitted</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.submitted_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Closed</td><td style="padding:6px 0; color:#1a2029;">{{.closed_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Rejected</td><td style="padding:6px 0; color:#1a2029;">{{.rejected_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Rejections &amp; Revisions (any stage)</td><td style="padding:6px 0; color:#1a2029;">{{.rejections_and_revisions}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Material Value Requested</td><td style="padding:6px 0; color:#1a2029;">${{.total_value}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">DI Savings Realized (Closed)</td><td style="padding:6px 0; color:#15803d; font-weight:600;">${{.di_savings}}</td></tr>
+    </table>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr>
+        <td colspan="3" style="padding:0 0 6px; border-bottom:1px solid #e2e8f0; color:#4a5364; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">
+          Active Queue by Site &amp; Stage
+        </td>
+      </tr>
+      {{.breakdown_html}}
+    </table>
+  </div>
+</div>

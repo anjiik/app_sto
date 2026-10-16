@@ -1,6 +1,6 @@
 import logger from './logger';
 import { Group } from '../types';
-import { groupCNFor, listGroupMembers } from './ldap';
+import { groupCNFor, listGroupMembers, ADMIN_GROUP_CN } from './ldap';
 
 // Formats a DECIMAL column value (freight_cost, material_value, quantity,
 // etc.) for a plain-text/HTML email — mssql/msnodesqlv8 can hand back
@@ -55,6 +55,10 @@ const RELAY_RECEIPT_CLOSED_TEMPLATE =
   process.env.NOTIFICATION_RELAY_RECEIPT_CLOSED_TEMPLATE || 'sto-receipt-closed';
 const RELAY_STALE_REMINDER_TEMPLATE =
   process.env.NOTIFICATION_RELAY_STALE_REMINDER_TEMPLATE || 'sto-stale-reminder';
+const RELAY_GROUP_WEEKLY_DIGEST_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_GROUP_WEEKLY_DIGEST_TEMPLATE || 'sto-group-weekly-digest';
+const RELAY_ADMIN_WEEKLY_DIGEST_TEMPLATE =
+  process.env.NOTIFICATION_RELAY_ADMIN_WEEKLY_DIGEST_TEMPLATE || 'sto-admin-weekly-digest';
 
 // Test mode toggle. When on, EVERY notification this module would send is
 // redirected to TEST_NOTIFICATION_OVERRIDE instead of the real recipient —
@@ -639,5 +643,152 @@ export async function sendStaleQueueReminder(sto: {
       },
     },
     { sto_id: sto.sto_id, status: sto.status },
+  );
+}
+
+const GROUP_LABELS: Record<Group, string> = {
+  shipping_planning: 'Shipping Planning',
+  shipping_logistics: 'Shipping Logistics',
+  management: 'Shipping Management',
+  receiving_management: 'Receiving Management',
+  receiving_logistics: 'Receiving Logistics',
+  site: 'Site',
+  admin: 'Admin',
+};
+
+interface QueueListRow {
+  id: number;
+  sto_id: string;
+  material_description: string | null;
+  material_value: number | null;
+  rush_request: boolean;
+  updated_at: string;
+}
+
+// Builds the "oldest in queue" list as a pre-rendered HTML fragment rather
+// than passing an array through email_vars — the relay's own required-vars
+// checker and templating are only confirmed to handle flat scalars (see the
+// {{if}}-only note in email-templates/sto-planning-queue.html), so a list is
+// built here where it's guaranteed to render, instead of betting on {{range}}
+// support that hasn't been verified against this relay.
+function renderQueueListHtml(rows: QueueListRow[]): string {
+  if (rows.length === 0) {
+    return '<tr><td colspan="2" style="padding:6px 0; color:#94a3b8; font-size:13px;">Nothing waiting — queue is empty.</td></tr>';
+  }
+  return rows
+    .map(r => {
+      const days = Math.floor((Date.now() - new Date(r.updated_at).getTime()) / 86_400_000);
+      const rushTag = r.rush_request
+        ? ' <span style="color:#ef4444; font-weight:600;">RUSH</span>'
+        : '';
+      return `<tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="${stoLink(r.id)}" style="color:#0068B3; text-decoration:none; font-weight:600;">${r.sto_id}</a>${rushTag} — ${r.material_description ?? 'No description'}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">${days}d waiting</td>
+      </tr>`;
+    })
+    .join('');
+}
+
+// Weekly "your group" digest — current queue snapshot (count, rush, aging
+// 48h+, total value, oldest 5) plus last 7 days' throughput (how many left
+// the queue, how many were rejections, and their combined value). Sent to
+// every member of the role+site group that owns the stage, resolved the same
+// way as the stale-reminder job (resolveGroupDestinations).
+export async function sendGroupWeeklyDigest(data: {
+  group: Group;
+  site: string;
+  queueCount: number;
+  rushCount: number;
+  agingCount: number;
+  queueValue: number;
+  oldest: QueueListRow[];
+  movedCount: number;
+  rejectedCount: number;
+  valueMoved: number;
+}): Promise<void> {
+  const destinations = await resolveGroupDestinations(data.group, data.site);
+  const label = GROUP_LABELS[data.group] ?? data.group;
+  postGroupNotification(
+    destinations,
+    {
+      event_id: `sto-weekly-digest-${data.group}-${data.site}-${Date.now()}`,
+      event_name: `Weekly STO Summary — ${label} (${data.site})`,
+      message: `Your weekly STO summary: ${data.queueCount} currently in queue, ${data.movedCount} moved in the last 7 days.`,
+      email_template: RELAY_GROUP_WEEKLY_DIGEST_TEMPLATE,
+      email_vars: {
+        group_label: label,
+        site: data.site,
+        queue_count: String(data.queueCount),
+        rush_count: String(data.rushCount),
+        aging_count: String(data.agingCount),
+        queue_value: formatDecimal(data.queueValue),
+        moved_count: String(data.movedCount),
+        rejected_count: String(data.rejectedCount),
+        value_moved: formatDecimal(data.valueMoved),
+        queue_list_html: renderQueueListHtml(data.oldest),
+      },
+    },
+    { group: data.group, site: data.site },
+  );
+}
+
+// Weekly admin digest — company-wide volume/value/DI/rejections for the last
+// 7 days, plus a per-site/per-stage breakdown of current active queue depth
+// and aging so admins can see which site or stage is the bottleneck (the one
+// thing a single group's digest can't show). Sent to every member of the
+// company-wide admin group.
+export async function sendAdminWeeklyDigest(data: {
+  submittedCount: number;
+  closedCount: number;
+  rejectedCount: number;
+  totalValue: number;
+  rejectionsAndRevisions: number;
+  diSavings: number;
+  breakdown: { site: string; status: string; count: number; aging: number }[];
+}): Promise<void> {
+  let destinations: string[];
+  if (TEST_MODE) {
+    destinations = [TEST_NOTIFICATION_OVERRIDE];
+  } else {
+    try {
+      const members = await listGroupMembers(ADMIN_GROUP_CN);
+      destinations = members.map(m => m.email).filter((e): e is string => Boolean(e));
+    } catch (err) {
+      logger.error({ err }, 'failed to resolve admin group members for weekly digest');
+      destinations = [];
+    }
+  }
+
+  const breakdownHtml =
+    data.breakdown.length === 0
+      ? '<tr><td colspan="3" style="padding:6px 0; color:#94a3b8; font-size:13px;">No active STOs company-wide.</td></tr>'
+      : data.breakdown
+          .map(
+            r => `<tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">${r.site}</td>
+        <td style="padding:6px 0; color:#4a5364;">${r.status.replace(/_/g, ' ')}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">${r.count}${r.aging > 0 ? ` <span style="color:#b45309;">(${r.aging} aging 48h+)</span>` : ''}</td>
+      </tr>`,
+          )
+          .join('');
+
+  postGroupNotification(
+    destinations,
+    {
+      event_id: `sto-admin-weekly-digest-${Date.now()}`,
+      event_name: 'Weekly STO Summary — Admin',
+      message: `Company-wide weekly STO summary: ${data.submittedCount} submitted, ${data.closedCount} closed, ${data.rejectedCount} rejected.`,
+      email_template: RELAY_ADMIN_WEEKLY_DIGEST_TEMPLATE,
+      email_vars: {
+        submitted_count: String(data.submittedCount),
+        closed_count: String(data.closedCount),
+        rejected_count: String(data.rejectedCount),
+        total_value: formatDecimal(data.totalValue),
+        rejections_and_revisions: String(data.rejectionsAndRevisions),
+        di_savings: formatDecimal(data.diSavings),
+        breakdown_html: breakdownHtml,
+      },
+    },
+    {},
   );
 }

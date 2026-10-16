@@ -16,6 +16,7 @@ import siteRoutes from './routes/sites';
 import adminRoutes from './routes/admin';
 import attachmentRoutes from './routes/attachments';
 import { startStaleReminderJob } from './jobs/staleReminders';
+import { startWeeklyDigestJob } from './jobs/weeklyDigest';
 
 // ── Startup env validation ────────────────────────────────────────────────────
 // Fail fast rather than silently misbehaving at runtime.
@@ -148,6 +149,7 @@ warmPool()
         'STO backend started',
       );
       startStaleReminderJob();
+      startWeeklyDigestJob();
     });
   })
   .catch(err => {

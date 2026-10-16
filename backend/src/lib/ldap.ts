@@ -76,6 +76,14 @@ export function groupCNFor(group: Group, site: string): string | undefined {
   return REVERSE_GROUP_MAP.get(`${group}@${site}`);
 }
 
+// Every {group, site} pair GROUP_MAP actually grants (admin excluded — it's
+// company-wide, no site). Lets callers (e.g. the weekly digest job) iterate
+// every real role+site combination without hardcoding a second site list
+// that could drift out of sync with GROUP_MAP.
+export const ALL_GRANTS: { group: Group; site: string }[] = Object.values(GROUP_MAP).filter(
+  g => g.group !== 'admin',
+);
+
 export interface LdapAuthResult {
   displayName: string;
   adUsername: string;

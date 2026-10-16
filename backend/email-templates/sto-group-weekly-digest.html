@@ -1,0 +1,53 @@
+<!--
+  notification_relay template body for "sto-group-weekly-digest".
+
+  This is NOT deployed automatically — it's reference source for the relay's
+  own template store. To (re)create it there, paste this file's contents as
+  the "body" field via the relay UI (/ui/templates) or its API, with:
+
+    template_name:  sto-group-weekly-digest
+    subject:        Weekly STO Summary — {{.group_label}} ({{.site}})
+    required_vars:  (leave empty)
+
+  Sent by sendGroupWeeklyDigest() in ../src/lib/notify.ts, fired every Monday
+  08:00 by the weekly digest cron job in ../src/jobs/weeklyDigest.ts, to every
+  member of the role+site AD group that owns a given workflow stage (e.g.
+  Shipping Planning at ABC owns PLANNING_REVIEW).
+
+  queue_list_html is a pre-rendered HTML fragment (table rows), not a plain
+  value — built server-side in notify.ts rather than relying on the relay's
+  own template engine to iterate a list, since only {{if}}-style conditionals
+  are confirmed to work against this relay (see sto-planning-queue.html's
+  note). Insert it verbatim, unescaped, inside the table below.
+-->
+<div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+  <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
+    <span style="color:#4A90D9; font-size:12px; letter-spacing:1px; text-transform:uppercase;">STO Management</span>
+    <h2 style="color:#ffffff; margin:6px 0 0; font-size:20px;">Weekly Summary — {{.group_label}} ({{.site}})</h2>
+  </div>
+  <div style="border:1px solid #d6dce5; border-top:none; border-radius:0 0 8px 8px; padding:24px;">
+    <p style="font-size:15px; color:#1a2029; margin:0 0 20px;">
+      Here's how your queue looked over the past week.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px; margin-bottom:20px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #0068B3; color:#0068B3; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Currently In Your Queue</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:55%;">Total Waiting</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.queue_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Rush Requests</td><td style="padding:6px 0; color:#1a2029;">{{.rush_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Aging 48h+ Untouched</td><td style="padding:6px 0; color:#b45309; font-weight:600;">{{.aging_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Total Material Value Waiting</td><td style="padding:6px 0; color:#1a2029;">${{.queue_value}}</td></tr>
+    </table>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px; margin-bottom:20px;">
+      <tr><td colspan="2" style="padding:0 0 6px; border-bottom:1px solid #e2e8f0; color:#4a5364; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Oldest Waiting</td></tr>
+      {{.queue_list_html}}
+    </table>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr><td colspan="2" style="padding:10px 0 6px; border-bottom:2px solid #3f6b4f; color:#3f6b4f; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Last 7 Days</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364; width:55%;">Moved Out of Your Queue</td><td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.moved_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Of Which Rejected</td><td style="padding:6px 0; color:#1a2029;">{{.rejected_count}}</td></tr>
+      <tr><td style="padding:6px 0; color:#4a5364;">Material Value Moved</td><td style="padding:6px 0; color:#1a2029;">${{.value_moved}}</td></tr>
+    </table>
+  </div>
+</div>
