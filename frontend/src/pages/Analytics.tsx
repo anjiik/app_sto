@@ -28,6 +28,7 @@ interface Summary {
   totalValue: number;
   monthValue: number;
   totalFreightCost: number;
+  netValue: number;
   rushCount: number;
   totalCount: number;
   avgCloseDays: number;
@@ -122,6 +123,7 @@ interface Filters {
   dateFrom: string;
   dateTo: string;
   requestTypes: string[];
+  diOnly: string;
 }
 
 const REQUEST_TYPES = ['Raw Material', 'Commodity', 'Consumable', 'Cell Bank', 'mAb', 'Toxin'] as const;
@@ -272,7 +274,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
-const EMPTY_FILTERS: Filters = { status: '', rush: '', dateFrom: '', dateTo: '', requestTypes: [] };
+const EMPTY_FILTERS: Filters = {
+  status: '',
+  rush: '',
+  dateFrom: '',
+  dateTo: '',
+  requestTypes: [],
+  diOnly: '',
+};
 
 export function Analytics() {
   const navigate = useNavigate();
@@ -313,15 +322,15 @@ export function Analytics() {
   }, []);
 
   const hasFilters =
-    Boolean(filters.status || filters.rush || filters.dateFrom || filters.dateTo) ||
+    Boolean(filters.status || filters.rush || filters.dateFrom || filters.dateTo || filters.diOnly) ||
     filters.requestTypes.length > 0;
 
-  function setFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo', value: string) {
+  function setFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo' | 'diOnly', value: string) {
     setFilters(prev => ({ ...prev, [key]: value }));
     setRawPage(1);
   }
 
-  function toggleFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo', value: string) {
+  function toggleFilter(key: 'status' | 'rush' | 'dateFrom' | 'dateTo' | 'diOnly', value: string) {
     setFilter(key, filters[key] === value ? '' : value);
   }
 
@@ -350,6 +359,7 @@ export function Analytics() {
       if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
       if (filters.dateTo) p.set('dateTo', filters.dateTo);
       if (filters.requestTypes.length) p.set('requestTypes', filters.requestTypes.join(','));
+      if (filters.diOnly) p.set('diOnly', filters.diOnly);
       Object.entries(extra).forEach(([k, v]) => p.set(k, v));
       return p.toString();
     },
@@ -600,47 +610,80 @@ export function Analytics() {
               {filters.requestTypes.map(t => (
                 <FilterChip key={t} label={t} onRemove={() => toggleRequestType(t)} />
               ))}
+              {filters.diOnly === '1' && (
+                <FilterChip label="DI-related only" onRemove={() => setFilter('diOnly', '')} />
+              )}
             </div>
           )}
         </div>
 
         {/* ── KPI row ──────────────────────────────────────────────────────────── */}
         {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            <KPI
-              label="Total STOs"
-              value={summary.total}
-              sub={`${summary.active} active`}
-              color="border-blue-500"
-            />
-            <KPI
-              label="Closed"
-              value={summary.closed}
-              sub={`${summary.rejected} rejected`}
-              color="border-green-500"
-            />
-            <KPI
-              label="Total Value"
-              value={fmt$(summary.totalValue)}
-              sub={`${fmt$(summary.monthValue)} this month`}
-              color="border-purple-500"
-            />
-            <KPI
-              label="Total Freight Cost"
-              value={fmt$(summary.totalFreightCost)}
-              sub="Counted once per shared shipment"
-              color="border-cyan-500"
-            />
-            <KPI
-              label="Rush Requests"
-              value={`${rushPct}%`}
-              sub={`${summary.rushCount} of ${summary.totalCount}`}
-              color="border-orange-500"
-            />
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <KPI
+                label="Total STOs"
+                value={summary.total}
+                sub={`${summary.active} active`}
+                color="border-blue-500"
+              />
+              <KPI
+                label="Closed"
+                value={summary.closed}
+                sub={`${summary.rejected} rejected`}
+                color="border-green-500"
+              />
+              <KPI
+                label="Total Material Value"
+                value={fmt$(summary.totalValue)}
+                sub={`${fmt$(summary.monthValue)} this month`}
+                color="border-purple-500"
+              />
+              <KPI
+                label="Total Freight Cost"
+                value={fmt$(summary.totalFreightCost)}
+                sub="Counted once per shared shipment"
+                color="border-cyan-500"
+              />
+              <KPI
+                label="Net Value"
+                value={fmt$(summary.netValue)}
+                sub="Material value minus freight cost"
+                color="border-indigo-500"
+              />
+              <KPI
+                label="Rush Requests"
+                value={`${rushPct}%`}
+                sub={`${summary.rushCount} of ${summary.totalCount}`}
+                color="border-orange-500"
+              />
+            </div>
+            <p className="text-xs text-gray-400 px-1">
+              <span className="font-medium text-gray-500">Net Value</span> = Total Material Value
+              − Total Freight Cost (freight counted once per shared shipment, not once per STO in
+              the group).
+            </p>
+          </>
         )}
 
         {/* ── DI savings + on-time delivery ────────────────────────────────────── */}
+        {summary && (
+          <div className="flex items-center justify-between -mb-1">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+              Distressed Inventory
+            </h3>
+            <button
+              onClick={() => toggleFilter('diOnly', '1')}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors border ${
+                filters.diOnly === '1'
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {filters.diOnly === '1' ? '✓ Showing DI STOs only' : 'Show DI-related STOs only'}
+            </button>
+          </div>
+        )}
         {summary && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <KPI

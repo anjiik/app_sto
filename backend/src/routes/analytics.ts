@@ -19,6 +19,7 @@ function buildFilters(q: Record<string, string>): {
   }
   if (q.rush === '1') conds.push('rush_request = 1');
   else if (q.rush === '0') conds.push('rush_request = 0');
+  if (q.diOnly === '1') conds.push('distressed_inventory = 1');
   if (q.requestTypes) {
     const types = q.requestTypes.split(',').filter(Boolean);
     if (types.length) {
@@ -148,6 +149,11 @@ router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> =>
       totalValue: Number(value?.total ?? 0),
       monthValue: Number(value?.this_month ?? 0),
       totalFreightCost: Number(freight?.total ?? 0),
+      // Net value: material value minus what it cost to ship it. Freight is
+      // already deduped per shipment group (see totalFreightCost's query
+      // above), so this stays consistent with that tile rather than
+      // double-subtracting a grouped freight cost per member STO.
+      netValue: Number(value?.total ?? 0) - Number(freight?.total ?? 0),
       rushCount: Number(rush?.rush ?? 0),
       totalCount: Number(rush?.total ?? 0),
       avgCloseDays: Math.round(Number(avgClose?.avg_days ?? 0)),
