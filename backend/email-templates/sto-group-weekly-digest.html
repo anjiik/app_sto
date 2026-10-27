@@ -14,11 +14,15 @@
   member of the role+site AD group that owns a given workflow stage (e.g.
   Shipping Planning at ABC owns PLANNING_REVIEW).
 
-  queue_list_html is a pre-rendered HTML fragment (table rows), not a plain
-  value — built server-side in notify.ts rather than relying on the relay's
-  own template engine to iterate a list, since only {{if}}-style conditionals
-  are confirmed to work against this relay (see sto-planning-queue.html's
-  note). Insert it verbatim, unescaped, inside the table below.
+  The "oldest waiting" list is passed as up to 5 flat row1_../row5_.. var
+  sets (row1_sto_id, row1_link, row1_description, row1_days, row1_rush, ...)
+  rather than a single pre-rendered HTML blob — an earlier version built the
+  rows as an HTML string and relied on the relay inserting it unescaped, but
+  this relay's html/template engine escapes every {{.var}} by default, so
+  the raw markup showed up as literal visible text in the sent email. Flat
+  scalars + {{if .rowN_sto_id}} guards is the pattern already proven to work
+  elsewhere (see sto-planning-queue.html's rush_reason/di_value), so empty
+  slots (fewer than 5 rows) are skipped via the guard around each row block.
 -->
 <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
   <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
@@ -40,7 +44,39 @@
 
     <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px; margin-bottom:20px;">
       <tr><td colspan="2" style="padding:0 0 6px; border-bottom:1px solid #e2e8f0; color:#4a5364; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Oldest Waiting</td></tr>
-      {{.queue_list_html}}
+      {{if .row1_sto_id}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="{{.row1_link}}" style="color:#0068B3; text-decoration:none; font-weight:600;">{{.row1_sto_id}}</a>{{if .row1_rush}} <span style="color:#ef4444; font-weight:600;">RUSH</span>{{end}} — {{.row1_description}}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">{{.row1_days}}d waiting</td>
+      </tr>
+      {{end}}
+      {{if .row2_sto_id}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="{{.row2_link}}" style="color:#0068B3; text-decoration:none; font-weight:600;">{{.row2_sto_id}}</a>{{if .row2_rush}} <span style="color:#ef4444; font-weight:600;">RUSH</span>{{end}} — {{.row2_description}}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">{{.row2_days}}d waiting</td>
+      </tr>
+      {{end}}
+      {{if .row3_sto_id}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="{{.row3_link}}" style="color:#0068B3; text-decoration:none; font-weight:600;">{{.row3_sto_id}}</a>{{if .row3_rush}} <span style="color:#ef4444; font-weight:600;">RUSH</span>{{end}} — {{.row3_description}}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">{{.row3_days}}d waiting</td>
+      </tr>
+      {{end}}
+      {{if .row4_sto_id}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="{{.row4_link}}" style="color:#0068B3; text-decoration:none; font-weight:600;">{{.row4_sto_id}}</a>{{if .row4_rush}} <span style="color:#ef4444; font-weight:600;">RUSH</span>{{end}} — {{.row4_description}}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">{{.row4_days}}d waiting</td>
+      </tr>
+      {{end}}
+      {{if .row5_sto_id}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029;"><a href="{{.row5_link}}" style="color:#0068B3; text-decoration:none; font-weight:600;">{{.row5_sto_id}}</a>{{if .row5_rush}} <span style="color:#ef4444; font-weight:600;">RUSH</span>{{end}} — {{.row5_description}}</td>
+        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">{{.row5_days}}d waiting</td>
+      </tr>
+      {{end}}
+      {{if not .row1_sto_id}}
+      <tr><td colspan="2" style="padding:6px 0; color:#94a3b8; font-size:13px;">Nothing waiting — queue is empty.</td></tr>
+      {{end}}
     </table>
 
     <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:14px;">

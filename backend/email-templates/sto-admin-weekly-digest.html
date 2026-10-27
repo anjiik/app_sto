@@ -14,9 +14,16 @@
   to every member of the company-wide admin AD group
   (APP-STO_MANAGEMENT_ADMIN).
 
-  breakdown_html is a pre-rendered HTML fragment (table rows), built
-  server-side in notify.ts for the same reason as the group digest's
-  queue_list_html — see that template's note. Insert it verbatim, unescaped.
+  The site/stage breakdown is passed as up to 20 flat brow1_../brow20_.. var
+  sets (brow1_site, brow1_stage, brow1_count, brow1_aging, ...) — enough for
+  every real site×stage combination (4 sites × 5 owning stages) — rather than
+  a single pre-rendered HTML blob. An earlier version built the rows as an
+  HTML string and relied on the relay inserting it unescaped, but this
+  relay's html/template engine escapes every {{.var}} by default, so the raw
+  markup showed up as literal visible text in the sent email instead of
+  rendering. Flat scalars + {{if .browN_site}} guards is the pattern already
+  proven to work elsewhere (see sto-planning-queue.html's
+  rush_reason/di_value), so empty slots are skipped via the guard.
 -->
 <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto;">
   <div style="background:#00285E; padding:20px 24px; border-radius:8px 8px 0 0;">
@@ -44,7 +51,149 @@
           Active Queue by Site &amp; Stage
         </td>
       </tr>
-      {{.breakdown_html}}
+      {{if .brow1_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow1_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow1_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow1_count}}{{if .brow1_aging}} <span style="color:#b45309;">({{.brow1_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow2_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow2_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow2_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow2_count}}{{if .brow2_aging}} <span style="color:#b45309;">({{.brow2_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow3_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow3_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow3_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow3_count}}{{if .brow3_aging}} <span style="color:#b45309;">({{.brow3_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow4_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow4_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow4_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow4_count}}{{if .brow4_aging}} <span style="color:#b45309;">({{.brow4_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow5_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow5_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow5_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow5_count}}{{if .brow5_aging}} <span style="color:#b45309;">({{.brow5_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow6_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow6_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow6_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow6_count}}{{if .brow6_aging}} <span style="color:#b45309;">({{.brow6_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow7_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow7_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow7_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow7_count}}{{if .brow7_aging}} <span style="color:#b45309;">({{.brow7_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow8_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow8_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow8_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow8_count}}{{if .brow8_aging}} <span style="color:#b45309;">({{.brow8_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow9_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow9_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow9_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow9_count}}{{if .brow9_aging}} <span style="color:#b45309;">({{.brow9_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow10_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow10_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow10_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow10_count}}{{if .brow10_aging}} <span style="color:#b45309;">({{.brow10_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow11_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow11_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow11_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow11_count}}{{if .brow11_aging}} <span style="color:#b45309;">({{.brow11_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow12_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow12_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow12_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow12_count}}{{if .brow12_aging}} <span style="color:#b45309;">({{.brow12_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow13_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow13_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow13_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow13_count}}{{if .brow13_aging}} <span style="color:#b45309;">({{.brow13_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow14_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow14_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow14_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow14_count}}{{if .brow14_aging}} <span style="color:#b45309;">({{.brow14_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow15_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow15_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow15_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow15_count}}{{if .brow15_aging}} <span style="color:#b45309;">({{.brow15_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow16_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow16_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow16_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow16_count}}{{if .brow16_aging}} <span style="color:#b45309;">({{.brow16_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow17_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow17_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow17_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow17_count}}{{if .brow17_aging}} <span style="color:#b45309;">({{.brow17_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow18_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow18_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow18_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow18_count}}{{if .brow18_aging}} <span style="color:#b45309;">({{.brow18_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow19_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow19_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow19_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow19_count}}{{if .brow19_aging}} <span style="color:#b45309;">({{.brow19_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if .brow20_site}}
+      <tr>
+        <td style="padding:6px 0; color:#1a2029; font-weight:600;">{{.brow20_site}}</td>
+        <td style="padding:6px 0; color:#4a5364;">{{.brow20_stage}}</td>
+        <td style="padding:6px 0; color:#1a2029; text-align:right;">{{.brow20_count}}{{if .brow20_aging}} <span style="color:#b45309;">({{.brow20_aging}} aging 48h+)</span>{{end}}</td>
+      </tr>
+      {{end}}
+      {{if not .brow1_site}}
+      <tr><td colspan="3" style="padding:6px 0; color:#94a3b8; font-size:13px;">No active STOs company-wide.</td></tr>
+      {{end}}
     </table>
   </div>
 </div>

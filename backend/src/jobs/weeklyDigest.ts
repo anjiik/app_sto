@@ -135,7 +135,7 @@ async function gatherAdminDigest() {
       FROM sto_requests
       WHERE archived = 0 AND status NOT IN ('CLOSED', 'REJECTED', 'DRAFT')
       GROUP BY COALESCE(shipping_site, receiving_site), status
-      ORDER BY site, status
+      ORDER BY cnt DESC, site, status
     `,
       {},
     ),

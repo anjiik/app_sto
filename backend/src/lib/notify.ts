@@ -665,28 +665,34 @@ interface QueueListRow {
   updated_at: string;
 }
 
-// Builds the "oldest in queue" list as a pre-rendered HTML fragment rather
-// than passing an array through email_vars — the relay's own required-vars
-// checker and templating are only confirmed to handle flat scalars (see the
-// {{if}}-only note in email-templates/sto-planning-queue.html), so a list is
-// built here where it's guaranteed to render, instead of betting on {{range}}
-// support that hasn't been verified against this relay.
-function renderQueueListHtml(rows: QueueListRow[]): string {
-  if (rows.length === 0) {
-    return '<tr><td colspan="2" style="padding:6px 0; color:#94a3b8; font-size:13px;">Nothing waiting — queue is empty.</td></tr>';
+const MAX_QUEUE_LIST_ROWS = 5;
+
+// Emits one flat {{.row1_sto_id}}, {{.row1_days}}, {{.row1_rush}}, ... set of
+// vars per row (up to MAX_QUEUE_LIST_ROWS), rather than a single pre-rendered
+// HTML blob. A prior version built the rows as an HTML string and relied on
+// the relay inserting it unescaped — it didn't: the relay's html/template
+// engine escapes every {{.var}} by default, so the raw <tr><td>... markup
+// showed up as literal visible text in the sent email instead of rendering.
+// Flat scalars plus {{if .rowN_sto_id}} guards is the pattern already proven
+// to work elsewhere (see sto-planning-queue.html's rush_reason/di_value), so
+// this uses that instead of trusting an unverified raw-HTML relay feature.
+function queueListVars(rows: QueueListRow[]): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (let i = 0; i < MAX_QUEUE_LIST_ROWS; i++) {
+    const n = i + 1;
+    const r = rows[i];
+    if (!r) {
+      vars[`row${n}_sto_id`] = '';
+      continue;
+    }
+    const days = Math.floor((Date.now() - new Date(r.updated_at).getTime()) / 86_400_000);
+    vars[`row${n}_sto_id`] = r.sto_id;
+    vars[`row${n}_link`] = stoLink(r.id);
+    vars[`row${n}_description`] = r.material_description ?? 'No description';
+    vars[`row${n}_days`] = String(days);
+    vars[`row${n}_rush`] = r.rush_request ? '1' : '';
   }
-  return rows
-    .map(r => {
-      const days = Math.floor((Date.now() - new Date(r.updated_at).getTime()) / 86_400_000);
-      const rushTag = r.rush_request
-        ? ' <span style="color:#ef4444; font-weight:600;">RUSH</span>'
-        : '';
-      return `<tr>
-        <td style="padding:6px 0; color:#1a2029;"><a href="${stoLink(r.id)}" style="color:#0068B3; text-decoration:none; font-weight:600;">${r.sto_id}</a>${rushTag} — ${r.material_description ?? 'No description'}</td>
-        <td style="padding:6px 0; color:#4a5364; text-align:right; white-space:nowrap;">${days}d waiting</td>
-      </tr>`;
-    })
-    .join('');
+  return vars;
 }
 
 // Weekly "your group" digest — current queue snapshot (count, rush, aging
@@ -725,7 +731,7 @@ export async function sendGroupWeeklyDigest(data: {
         moved_count: String(data.movedCount),
         rejected_count: String(data.rejectedCount),
         value_moved: formatDecimal(data.valueMoved),
-        queue_list_html: renderQueueListHtml(data.oldest),
+        ...queueListVars(data.oldest),
       },
     },
     { group: data.group, site: data.site },
@@ -759,18 +765,24 @@ export async function sendAdminWeeklyDigest(data: {
     }
   }
 
-  const breakdownHtml =
-    data.breakdown.length === 0
-      ? '<tr><td colspan="3" style="padding:6px 0; color:#94a3b8; font-size:13px;">No active STOs company-wide.</td></tr>'
-      : data.breakdown
-          .map(
-            r => `<tr>
-        <td style="padding:6px 0; color:#1a2029; font-weight:600;">${r.site}</td>
-        <td style="padding:6px 0; color:#4a5364;">${r.status.replace(/_/g, ' ')}</td>
-        <td style="padding:6px 0; color:#1a2029; text-align:right;">${r.count}${r.aging > 0 ? ` <span style="color:#b45309;">(${r.aging} aging 48h+)</span>` : ''}</td>
-      </tr>`,
-          )
-          .join('');
+  // 4 sites × 5 workflow-owning stages = 20 possible combinations at most, so
+  // this cap guarantees every real row fits (ordered by count DESC in the
+  // query, so if it's ever exceeded, the highest-volume/most-bottlenecked
+  // combinations are what's kept).
+  const MAX_BREAKDOWN_ROWS = 20;
+  const breakdownVars: Record<string, string> = {};
+  for (let i = 0; i < MAX_BREAKDOWN_ROWS; i++) {
+    const n = i + 1;
+    const r = data.breakdown[i];
+    if (!r) {
+      breakdownVars[`brow${n}_site`] = '';
+      continue;
+    }
+    breakdownVars[`brow${n}_site`] = r.site;
+    breakdownVars[`brow${n}_stage`] = r.status.replace(/_/g, ' ');
+    breakdownVars[`brow${n}_count`] = String(r.count);
+    breakdownVars[`brow${n}_aging`] = r.aging > 0 ? String(r.aging) : '';
+  }
 
   postGroupNotification(
     destinations,
@@ -786,7 +798,7 @@ export async function sendAdminWeeklyDigest(data: {
         total_value: formatDecimal(data.totalValue),
         rejections_and_revisions: String(data.rejectionsAndRevisions),
         di_savings: formatDecimal(data.diSavings),
-        breakdown_html: breakdownHtml,
+        ...breakdownVars,
       },
     },
     {},
